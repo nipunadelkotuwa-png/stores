@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@netlify/vite-plugin-react-router": "^4.0.0",
     "@playwright/test": "^1.61.1",
     "@react-router/dev": "8.0.0",
     "@tailwindcss/vite": "^4.2.2",
