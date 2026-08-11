@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { Form, redirect, useActionData } from "react-router";
+import { Form, redirect, useActionData, useNavigation } from "react-router";
 import { z } from "zod";
 
 import { db } from "~/db/client.server";
@@ -10,7 +10,10 @@ import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/auth.change-password";
 
 const schema = z
-  .object({ password: z.string().min(12), confirmPassword: z.string() })
+  .object({ 
+    password: z.string().min(12, "Password must be at least 12 characters"), 
+    confirmPassword: z.string() 
+  })
   .refine((value) => value.password === value.confirmPassword, {
     message: "Passwords do not match",
   });
@@ -47,6 +50,8 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function ChangePassword({ loaderData }: Route.ComponentProps) {
   const data = useActionData<typeof action>();
+  const navigation = useNavigation();
+  
   return (
     <main className="auth-page">
       <section className="auth-card">
@@ -59,19 +64,20 @@ export default function ChangePassword({ loaderData }: Route.ComponentProps) {
           <input type="hidden" name="csrf" value={loaderData.csrf} />
           <label>
             New password
-            <input type="password" name="password" minLength={12} required />
+            <input type="password" name="password" required />
           </label>
           <label>
             Confirm password
-            <input
-              type="password"
-              name="confirmPassword"
-              minLength={12}
-              required
-            />
+            <input type="password" name="confirmPassword" required />
           </label>
           {data?.error ? <p className="form-error">{data.error}</p> : null}
-          <button className="button button-primary">Update password</button>
+          <button 
+            type="submit" 
+            className="button button-primary"
+            disabled={navigation.state !== "idle"}
+          >
+            {navigation.state === "submitting" ? "Updating..." : "Update password"}
+          </button>
         </Form>
       </section>
     </main>
