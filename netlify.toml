@@ -1,0 +1,6 @@
+[build]
+  command = "pnpm run build"
+  publish = "build/client"
+
+[build.environment]
+  SECRETS_SCAN_ENABLED = "false"
