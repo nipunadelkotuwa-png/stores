@@ -1,0 +1,14 @@
+.DS_Store
+.env
+/node_modules/
+
+# React Router
+/.react-router/
+/build/
+
+# Local tooling and test output
+/graphify-out/
+/coverage/
+/test-results/
+/playwright-report/
+*.log
