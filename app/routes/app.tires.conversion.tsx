@@ -1,4 +1,5 @@
 import { Form, redirect, useActionData, useNavigation } from "react-router";
+import { PartSelector } from "~/components/part-selector";
 import { CsrfField } from "~/components/csrf-field";
 import {
   inventoryActionError,
@@ -104,26 +105,12 @@ export default function TireConversionPage({
 
         <label>
           Original Part (Source)
-          <select name="sourcePartId" required>
-            <option value="">Select source tire...</option>
-            {options.parts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.sku} — {p.name}
-              </option>
-            ))}
-          </select>
+          <PartSelector name="sourcePartId" parts={options.parts} required />
         </label>
 
         <label>
           Retreaded Part (Destination)
-          <select name="targetPartId" required>
-            <option value="">Select destination tire...</option>
-            {options.parts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.sku} — {p.name}
-              </option>
-            ))}
-          </select>
+          <PartSelector name="targetPartId" parts={options.parts} required />
         </label>
 
         <label>

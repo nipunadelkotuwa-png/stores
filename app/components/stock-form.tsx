@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Form, useNavigation } from "react-router";
 import { CsrfField } from "~/components/csrf-field";
 import type { getTransactionOptions } from "~/features/inventory/queries.server";
+import { PartSelector } from "./part-selector";
 
 type Options = Awaited<ReturnType<typeof getTransactionOptions>>;
 export function StockForm({
@@ -74,14 +75,12 @@ export function StockForm({
         )}
         <label>
           Part
-          <select name="partId" required defaultValue={initialPartId || ""}>
-            <option value="">Select spare part</option>
-            {options.parts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.sku} — {p.name}
-              </option>
-            ))}
-          </select>
+          <PartSelector
+            name="partId"
+            parts={options.parts}
+            defaultValue={initialPartId}
+            required
+          />
         </label>
         <label>
           Quantity

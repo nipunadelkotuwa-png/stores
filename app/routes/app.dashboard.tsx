@@ -97,21 +97,26 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      <section className="metric-grid">
+      <section className="metric-grid animate-slide-up">
         {cards.map(([label, value]) => (
-          <article className="metric-card" key={label}>
-            <span>{label}</span>
-            <strong>{value}</strong>
+          <article className="card metric-card" key={label}>
+            <span className="metric-label">{label}</span>
+            <strong className="metric-value">{value}</strong>
           </article>
         ))}
-        <article className="metric-card warning">
-          <span>Low-stock alerts</span>
-          <strong>{loaderData.lowStock.length}</strong>
+        <article className="card metric-card warning">
+          <span className="metric-label">Low-stock alerts</span>
+          <strong className="metric-value" style={{ color: "var(--red)" }}>
+            {loaderData.lowStock.length}
+          </strong>
           <Link to="#low-stock">Review below ↓</Link>
         </article>
       </section>
 
-      <section className="panel" style={{ marginBottom: "1.5rem" }}>
+      <section
+        className="card animate-slide-up"
+        style={{ marginBottom: "1.5rem", animationDelay: "0.1s" }}
+      >
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Activity</p>
@@ -164,7 +169,11 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
       </section>
 
       <div className="two-column">
-        <section className="panel" id="low-stock">
+        <section
+          className="card animate-slide-up"
+          id="low-stock"
+          style={{ animationDelay: "0.2s" }}
+        >
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Attention required</p>
@@ -235,7 +244,10 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
           )}
         </section>
 
-        <section className="panel">
+        <section
+          className="card animate-slide-up"
+          style={{ animationDelay: "0.3s" }}
+        >
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Fleet usage</p>

@@ -14,7 +14,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-const coreNavigation = [
+const operationsNav = [
   ["/", "Dashboard"],
   ["/balances", "Balances"],
   ["/scan", "Scan Barcode"],
@@ -25,6 +25,9 @@ const coreNavigation = [
   ["/tires/conversion", "Tire Conversion"],
   ["/purchases", "Purchases"],
   ["/alerts/low-stock", "Low stock"],
+] as const;
+
+const masterDataNav = [
   ["/parts", "Parts"],
   ["/categories", "Categories"],
   ["/buses", "Buses"],
@@ -51,11 +54,25 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
         <nav>
-          {coreNavigation.map(([to, label]) => (
+          <p className="nav-section">Operations</p>
+          {operationsNav.map(([to, label]) => (
             <NavLink
               key={to}
               to={to}
               end={to === "/" || to === "/purchases"}
+              className={({ isActive }) =>
+                isActive ? "nav-link active" : "nav-link"
+              }
+            >
+              {label}
+            </NavLink>
+          ))}
+
+          <p className="nav-section">Master Data</p>
+          {masterDataNav.map(([to, label]) => (
+            <NavLink
+              key={to}
+              to={to}
               className={({ isActive }) =>
                 isActive ? "nav-link active" : "nav-link"
               }
