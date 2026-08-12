@@ -4,6 +4,7 @@ import {
   buses,
   inventoryBalances,
   localPurchases,
+  partCategories,
   parts,
   stockDocumentLines,
   stockDocuments,
@@ -29,8 +30,16 @@ export async function getTransactionOptions(actor: Actor) {
       .where(and(eq(stores.active, true), scopedStoreCondition(stores.id, ids)))
       .orderBy(asc(stores.code)),
     db
-      .select()
+      .select({
+        id: parts.id,
+        sku: parts.sku,
+        name: parts.name,
+        barcode: parts.barcode,
+        categoryId: parts.categoryId,
+        categoryName: partCategories.name,
+      })
       .from(parts)
+      .leftJoin(partCategories, eq(parts.categoryId, partCategories.id))
       .where(eq(parts.active, true))
       .orderBy(asc(parts.sku)),
     db

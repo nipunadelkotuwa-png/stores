@@ -7,6 +7,7 @@ export type PartOption = {
   name: string;
   barcode: string | null;
   categoryId?: string | null;
+  categoryName?: string | null;
 };
 
 interface PartSelectorProps {
@@ -22,15 +23,32 @@ export function PartSelector({
   defaultValue,
   required = false,
 }: PartSelectorProps) {
-  const options = parts.map((p) => ({
+  const allOptions = parts.map((p) => ({
     value: p.id,
     label: `${p.sku} — ${p.name}`,
     barcode: p.barcode,
     sku: p.sku,
     name: p.name,
+    categoryName: p.categoryName || "Uncategorized",
   }));
 
-  const initialValue = options.find((o) => o.value === defaultValue) || null;
+  const groupedOptionsMap = allOptions.reduce(
+    (acc, curr) => {
+      if (!acc[curr.categoryName]) {
+        acc[curr.categoryName] = [];
+      }
+      acc[curr.categoryName].push(curr);
+      return acc;
+    },
+    {} as Record<string, typeof allOptions>,
+  );
+
+  const options = Object.entries(groupedOptionsMap).map(([label, opts]) => ({
+    label,
+    options: opts,
+  }));
+
+  const initialValue = allOptions.find((o) => o.value === defaultValue) || null;
   const [selected, setSelected] = useState<{ value: string } | null>(
     initialValue,
   );
@@ -68,7 +86,9 @@ export function PartSelector({
             padding: "0.2rem",
             borderRadius: "999px",
             borderColor: state.isFocused ? "var(--primary)" : "var(--line)",
-            boxShadow: state.isFocused ? "0 0 0 3px rgba(16, 185, 129, 0.12)" : "none",
+            boxShadow: state.isFocused
+              ? "0 0 0 3px rgba(16, 185, 129, 0.12)"
+              : "none",
             "&:hover": {
               borderColor: "var(--primary)",
             },
@@ -78,16 +98,30 @@ export function PartSelector({
             borderRadius: "16px",
             boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)",
             overflow: "hidden",
-            border: "1px solid var(--line)"
+            border: "1px solid var(--line)",
+          }),
+          groupHeading: (base) => ({
+            ...base,
+            color: "var(--muted)",
+            fontSize: "0.75rem",
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            padding: "0.75rem 1rem 0.25rem",
           }),
           option: (base, state) => ({
             ...base,
-            backgroundColor: state.isSelected ? "var(--primary)" : state.isFocused ? "var(--mint)" : "white",
+            padding: "0.5rem 1rem",
+            backgroundColor: state.isSelected
+              ? "var(--primary)"
+              : state.isFocused
+                ? "var(--mint)"
+                : "white",
             color: state.isSelected ? "white" : "var(--ink)",
             "&:active": {
               backgroundColor: "var(--primary)",
-            }
-          })
+            },
+          }),
         }}
       />
     </div>
