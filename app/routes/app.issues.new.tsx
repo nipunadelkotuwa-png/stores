@@ -1,4 +1,4 @@
-import { redirect, useActionData } from "react-router";
+import { redirect, useActionData, useSearchParams } from "react-router";
 import { StockForm } from "~/components/stock-form";
 import {
   inventoryActionError,
@@ -24,7 +24,7 @@ export async function action({ request }: Route.ActionArgs) {
       ...form,
       lines: [{ partId: form.partId, quantity: form.quantity }],
     });
-    throw redirect(`/reports/bus-usage?posted=${result.number}`);
+    throw redirect(`/receipts/${result.id}`);
   } catch (error) {
     if (error instanceof Response) throw error;
     return {
@@ -35,6 +35,9 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function IssuePage({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
+  const [params] = useSearchParams();
+  const part = params.get("part");
+
   return (
     <>
       <div className="page-heading">
@@ -47,7 +50,12 @@ export default function IssuePage({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
       </div>
-      <StockForm options={loaderData} kind="issue" actionData={actionData} />
+      <StockForm
+        options={loaderData}
+        kind="issue"
+        actionData={actionData}
+        initialPartId={part || undefined}
+      />
     </>
   );
 }

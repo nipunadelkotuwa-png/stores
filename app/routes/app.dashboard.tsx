@@ -85,6 +85,9 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="heading-actions">
+          <Link className="button button-secondary" to="/parts#add-part-form">
+            Add new item
+          </Link>
           <Link className="button button-secondary" to="/issues/new">
             Issue to bus
           </Link>

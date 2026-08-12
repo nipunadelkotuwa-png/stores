@@ -7,13 +7,22 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function LowStockPage({ loaderData }: Route.ComponentProps) {
   return (
     <>
-      <div className="page-heading">
+      <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Attention required</p>
           <h1>Low-stock alerts</h1>
           <p className="muted">
             Parts at or below the location-specific reorder threshold.
           </p>
+        </div>
+        <div className="heading-actions">
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => window.print()}
+          >
+            Print / Save as PDF
+          </button>
         </div>
       </div>
       <section className="panel">

@@ -16,6 +16,7 @@ export const listParts = () =>
       id: parts.id,
       sku: parts.sku,
       name: parts.name,
+      barcode: parts.barcode,
       unit: parts.unit,
       brand: parts.brand,
       active: parts.active,
@@ -50,3 +51,6 @@ export const listUserAssignments = () =>
     })
     .from(userStoreAssignments)
     .innerJoin(stores, eq(userStoreAssignments.storeId, stores.id));
+
+export const listPartCategories = () =>
+  db.select().from(partCategories).orderBy(asc(partCategories.name));

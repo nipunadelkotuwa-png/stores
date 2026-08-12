@@ -1,0 +1,1 @@
+ALTER TYPE "public"."stock_document_type" ADD VALUE 'BUS_RETURN' BEFORE 'ADJUSTMENT';

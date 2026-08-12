@@ -8,10 +8,12 @@ export function StockForm({
   options,
   kind,
   actionData,
+  initialPartId,
 }: {
   options: Options;
-  kind: "receipt" | "issue";
+  kind: "receipt" | "issue" | "bus_return";
   actionData?: { error?: string };
+  initialPartId?: string;
 }) {
   const navigation = useNavigation();
   const [idempotencyKey] = useState(() => crypto.randomUUID());
@@ -22,14 +24,18 @@ export function StockForm({
       <div className="form-grid">
         <label>
           Store
-          <select name="storeId" required>
-            <option value="">Select store</option>
-            {options.stores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.code} — {s.name}
-              </option>
-            ))}
-          </select>
+          {options.stores.length === 0 ? (
+            <p className="form-error">You are not assigned to any stores.</p>
+          ) : (
+            <select name="storeId" required>
+              <option value="">Select store</option>
+              {options.stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.code} — {s.name}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
         <label>
           Business date
@@ -40,7 +46,7 @@ export function StockForm({
             required
           />
         </label>
-        {kind === "issue" ? (
+        {kind === "issue" || kind === "bus_return" ? (
           <label>
             Bus
             <select name="busId" required>
@@ -68,7 +74,7 @@ export function StockForm({
         )}
         <label>
           Part
-          <select name="partId" required>
+          <select name="partId" required defaultValue={initialPartId || ""}>
             <option value="">Select spare part</option>
             {options.parts.map((p) => (
               <option key={p.id} value={p.id}>
@@ -108,13 +114,15 @@ export function StockForm({
       <div className="form-actions">
         <button
           className="button button-primary"
-          disabled={navigation.state !== "idle"}
+          disabled={navigation.state !== "idle" || options.stores.length === 0}
         >
           {navigation.state === "submitting"
             ? "Posting…"
             : kind === "issue"
               ? "Post bus issue"
-              : "Post stock receipt"}
+              : kind === "bus_return"
+                ? "Post bus return"
+                : "Post stock receipt"}
         </button>
       </div>
     </Form>

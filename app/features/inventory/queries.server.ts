@@ -136,8 +136,23 @@ export async function getMovements(actor: Actor) {
   };
 }
 
-export async function getBusUsage(actor: Actor) {
+export async function getBusUsage(
+  actor: Actor,
+  filters?: { start?: string; end?: string; bus?: string },
+) {
   const ids = await getAuthorizedStoreIds(actor);
+
+  const conditions = [
+    eq(stockDocuments.type, "BUS_ISSUE"),
+    scopedStoreCondition(stockDocuments.storeId, ids),
+  ];
+
+  if (filters?.start)
+    conditions.push(sql`${stockDocuments.businessDate} >= ${filters.start}`);
+  if (filters?.end)
+    conditions.push(sql`${stockDocuments.businessDate} <= ${filters.end}`);
+  if (filters?.bus) conditions.push(eq(buses.fleetNumber, filters.bus));
+
   const rows = await db
     .select({
       date: stockDocuments.businessDate,
@@ -157,12 +172,7 @@ export async function getBusUsage(actor: Actor) {
     .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
     .innerJoin(buses, eq(stockDocuments.busId, buses.id))
     .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
-    .where(
-      and(
-        eq(stockDocuments.type, "BUS_ISSUE"),
-        scopedStoreCondition(stockDocuments.storeId, ids),
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(desc(stockDocuments.businessDate))
     .limit(REPORT_LIMIT + 1);
   return {
@@ -171,8 +181,21 @@ export async function getBusUsage(actor: Actor) {
   };
 }
 
-export async function getLocalPurchases(actor: Actor) {
+export async function getLocalPurchases(
+  actor: Actor,
+  filters?: { start?: string; end?: string; supplier?: string },
+) {
   const ids = await getAuthorizedStoreIds(actor);
+
+  const conditions = [scopedStoreCondition(localPurchases.storeId, ids)];
+
+  if (filters?.start)
+    conditions.push(sql`${localPurchases.businessDate} >= ${filters.start}`);
+  if (filters?.end)
+    conditions.push(sql`${localPurchases.businessDate} <= ${filters.end}`);
+  if (filters?.supplier)
+    conditions.push(eq(localPurchases.supplierNameSnapshot, filters.supplier));
+
   const rows = await db
     .select({
       id: localPurchases.id,
@@ -185,7 +208,7 @@ export async function getLocalPurchases(actor: Actor) {
     })
     .from(localPurchases)
     .innerJoin(stores, eq(localPurchases.storeId, stores.id))
-    .where(scopedStoreCondition(localPurchases.storeId, ids))
+    .where(and(...conditions))
     .orderBy(desc(localPurchases.businessDate), desc(localPurchases.createdAt))
     .limit(REPORT_LIMIT + 1);
   return {
@@ -219,4 +242,104 @@ export async function getPostedDocumentsForReversal(actor: Actor) {
     )
     .orderBy(desc(stockDocuments.postedAt))
     .limit(100);
+}
+
+export async function getDocumentForReceipt(actor: Actor, id: string) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const [doc] = await db
+    .select({
+      id: stockDocuments.id,
+      number: stockDocuments.documentNumber,
+      type: stockDocuments.type,
+      date: stockDocuments.businessDate,
+      store: stores.name,
+      storeCode: stores.code,
+      bus: buses.fleetNumber,
+      postedAt: stockDocuments.postedAt,
+      reason: stockDocuments.reason,
+    })
+    .from(stockDocuments)
+    .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
+    .leftJoin(buses, eq(stockDocuments.busId, buses.id))
+    .where(
+      and(
+        eq(stockDocuments.id, id),
+        scopedStoreCondition(stockDocuments.storeId, ids),
+      ),
+    );
+
+  if (!doc) return null;
+
+  const lines = await db
+    .select({
+      sku: parts.sku,
+      name: parts.name,
+      quantity: stockDocumentLines.quantity,
+      unit: parts.unit,
+    })
+    .from(stockDocumentLines)
+    .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
+    .where(eq(stockDocumentLines.documentId, id));
+
+  return { ...doc, lines };
+}
+
+export async function getDailyMovements(actor: Actor, date: string) {
+  const ids = await getAuthorizedStoreIds(actor);
+  return db
+    .select({
+      id: stockDocuments.id,
+      number: stockDocuments.documentNumber,
+      type: stockDocuments.type,
+      store: stores.name,
+      sku: parts.sku,
+      part: parts.name,
+      delta: stockMovements.quantityDelta,
+      balance: stockMovements.balanceAfter,
+    })
+    .from(stockMovements)
+    .innerJoin(stockDocuments, eq(stockMovements.documentId, stockDocuments.id))
+    .innerJoin(stores, eq(stockMovements.storeId, stores.id))
+    .innerJoin(parts, eq(stockMovements.partId, parts.id))
+    .where(
+      and(
+        eq(stockDocuments.businessDate, date),
+        scopedStoreCondition(stockMovements.storeId, ids),
+      ),
+    )
+    .orderBy(desc(stockMovements.occurredAt));
+}
+
+export async function getFastMovingParts(
+  actor: Actor,
+  startDate: string,
+  endDate: string,
+) {
+  const ids = await getAuthorizedStoreIds(actor);
+
+  const results = await db
+    .select({
+      sku: parts.sku,
+      part: parts.name,
+      category: parts.categoryId,
+      totalIssued: sql<string>`sum(cast(abs(cast(${stockMovements.quantityDelta} as numeric)) as text))`,
+    })
+    .from(stockMovements)
+    .innerJoin(stockDocuments, eq(stockMovements.documentId, stockDocuments.id))
+    .innerJoin(parts, eq(stockMovements.partId, parts.id))
+    .where(
+      and(
+        eq(stockDocuments.type, "BUS_ISSUE"),
+        sql`${stockDocuments.businessDate} >= ${startDate}`,
+        sql`${stockDocuments.businessDate} <= ${endDate}`,
+        scopedStoreCondition(stockMovements.storeId, ids),
+      ),
+    )
+    .groupBy(parts.id, parts.sku, parts.name, parts.categoryId)
+    .orderBy(
+      desc(sql`sum(abs(cast(${stockMovements.quantityDelta} as numeric)))`),
+    )
+    .limit(50);
+
+  return results;
 }

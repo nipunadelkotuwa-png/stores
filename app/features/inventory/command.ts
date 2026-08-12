@@ -2,12 +2,15 @@ import Decimal from "decimal.js";
 
 import { postStockSchema } from "./schemas";
 
-export type StockType = "STOCK_RECEIPT" | "BUS_ISSUE" | "ADJUSTMENT";
+export type StockType =
+  "STOCK_RECEIPT" | "BUS_ISSUE" | "BUS_RETURN" | "ADJUSTMENT";
 
 export function prepareStockCommand(type: StockType, input: unknown) {
   const command = postStockSchema.parse(input);
-  if (type === "BUS_ISSUE" && !command.busId) {
-    throw new Error("Bus is required for a bus issue");
+  if ((type === "BUS_ISSUE" || type === "BUS_RETURN") && !command.busId) {
+    throw new Error(
+      `Bus is required for a ${type.toLowerCase().replace("_", " ")}`,
+    );
   }
   if (type === "ADJUSTMENT") {
     const reason = command.reason?.trim();

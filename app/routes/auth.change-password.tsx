@@ -10,9 +10,9 @@ import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/auth.change-password";
 
 const schema = z
-  .object({ 
-    password: z.string().min(12, "Password must be at least 12 characters"), 
-    confirmPassword: z.string() 
+  .object({
+    password: z.string().min(12, "Password must be at least 12 characters"),
+    confirmPassword: z.string(),
   })
   .refine((value) => value.password === value.confirmPassword, {
     message: "Passwords do not match",
@@ -51,7 +51,7 @@ export async function action({ request }: Route.ActionArgs) {
 export default function ChangePassword({ loaderData }: Route.ComponentProps) {
   const data = useActionData<typeof action>();
   const navigation = useNavigation();
-  
+
   return (
     <main className="auth-page">
       <section className="auth-card">
@@ -71,12 +71,14 @@ export default function ChangePassword({ loaderData }: Route.ComponentProps) {
             <input type="password" name="confirmPassword" required />
           </label>
           {data?.error ? <p className="form-error">{data.error}</p> : null}
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="button button-primary"
             disabled={navigation.state !== "idle"}
           >
-            {navigation.state === "submitting" ? "Updating..." : "Update password"}
+            {navigation.state === "submitting"
+              ? "Updating..."
+              : "Update password"}
           </button>
         </Form>
       </section>

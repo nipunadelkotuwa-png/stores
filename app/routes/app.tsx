@@ -14,18 +14,29 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-const navigation = [
+const coreNavigation = [
   ["/", "Dashboard"],
   ["/balances", "Balances"],
+  ["/scan", "Scan Barcode"],
   ["/stock-in/new", "Stock in"],
   ["/issues/new", "Bus issue"],
+  ["/returns/bus", "Bus Return"],
+  ["/returns", "Returns & Reversals"],
+  ["/tires/conversion", "Tire Conversion"],
   ["/purchases", "Purchases"],
   ["/alerts/low-stock", "Low stock"],
   ["/parts", "Parts"],
+  ["/categories", "Categories"],
   ["/buses", "Buses"],
   ["/suppliers", "Suppliers"],
+] as const;
+
+const reportsNavigation = [
   ["/reports/movements", "Movements"],
+  ["/reports/daily-movement", "Daily Movement"],
+  ["/reports/fast-moving", "Fast Moving Items"],
   ["/reports/bus-usage", "Bus usage"],
+  ["/reports/purchases", "Purchases"],
 ] as const;
 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
@@ -40,7 +51,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
         <nav>
-          {navigation.map(([to, label]) => (
+          {coreNavigation.map(([to, label]) => (
             <NavLink
               key={to}
               to={to}
@@ -52,6 +63,20 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
               {label}
             </NavLink>
           ))}
+
+          <p className="nav-section">Reports</p>
+          {reportsNavigation.map(([to, label]) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                isActive ? "nav-link active" : "nav-link"
+              }
+            >
+              {label}
+            </NavLink>
+          ))}
+
           {loaderData.user.role === "ADMIN" ? (
             <>
               <p className="nav-section">Administration</p>

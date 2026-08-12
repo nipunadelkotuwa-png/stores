@@ -27,6 +27,7 @@ export const parts = pgTable(
     id: idColumn(),
     sku: text("sku").notNull(),
     name: text("name").notNull(),
+    barcode: text("barcode"),
     description: text("description"),
     categoryId: uuid("category_id").references(() => partCategories.id),
     unit: text("unit").default("EA").notNull(),
@@ -35,7 +36,10 @@ export const parts = pgTable(
     active: boolean("active").default(true).notNull(),
     ...timestamps,
   },
-  (table) => [uniqueIndex("parts_sku_unique").on(table.sku)],
+  (table) => [
+    uniqueIndex("parts_sku_unique").on(table.sku),
+    uniqueIndex("parts_barcode_unique").on(table.barcode),
+  ],
 );
 
 export const storePartSettings = pgTable(

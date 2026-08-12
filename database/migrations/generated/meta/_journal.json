@@ -8,6 +8,20 @@
       "when": 1784633449439,
       "tag": "0000_abandoned_betty_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786447784778,
+      "tag": "0001_round_steel_serpent",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786515070260,
+      "tag": "0002_romantic_william_stryker",
+      "breakpoints": true
     }
   ]
 }

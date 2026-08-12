@@ -20,6 +20,7 @@ import { idColumn, timestamps } from "./common";
 export const stockDocumentType = pgEnum("stock_document_type", [
   "STOCK_RECEIPT",
   "BUS_ISSUE",
+  "BUS_RETURN",
   "ADJUSTMENT",
   "REVERSAL",
 ]);

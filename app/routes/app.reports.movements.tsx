@@ -9,13 +9,21 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function MovementsPage({ loaderData }: Route.ComponentProps) {
   return (
     <>
-      <div className="page-heading">
+      <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Audit report</p>
           <h1>Stock movement ledger</h1>
           <p className="muted">
             Immutable movements with the resulting balance after every posting.
           </p>
+        </div>
+        <div>
+          <button
+            className="button button-primary"
+            onClick={() => window.print()}
+          >
+            Print / Save as PDF
+          </button>
         </div>
       </div>
       {loaderData.truncated ? (
@@ -24,7 +32,7 @@ export default function MovementsPage({ loaderData }: Route.ComponentProps) {
           omitted.
         </p>
       ) : null}
-      <section className="panel">
+      <section className="panel print-panel">
         <div className="table-wrap">
           <table>
             <thead>

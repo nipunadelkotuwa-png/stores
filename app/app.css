@@ -525,3 +525,23 @@ td small {
     padding: 1.5rem;
   }
 }
+@media print {
+  .sidebar,
+  .topbar,
+  .no-print {
+    display: none !important;
+  }
+  .app-frame {
+    display: block;
+    grid-template-columns: none;
+  }
+  .content {
+    padding: 0;
+    margin: 0;
+    max-width: none;
+  }
+  body,
+  html {
+    background: white;
+  }
+}

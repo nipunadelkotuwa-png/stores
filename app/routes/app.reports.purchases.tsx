@@ -1,27 +1,34 @@
 import { Form, useSearchParams } from "react-router";
-import { getBusUsage } from "~/features/inventory/queries.server";
+import { getLocalPurchases } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
-import type { Route } from "./+types/app.reports.bus-usage";
+import type { Route } from "./+types/app.reports.purchases";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const start = url.searchParams.get("start") || undefined;
   const end = url.searchParams.get("end") || undefined;
-  const bus = url.searchParams.get("bus") || undefined;
-  return getBusUsage(await requireUser(request), { start, end, bus });
+  const supplier = url.searchParams.get("supplier") || undefined;
+  const result = await getLocalPurchases(await requireUser(request), {
+    start,
+    end,
+    supplier,
+  });
+  return result;
 }
 
-export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
+export default function PurchasesReportPage({
+  loaderData,
+}: Route.ComponentProps) {
   const [params] = useSearchParams();
 
   return (
     <>
       <div className="page-heading no-print">
         <div>
-          <p className="eyebrow">Fleet report</p>
-          <h1>Bus-wise stock issues</h1>
+          <p className="eyebrow">Procurement report</p>
+          <h1>Local purchases</h1>
           <p className="muted">
-            Spare parts consumed by each bus, store, and date.
+            Report of all local purchases, filterable by date and supplier.
           </p>
         </div>
         <div className="heading-actions">
@@ -60,12 +67,12 @@ export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
             />
           </div>
           <div>
-            <label>Bus Number</label>
+            <label>Supplier Name</label>
             <input
               type="text"
-              name="bus"
-              placeholder="e.g. B-001"
-              defaultValue={params.get("bus") || ""}
+              name="supplier"
+              placeholder="e.g. NTN Trading"
+              defaultValue={params.get("supplier") || ""}
             />
           </div>
           <div>
@@ -78,8 +85,8 @@ export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
 
       {loaderData.truncated ? (
         <p className="muted no-print">
-          Showing the latest {loaderData.rows.length} issue lines. Older rows
-          are omitted. Please use filters to narrow down results.
+          Showing the latest {loaderData.rows.length} purchases. Older rows are
+          omitted. Please use filters to narrow down results.
         </p>
       ) : null}
 
@@ -89,11 +96,11 @@ export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
             <thead>
               <tr>
                 <th>Date</th>
-                <th>Bus</th>
+                <th>Purchase</th>
                 <th>Store</th>
-                <th>Document</th>
-                <th>Part</th>
-                <th>Quantity</th>
+                <th>Supplier</th>
+                <th>Total (LKR)</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -101,28 +108,25 @@ export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
                 <tr>
                   <td colSpan={6}>
                     <div className="empty-state">
-                      <strong>No issues found</strong>
+                      <strong>No purchases found</strong>
                       <p>Try adjusting your filters.</p>
                     </div>
                   </td>
                 </tr>
-              ) : null}
-              {loaderData.rows.map((row, index) => (
-                <tr key={`${row.number}-${index}`}>
-                  <td>{row.date}</td>
-                  <td>
-                    <strong>{row.fleetNumber}</strong>
-                    <small>{row.registration ?? ""}</small>
-                  </td>
-                  <td>{row.store}</td>
-                  <td className="mono">{row.number}</td>
-                  <td>
-                    <strong>{row.sku}</strong>
-                    <small>{row.part}</small>
-                  </td>
-                  <td className="quantity">{row.quantity}</td>
-                </tr>
-              ))}
+              ) : (
+                loaderData.rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.date}</td>
+                    <td className="mono">{row.number}</td>
+                    <td>{row.store}</td>
+                    <td>{row.supplier}</td>
+                    <td className="quantity">{row.total}</td>
+                    <td>
+                      <span className="badge success">{row.status}</span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

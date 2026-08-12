@@ -62,12 +62,14 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     } else if (error.status === 403) {
       message = "Access denied";
       details =
-        typeof error.data === "object" &&
-        error.data &&
-        "message" in error.data &&
-        typeof (error.data as { message?: unknown }).message === "string"
-          ? (error.data as { message: string }).message
-          : "You do not have permission to view this page.";
+        typeof error.data === "string"
+          ? error.data
+          : typeof error.data === "object" &&
+              error.data &&
+              "message" in error.data &&
+              typeof (error.data as { message?: unknown }).message === "string"
+            ? (error.data as { message: string }).message
+            : "You do not have permission to view this page.";
     } else {
       message = `Error ${error.status}`;
       details = error.statusText || details;
