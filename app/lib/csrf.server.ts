@@ -7,16 +7,25 @@ export async function requireValidCsrf(request: Request, formData: FormData) {
   const origin = request.headers.get("Origin");
   const referer = request.headers.get("Referer");
   const appOrigin = getEnv().APP_ORIGIN;
+  const requestOrigin = new URL(request.url).origin;
+
+  const isValidOrigin = (o: string) => o === appOrigin || o === requestOrigin;
+
   if (origin) {
-    if (origin !== appOrigin)
+    if (!isValidOrigin(origin))
       throw new Response(
         JSON.stringify({
-          message: `Invalid request origin: expected ${appOrigin}, got ${origin}`,
+          message: `Invalid request origin: expected ${appOrigin} or ${requestOrigin}, got ${origin}`,
         }),
         { status: 403, headers: { "Content-Type": "application/json" } },
       );
   } else if (referer) {
-    if (!referer.startsWith(`${appOrigin}/`) && referer !== appOrigin)
+    const validRef =
+      referer.startsWith(`${appOrigin}/`) ||
+      referer === appOrigin ||
+      referer.startsWith(`${requestOrigin}/`) ||
+      referer === requestOrigin;
+    if (!validRef)
       throw new Response(
         JSON.stringify({ message: "Invalid request referer" }),
         { status: 403, headers: { "Content-Type": "application/json" } },
