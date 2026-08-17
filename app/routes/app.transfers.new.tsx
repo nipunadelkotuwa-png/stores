@@ -7,11 +7,15 @@ import {
   useNavigation,
 } from "react-router";
 import { CsrfField } from "~/components/csrf-field";
-import { PartSelector } from "~/components/part-selector";
-import { workshopActionError } from "~/features/workshop/errors";
-import { listInStoreTyres } from "~/features/workshop/queries.server";
+import { StockLineItems } from "~/components/stock-line-items";
+import {
+  loadStockLines,
+  stockLinesActionError,
+} from "~/features/inventory/form-lines";
 import { getTransactionOptions } from "~/features/inventory/queries.server";
 import { sendStoreTransfer } from "~/features/inventory/transfers.server";
+import { workshopActionError } from "~/features/workshop/errors";
+import { listInStoreTyres } from "~/features/workshop/queries.server";
 import { listStores } from "~/features/master-data/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
@@ -36,16 +40,26 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const form = Object.fromEntries(formData);
+  const loaded = loadStockLines(formData);
+  if (!loaded.ok) {
+    return { error: loaded.error, lineErrors: loaded.lineErrors };
+  }
   try {
     const result = await sendStoreTransfer(actor, {
       ...form,
       tyreIds: formData.getAll("tyreIds"),
-      lines: [{ partId: form.partId, quantity: form.quantity }],
+      lines: loaded.lines,
     });
     throw redirect(`/receipts/${result.id}`);
   } catch (error) {
     if (error instanceof Response) throw error;
-    return { error: workshopActionError(error, "Unable to send transfer") };
+    const failure = stockLinesActionError(
+      error,
+      "Unable to send transfer",
+      loaded.lines,
+      workshopActionError,
+    );
+    return { error: failure.error, lineErrors: failure.lineErrors };
   }
 }
 
@@ -53,15 +67,20 @@ export default function NewTransferPage({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [idempotencyKey] = useState(() => crypto.randomUUID());
-  const [partId, setPartId] = useState("");
   const [storeId, setStoreId] = useState("");
-  const [quantity, setQuantity] = useState("1");
-  const selected = loaderData.options.parts.find((part) => part.id === partId);
-  const isTyre = selected?.categoryCode === "TYRE";
-  const serials = loaderData.inStoreTyres.filter(
-    (tyre) =>
-      tyre.sku === selected?.sku && (!storeId || tyre.storeId === storeId),
+  const [drafts, setDrafts] = useState<{ partId: string; quantity: string }[]>(
+    [],
   );
+  const tyreParts = [
+    ...new Map(
+      drafts.flatMap((draft) => {
+        const part = loaderData.options.parts.find(
+          (row) => row.id === draft.partId,
+        );
+        return part?.categoryCode === "TYRE" ? [[part.id, part] as const] : [];
+      }),
+    ).values(),
+  ];
 
   return (
     <>
@@ -119,45 +138,46 @@ export default function NewTransferPage({ loaderData }: Route.ComponentProps) {
               defaultValue={new Date().toISOString().slice(0, 10)}
             />
           </label>
-          <label>
-            Part
-            <PartSelector
-              name="partId"
-              parts={loaderData.options.parts}
-              required
-              onChange={(id) => setPartId(id ?? "")}
-            />
-          </label>
-          <label>
-            Quantity
-            <input
-              type="number"
-              name="quantity"
-              min="0.001"
-              step="0.001"
-              required
-              value={quantity}
-              onChange={(event) => setQuantity(event.target.value)}
-            />
-          </label>
         </div>
-        {isTyre ? (
-          <fieldset className="stack">
-            <legend>Tyre serials (required)</legend>
-            {serials.length === 0 ? (
-              <p className="form-error">
-                Register in-store serials for this SKU before transferring.
-              </p>
-            ) : (
-              serials.map((tyre) => (
-                <label key={tyre.id} style={{ display: "flex", gap: "0.5rem" }}>
-                  <input type="checkbox" name="tyreIds" value={tyre.id} />
-                  {tyre.serialNumber} ({tyre.store})
-                </label>
-              ))
-            )}
-          </fieldset>
-        ) : null}
+        <StockLineItems
+          parts={loaderData.options.parts}
+          onLinesChange={setDrafts}
+          lineErrors={actionData?.lineErrors}
+        />
+        {tyreParts.map((part) => {
+          const expected = drafts
+            .filter((draft) => draft.partId === part.id)
+            .reduce((sum, draft) => sum + Number(draft.quantity || 0), 0);
+          const needed = Number.isFinite(expected) ? expected : 0;
+          const serials = loaderData.inStoreTyres.filter(
+            (tyre) =>
+              tyre.sku === part.sku && (!storeId || tyre.storeId === storeId),
+          );
+          const countLabel =
+            needed > 0 ? `select ${needed}` : "select as many as the quantity";
+          return (
+            <fieldset key={part.id} className="stack">
+              <legend>
+                Tyre serials for {part.sku} ({countLabel})
+              </legend>
+              {serials.length === 0 ? (
+                <p className="form-error">
+                  Register in-store serials for this SKU before transferring.
+                </p>
+              ) : (
+                serials.map((tyre) => (
+                  <label
+                    key={tyre.id}
+                    style={{ display: "flex", gap: "0.5rem" }}
+                  >
+                    <input type="checkbox" name="tyreIds" value={tyre.id} />
+                    {tyre.serialNumber} ({tyre.store})
+                  </label>
+                ))
+              )}
+            </fieldset>
+          );
+        })}
         <label>
           Notes
           <textarea name="notes" rows={2} />

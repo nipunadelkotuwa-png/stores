@@ -94,16 +94,20 @@ describe("prepareStockCommand", () => {
     ).toThrow(/destination/i);
   });
 
-  it("requires a DAG supplier on send", () => {
-    expect(() =>
-      prepareStockCommand("TYRE_DAG_SEND", {
-        storeId: "11111111-1111-4111-8111-111111111111",
-        businessDate: "2026-07-21",
-        idempotencyKey: "0123456789abcdef",
-        lines: [
-          { partId: "22222222-2222-4222-8222-222222222222", quantity: "1" },
-        ],
-      }),
-    ).toThrow(/supplier/i);
+  it("keeps two different parts as separate lines", () => {
+    const command = prepareStockCommand("STOCK_RECEIPT", {
+      storeId: "11111111-1111-4111-8111-111111111111",
+      businessDate: "2026-07-21",
+      idempotencyKey: "0123456789abcdef",
+      lines: [
+        { partId: "22222222-2222-4222-8222-222222222222", quantity: "1" },
+        { partId: "33333333-3333-4333-8333-333333333333", quantity: "2" },
+      ],
+    });
+    expect(command.lines).toHaveLength(2);
+    expect(command.lines.map((line) => line.partId)).toEqual([
+      "22222222-2222-4222-8222-222222222222",
+      "33333333-3333-4333-8333-333333333333",
+    ]);
   });
 });

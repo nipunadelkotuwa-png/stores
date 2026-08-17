@@ -99,6 +99,11 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
                 >
                   Unit
                 </th>
+                {doc.lines.some((line) => line.unitCost) ? (
+                  <th style={{ textAlign: "right", padding: "0.5rem 0" }}>
+                    Unit cost
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -114,6 +119,11 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
                   <td style={{ padding: "0.5rem 0", paddingLeft: "0.5rem" }}>
                     {line.unit}
                   </td>
+                  {doc.lines.some((row) => row.unitCost) ? (
+                    <td style={{ padding: "0.5rem 0", textAlign: "right" }}>
+                      {line.unitCost ?? "—"}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

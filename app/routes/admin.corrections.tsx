@@ -2,7 +2,12 @@ import { useState } from "react";
 import { Form, redirect, useActionData, useNavigation } from "react-router";
 import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
-import { PartSelector } from "~/components/part-selector";
+import { StockLineItems } from "~/components/stock-line-items";
+import {
+  formatZodLineError,
+  loadStockLines,
+  stockLinesActionError,
+} from "~/features/inventory/form-lines";
 import {
   inventoryActionError,
   postReversal,
@@ -20,13 +25,20 @@ const adjustmentSchema = z.object({
   intent: z.literal("adjust"),
   storeId: z.string().uuid(),
   businessDate: z.string().date(),
-  partId: z.string().uuid(),
   direction: z.enum(["increase", "decrease"]),
-  quantity: z
-    .string()
-    .regex(/^\d+(\.\d{1,3})?$/, "Quantity must be a positive decimal"),
   reason: z.string().min(3).max(500),
   idempotencyKey: z.string().min(16),
+  lines: z
+    .array(
+      z.object({
+        partId: z.string().uuid(),
+        quantity: z
+          .string()
+          .regex(/^\d+(\.\d{1,3})?$/, "Quantity must be a positive decimal"),
+      }),
+    )
+    .min(1)
+    .max(100),
 });
 
 const reversalSchema = z.object({
@@ -53,27 +65,38 @@ export async function action({ request }: Route.ActionArgs) {
   const entries = Object.fromEntries(formData);
   try {
     if (entries.intent === "adjust") {
-      const parsed = adjustmentSchema.safeParse(entries);
-      if (!parsed.success) {
-        return {
-          error:
-            parsed.error.issues[0]?.message ?? "Invalid adjustment details.",
-        };
+      const loaded = loadStockLines(formData);
+      if (!loaded.ok) {
+        return { error: loaded.error, lineErrors: loaded.lineErrors };
       }
-      const result = await postStock(actor, "ADJUSTMENT", {
-        storeId: parsed.data.storeId,
-        businessDate: parsed.data.businessDate,
-        direction: parsed.data.direction,
-        reason: parsed.data.reason,
-        idempotencyKey: parsed.data.idempotencyKey,
-        lines: [
-          {
-            partId: parsed.data.partId,
-            quantity: parsed.data.quantity,
-          },
-        ],
+      const parsed = adjustmentSchema.safeParse({
+        ...entries,
+        lines: loaded.lines,
       });
-      throw redirect(`/reports/movements?posted=${result.number}`);
+      if (!parsed.success) {
+        const failure = formatZodLineError(parsed.error, loaded.lines);
+        return { error: failure.error, lineErrors: failure.lineErrors };
+      }
+      try {
+        const result = await postStock(actor, "ADJUSTMENT", {
+          storeId: parsed.data.storeId,
+          businessDate: parsed.data.businessDate,
+          direction: parsed.data.direction,
+          reason: parsed.data.reason,
+          idempotencyKey: parsed.data.idempotencyKey,
+          lines: parsed.data.lines,
+        });
+        throw redirect(`/reports/movements?posted=${result.number}`);
+      } catch (error) {
+        if (error instanceof Response) throw error;
+        const failure = stockLinesActionError(
+          error,
+          "Unable to post correction",
+          loaded.lines,
+          inventoryActionError,
+        );
+        return { error: failure.error, lineErrors: failure.lineErrors };
+      }
     }
     if (entries.intent === "reverse") {
       const parsed = reversalSchema.safeParse(entries);
@@ -136,30 +159,16 @@ export default function CorrectionsPage({ loaderData }: Route.ComponentProps) {
               />
             </label>
             <label>
-              Part
-              <PartSelector
-                name="partId"
-                parts={loaderData.options.parts}
-                required
-              />
-            </label>
-            <label>
               Direction
               <select name="direction" required defaultValue="increase">
                 <option value="increase">Increase on-hand</option>
                 <option value="decrease">Decrease on-hand</option>
               </select>
             </label>
-            <label>
-              Quantity
-              <input
-                type="number"
-                name="quantity"
-                min="0.001"
-                step="0.001"
-                required
-              />
-            </label>
+            <StockLineItems
+              parts={loaderData.options.parts}
+              lineErrors={data?.lineErrors}
+            />
             <label>
               Reason
               <textarea name="reason" required rows={3} />

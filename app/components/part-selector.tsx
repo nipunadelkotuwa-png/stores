@@ -16,6 +16,8 @@ interface PartSelectorProps {
   parts: PartOption[];
   defaultValue?: string;
   required?: boolean;
+  menuZIndex?: number;
+  disabledPartIds?: string[];
   onChange?: (partId: string | null) => void;
 }
 
@@ -24,6 +26,8 @@ export function PartSelector({
   parts,
   defaultValue,
   required = false,
+  menuZIndex = 10,
+  disabledPartIds = [],
   onChange,
 }: PartSelectorProps) {
   const allOptions = parts.map((p) => ({
@@ -72,7 +76,7 @@ export function PartSelector({
   };
 
   return (
-    <div style={{ position: "relative", zIndex: 10 }}>
+    <div style={{ position: "relative", zIndex: menuZIndex }}>
       {/* Hidden input for Remix form submission */}
       <input type="hidden" name={name} value={selected ? selected.value : ""} />
       <Select
@@ -85,8 +89,9 @@ export function PartSelector({
         }}
         filterOption={customFilter}
         placeholder="Search by name, SKU, or scan barcode..."
-        isClearable
+        isClearable={!required}
         required={required && !selected}
+        isOptionDisabled={(option) => disabledPartIds.includes(option.value)}
         styles={{
           control: (base, state) => ({
             ...base,

@@ -8,16 +8,24 @@ import {
   useNavigation,
 } from "react-router";
 import { CsrfField } from "~/components/csrf-field";
-import { PartSelector } from "~/components/part-selector";
+import { StockLineItems } from "~/components/stock-line-items";
 import { TyreMap } from "~/components/tyre-map";
+import {
+  loadStockLines,
+  stockLinesActionError,
+} from "~/features/inventory/form-lines";
 import {
   inventoryActionError,
   postStock,
 } from "~/features/inventory/posting.server";
-import { getTransactionOptions } from "~/features/inventory/queries.server";
+import {
+  getRepetitiveIssueCounts,
+  getTransactionOptions,
+} from "~/features/inventory/queries.server";
 import {
   TYRE_POSITION_LABELS,
   TYRE_POSITIONS,
+  UNUSUAL_ISSUE_THRESHOLD,
 } from "~/features/workshop/constants";
 import { workshopActionError } from "~/features/workshop/errors";
 import {
@@ -40,11 +48,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
   const url = new URL(request.url);
-  const options = await getTransactionOptions(actor);
+  const [options, unusualCounts] = await Promise.all([
+    getTransactionOptions(actor),
+    getRepetitiveIssueCounts(actor),
+  ]);
   return {
     card,
     parts: options.parts,
     initialPartId: url.searchParams.get("part") || "",
+    unusualCounts,
+    unusualThreshold: UNUSUAL_ISSUE_THRESHOLD,
   };
 }
 
@@ -61,21 +74,31 @@ export async function action({ request, params }: Route.ActionArgs) {
       if (!card || card.status !== "OPEN") {
         return { error: "Job card must be open to issue parts" };
       }
-      const result = await postStock(actor, "BUS_ISSUE", {
-        storeId: card.storeId,
-        busId: card.busId,
-        jobCardId: card.id,
-        businessDate: card.businessDate,
-        notes: formData.get("notes"),
-        idempotencyKey: formData.get("idempotencyKey"),
-        lines: [
-          {
-            partId: formData.get("partId"),
-            quantity: formData.get("quantity"),
-          },
-        ],
-      });
-      throw redirect(`/receipts/${result.id}`);
+      const loaded = loadStockLines(formData);
+      if (!loaded.ok) {
+        return { error: loaded.error, lineErrors: loaded.lineErrors };
+      }
+      try {
+        const result = await postStock(actor, "BUS_ISSUE", {
+          storeId: card.storeId,
+          busId: card.busId,
+          jobCardId: card.id,
+          businessDate: card.businessDate,
+          notes: formData.get("notes"),
+          idempotencyKey: formData.get("idempotencyKey"),
+          lines: loaded.lines,
+        });
+        throw redirect(`/receipts/${result.id}`);
+      } catch (error) {
+        if (error instanceof Response) throw error;
+        const failure = stockLinesActionError(
+          error,
+          "Unable to update job card",
+          loaded.lines,
+          inventoryActionError,
+        );
+        return { error: failure.error, lineErrors: failure.lineErrors };
+      }
     }
     if (intent === "fit-tyre") {
       await fitOrReplaceTyre(actor, {
@@ -121,14 +144,32 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function JobCardDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { card } = loaderData;
+  const { card, unusualCounts, unusualThreshold } = loaderData;
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [issueKey] = useState(() => crypto.randomUUID());
   const [tyreKey] = useState(() => crypto.randomUUID());
   const [oilKey] = useState(() => crypto.randomUUID());
+  const [issuePartIds, setIssuePartIds] = useState<string[]>(
+    loaderData.initialPartId ? [loaderData.initialPartId] : [],
+  );
   const open = card.status === "OPEN";
   const busy = navigation.state !== "idle";
+  const unusualParts = issuePartIds.flatMap((partId) => {
+    if (!partId) return [];
+    const count =
+      unusualCounts.find(
+        (row) => row.partId === partId && row.busId === card.busId,
+      )?.issueCount ?? 0;
+    if (count < unusualThreshold) return [];
+    const part = loaderData.parts.find((row) => row.id === partId);
+    return [
+      {
+        label: part ? `${part.sku} — ${part.name}` : partId,
+        count,
+      },
+    ];
+  });
 
   return (
     <>
@@ -204,148 +245,157 @@ export default function JobCardDetailPage({
       </section>
 
       {open ? (
-        <div className="two-column no-print" style={{ marginBottom: "1.5rem" }}>
-          <section className="panel form-panel">
+        <>
+          <section
+            className="panel form-panel no-print"
+            style={{ marginBottom: "1.5rem" }}
+          >
             <h2>Issue parts</h2>
             <Form method="post" className="stack">
               <CsrfField />
               <input type="hidden" name="intent" value="issue" />
               <input type="hidden" name="idempotencyKey" value={issueKey} />
-              <label>
-                Part
-                <PartSelector
-                  name="partId"
-                  parts={loaderData.parts}
-                  defaultValue={loaderData.initialPartId}
-                  required
-                />
-              </label>
-              <label>
-                Quantity
-                <input
-                  type="number"
-                  name="quantity"
-                  min="0.001"
-                  step="0.001"
-                  required
-                />
-              </label>
+              <StockLineItems
+                parts={loaderData.parts}
+                initialPartId={loaderData.initialPartId || undefined}
+                lineErrors={actionData?.lineErrors}
+                onLinesChange={(rows) =>
+                  setIssuePartIds(rows.map((row) => row.partId))
+                }
+              />
               <label>
                 Notes
                 <textarea name="notes" rows={2} />
               </label>
+              {unusualParts.length > 0 ? (
+                <p className="form-error">
+                  Unusual request:{" "}
+                  {unusualParts
+                    .map(
+                      (row) =>
+                        `${row.label} has been issued to ${card.fleetNumber} ${row.count} times in the last 30 days`,
+                    )
+                    .join("; ")}{" "}
+                  (threshold {unusualThreshold}).
+                </p>
+              ) : null}
               <button className="button button-primary" disabled={busy}>
                 Post issue
               </button>
             </Form>
           </section>
 
-          <section className="panel form-panel">
-            <h2>Fit / replace tyre</h2>
-            {card.storeTyres.length === 0 ? (
-              <p className="muted">
-                Register a tyre serial in store stock first.{" "}
-                <Link to="/tyres">Tyres</Link>
-              </p>
-            ) : (
+          <div
+            className="two-column no-print"
+            style={{ marginBottom: "1.5rem" }}
+          >
+            <section className="panel form-panel">
+              <h2>Fit / replace tyre</h2>
+              {card.storeTyres.length === 0 ? (
+                <p className="muted">
+                  Register a tyre serial in store stock first.{" "}
+                  <Link to="/tyres">Tyres</Link>
+                </p>
+              ) : (
+                <Form method="post" className="stack">
+                  <CsrfField />
+                  <input type="hidden" name="intent" value="fit-tyre" />
+                  <input type="hidden" name="idempotencyKey" value={tyreKey} />
+                  <label>
+                    Tyre serial
+                    <select name="tyreId" required>
+                      <option value="">Select tyre</option>
+                      {card.storeTyres.map((tyre) => (
+                        <option key={tyre.id} value={tyre.id}>
+                          {tyre.serialNumber} — {tyre.sku} ({tyre.stage})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Position
+                    <select name="position" required>
+                      <option value="">Select position</option>
+                      {TYRE_POSITIONS.map((position) => (
+                        <option key={position} value={position}>
+                          {position} — {TYRE_POSITION_LABELS[position]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="button button-primary" disabled={busy}>
+                    Fit tyre
+                  </button>
+                </Form>
+              )}
+            </section>
+
+            <section className="panel form-panel">
+              <h2>Oil change</h2>
+              {card.oilParts.length === 0 ? (
+                <p className="muted">
+                  Add an OIL-category part to record a change.
+                </p>
+              ) : (
+                <Form method="post" className="stack">
+                  <CsrfField />
+                  <input type="hidden" name="intent" value="oil" />
+                  <input type="hidden" name="idempotencyKey" value={oilKey} />
+                  <label>
+                    Oil
+                    <select name="partId" required>
+                      <option value="">Select oil</option>
+                      {card.oilParts.map((part) => (
+                        <option key={part.id} value={part.id}>
+                          {part.sku} — {part.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Litres
+                    <input
+                      type="number"
+                      name="litres"
+                      min="0.001"
+                      step="0.001"
+                      required
+                    />
+                  </label>
+                  <label>
+                    Notes
+                    <textarea name="notes" rows={2} />
+                  </label>
+                  <button className="button button-primary" disabled={busy}>
+                    Record oil change
+                  </button>
+                </Form>
+              )}
+            </section>
+
+            <section className="panel form-panel">
+              <h2>Close job card</h2>
               <Form method="post" className="stack">
                 <CsrfField />
-                <input type="hidden" name="intent" value="fit-tyre" />
-                <input type="hidden" name="idempotencyKey" value={tyreKey} />
+                <input type="hidden" name="intent" value="close" />
                 <label>
-                  Tyre serial
-                  <select name="tyreId" required>
-                    <option value="">Select tyre</option>
-                    {card.storeTyres.map((tyre) => (
-                      <option key={tyre.id} value={tyre.id}>
-                        {tyre.serialNumber} — {tyre.sku} ({tyre.stage})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Position
-                  <select name="position" required>
-                    <option value="">Select position</option>
-                    {TYRE_POSITIONS.map((position) => (
-                      <option key={position} value={position}>
-                        {position} — {TYRE_POSITION_LABELS[position]}
-                      </option>
-                    ))}
-                  </select>
+                  Work done
+                  <textarea name="workDone" rows={4} required minLength={3} />
                 </label>
                 <button className="button button-primary" disabled={busy}>
-                  Fit tyre
+                  Close card
                 </button>
               </Form>
-            )}
-          </section>
-
-          <section className="panel form-panel">
-            <h2>Oil change</h2>
-            {card.oilParts.length === 0 ? (
-              <p className="muted">
-                Add an OIL-category part to record a change.
-              </p>
-            ) : (
-              <Form method="post" className="stack">
+              <Form method="post" style={{ marginTop: "1rem" }}>
                 <CsrfField />
-                <input type="hidden" name="intent" value="oil" />
-                <input type="hidden" name="idempotencyKey" value={oilKey} />
-                <label>
-                  Oil
-                  <select name="partId" required>
-                    <option value="">Select oil</option>
-                    {card.oilParts.map((part) => (
-                      <option key={part.id} value={part.id}>
-                        {part.sku} — {part.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Litres
-                  <input
-                    type="number"
-                    name="litres"
-                    min="0.001"
-                    step="0.001"
-                    required
-                  />
-                </label>
-                <label>
-                  Notes
-                  <textarea name="notes" rows={2} />
-                </label>
-                <button className="button button-primary" disabled={busy}>
-                  Record oil change
+                <input type="hidden" name="intent" value="cancel" />
+                <button className="text-button" disabled={busy}>
+                  Cancel unused card
                 </button>
               </Form>
-            )}
-          </section>
-
-          <section className="panel form-panel">
-            <h2>Close job card</h2>
-            <Form method="post" className="stack">
-              <CsrfField />
-              <input type="hidden" name="intent" value="close" />
-              <label>
-                Work done
-                <textarea name="workDone" rows={4} required minLength={3} />
-              </label>
-              <button className="button button-primary" disabled={busy}>
-                Close card
-              </button>
-            </Form>
-            <Form method="post" style={{ marginTop: "1rem" }}>
-              <CsrfField />
-              <input type="hidden" name="intent" value="cancel" />
-              <button className="text-button" disabled={busy}>
-                Cancel unused card
-              </button>
-            </Form>
-          </section>
-        </div>
+            </section>
+          </div>
+        </>
       ) : null}
 
       <section className="panel" style={{ marginBottom: "1.5rem" }}>

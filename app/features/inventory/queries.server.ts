@@ -354,6 +354,7 @@ export async function getDocumentForReceipt(actor: Actor, id: string) {
       name: parts.name,
       quantity: stockDocumentLines.quantity,
       unit: parts.unit,
+      unitCost: stockDocumentLines.unitCost,
     })
     .from(stockDocumentLines)
     .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))

@@ -1,6 +1,10 @@
 import { redirect, useActionData } from "react-router";
 import { StockForm } from "~/components/stock-form";
 import {
+  loadStockLines,
+  stockLinesActionError,
+} from "~/features/inventory/form-lines";
+import {
   inventoryActionError,
   postStock,
 } from "~/features/inventory/posting.server";
@@ -24,17 +28,25 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const form = Object.fromEntries(formData);
+  const loaded = loadStockLines(formData);
+  if (!loaded.ok) {
+    return { error: loaded.error, lineErrors: loaded.lineErrors };
+  }
   try {
     const result = await postStock(actor, "BUS_RETURN", {
       ...form,
-      lines: [{ partId: form.partId, quantity: form.quantity }],
+      lines: loaded.lines,
     });
     throw redirect(`/receipts/${result.id}`);
   } catch (error) {
     if (error instanceof Response) throw error;
-    return {
-      error: inventoryActionError(error, "Unable to post bus return"),
-    };
+    const failure = stockLinesActionError(
+      error,
+      "Unable to post bus return",
+      loaded.lines,
+      inventoryActionError,
+    );
+    return { error: failure.error, lineErrors: failure.lineErrors };
   }
 }
 

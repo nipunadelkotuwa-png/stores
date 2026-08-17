@@ -1,12 +1,22 @@
 import Decimal from "decimal.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { useState } from "react";
 import { Form, redirect, useActionData, useNavigation } from "react-router";
 import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
-import { PartSelector } from "~/components/part-selector";
+import { StockLineItems } from "~/components/stock-line-items";
 import { db } from "~/db/client.server";
-import { auditEvents, localPurchaseLines, localPurchases } from "~/db/schema";
+import {
+  auditEvents,
+  localPurchaseLines,
+  localPurchases,
+  parts,
+} from "~/db/schema";
+import {
+  formatZodLineError,
+  loadStockLines,
+  stockLinesActionError,
+} from "~/features/inventory/form-lines";
 import {
   inventoryActionError,
   postStockInTransaction,
@@ -20,10 +30,7 @@ import {
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.purchases.new";
 
-const schema = z.object({
-  storeId: z.string().uuid(),
-  supplierId: z.string().uuid(),
-  businessDate: z.string().date(),
+const purchaseLineSchema = z.object({
   partId: z.string().uuid(),
   quantity: z
     .string()
@@ -32,8 +39,15 @@ const schema = z.object({
   unitPrice: z
     .string()
     .regex(/^\d+(\.\d{1,2})?$/, "Unit price must be a non-negative decimal"),
+});
+
+const schema = z.object({
+  storeId: z.string().uuid(),
+  supplierId: z.string().uuid(),
+  businessDate: z.string().date(),
   invoiceReference: z.string().optional(),
   idempotencyKey: z.string().min(16),
+  lines: z.array(purchaseLineSchema).min(1).max(100),
 });
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -44,21 +58,36 @@ export async function action({ request }: Route.ActionArgs) {
   const actor = await requireUser(request);
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
-  const parsed = schema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success)
-    return { error: "Complete all purchase fields with valid values." };
+  const loaded = loadStockLines(formData, "unitPrice");
+  if (!loaded.ok) {
+    return { error: loaded.error, lineErrors: loaded.lineErrors };
+  }
+  const parsed = schema.safeParse({
+    ...Object.fromEntries(formData),
+    lines: loaded.lines,
+  });
+  if (!parsed.success) {
+    const failure = formatZodLineError(parsed.error, loaded.lines);
+    return { error: failure.error, lineErrors: failure.lineErrors };
+  }
   const value = parsed.data;
   await requireStoreAccess(actor, value.storeId);
   const supplier = await db.query.suppliers.findFirst({
     where: (row, { eq }) => eq(row.id, value.supplierId),
   });
-  const part = await db.query.parts.findFirst({
-    where: (row, { eq }) => eq(row.id, value.partId),
-  });
-  if (!supplier || !part)
+  const partIds = [...new Set(value.lines.map((line) => line.partId))];
+  const partRows = await db
+    .select()
+    .from(parts)
+    .where(inArray(parts.id, partIds));
+  const partById = new Map(partRows.map((part) => [part.id, part]));
+  if (!supplier || partById.size !== partIds.length)
     return { error: "Supplier or part no longer exists." };
-  const subtotal = new Decimal(value.quantity)
-    .times(value.unitPrice)
+  const lineTotals = value.lines.map((line) =>
+    new Decimal(line.quantity).times(line.unitPrice).toDecimalPlaces(2),
+  );
+  const subtotal = lineTotals
+    .reduce((sum, amount) => sum.plus(amount), new Decimal(0))
     .toDecimalPlaces(2);
   try {
     const result = await db.transaction(async (tx) => {
@@ -96,17 +125,22 @@ export async function action({ request }: Route.ActionArgs) {
           createdBy: actor.id,
         })
         .returning();
-      await tx.insert(localPurchaseLines).values({
-        purchaseId: purchase.id,
-        lineNumber: 1,
-        partId: part.id,
-        quantity: new Decimal(value.quantity).toFixed(3),
-        unitPrice: new Decimal(value.unitPrice).toFixed(2),
-        lineTotal: subtotal.toFixed(2),
-        skuSnapshot: part.sku,
-        nameSnapshot: part.name,
-        unitSnapshot: part.unit,
-      });
+      await tx.insert(localPurchaseLines).values(
+        value.lines.map((line, index) => {
+          const part = partById.get(line.partId)!;
+          return {
+            purchaseId: purchase.id,
+            lineNumber: index + 1,
+            partId: part.id,
+            quantity: new Decimal(line.quantity).toFixed(3),
+            unitPrice: new Decimal(line.unitPrice).toFixed(2),
+            lineTotal: lineTotals[index]!.toFixed(2),
+            skuSnapshot: part.sku,
+            nameSnapshot: part.name,
+            unitSnapshot: part.unit,
+          };
+        }),
+      );
       const receipt = await postStockInTransaction(
         tx,
         actor,
@@ -116,13 +150,11 @@ export async function action({ request }: Route.ActionArgs) {
           supplierId: value.supplierId,
           businessDate: value.businessDate,
           idempotencyKey: `receipt-${value.idempotencyKey}`,
-          lines: [
-            {
-              partId: value.partId,
-              quantity: value.quantity,
-              unitCost: value.unitPrice,
-            },
-          ],
+          lines: value.lines.map((line) => ({
+            partId: line.partId,
+            quantity: line.quantity,
+            unitCost: line.unitPrice,
+          })),
         }),
       );
       await tx
@@ -148,9 +180,13 @@ export async function action({ request }: Route.ActionArgs) {
     throw redirect(`/reports/movements?purchase=${result.number}`);
   } catch (error) {
     if (error instanceof Response) throw error;
-    return {
-      error: inventoryActionError(error, "Unable to post purchase"),
-    };
+    const failure = stockLinesActionError(
+      error,
+      "Unable to post purchase",
+      loaded.lines,
+      inventoryActionError,
+    );
+    return { error: failure.error, lineErrors: failure.lineErrors };
   }
 }
 
@@ -208,31 +244,16 @@ export default function PurchasePage({ loaderData }: Route.ComponentProps) {
             Supplier invoice
             <input name="invoiceReference" />
           </label>
-          <label>
-            Part
-            <PartSelector name="partId" parts={loaderData.parts} required />
-          </label>
-          <label>
-            Quantity
-            <input
-              name="quantity"
-              type="number"
-              min="0.001"
-              step="0.001"
-              required
-            />
-          </label>
-          <label>
-            Unit price (LKR)
-            <input
-              name="unitPrice"
-              type="number"
-              min="0"
-              step="0.01"
-              required
-            />
-          </label>
         </div>
+        <StockLineItems
+          parts={loaderData.parts}
+          lineErrors={data?.lineErrors}
+          cost={{
+            name: "unitPrice",
+            label: "Unit price (LKR)",
+            required: true,
+          }}
+        />
         {data?.error ? <p className="form-error">{data.error}</p> : null}
         <div className="form-actions">
           <button

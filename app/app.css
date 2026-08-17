@@ -178,9 +178,12 @@ textarea {
   transform: translateY(-1px);
 }
 .button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.65;
   transform: none;
+}
+.button-primary:disabled {
+  cursor: wait;
 }
 .button-primary {
   color: white;
@@ -498,6 +501,44 @@ td small {
   padding-top: 1.1rem;
   border-top: 1px solid var(--line);
 }
+.stock-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: 0.25rem 0 1rem;
+}
+.stock-lines-heading .eyebrow {
+  margin-bottom: 0;
+}
+.stock-line-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8.5rem auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+.stock-line-row.has-cost {
+  grid-template-columns: minmax(0, 1.5fr) 8.5rem 9rem auto;
+}
+.stock-line-row.has-error {
+  padding: 0.75rem;
+  border: 1px solid var(--red);
+  border-radius: 16px;
+}
+.stock-line-row label {
+  margin: 0;
+}
+.stock-line-row .button {
+  min-height: 42px;
+  padding: 0.5rem 0.9rem;
+}
+.stock-lines-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+.two-column .stock-line-row,
+.two-column .stock-line-row.has-cost {
+  grid-template-columns: minmax(0, 1fr);
+}
 
 @media (max-width: 1100px) {
   .metric-grid {
@@ -538,7 +579,9 @@ td small {
 }
 @media (max-width: 560px) {
   .metric-grid,
-  .form-grid {
+  .form-grid,
+  .stock-line-row,
+  .stock-line-row.has-cost {
     grid-template-columns: 1fr;
   }
   .sidebar nav {

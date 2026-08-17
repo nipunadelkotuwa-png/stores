@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Form, Link, useNavigation } from "react-router";
 import { CsrfField } from "~/components/csrf-field";
+import { StockLineItems } from "~/components/stock-line-items";
 import type { getTransactionOptions } from "~/features/inventory/queries.server";
 import type { listOpenJobCards } from "~/features/workshop/queries.server";
-import { PartSelector } from "./part-selector";
 
 type Options = Awaited<ReturnType<typeof getTransactionOptions>>;
 type OpenJobCards = Awaited<ReturnType<typeof listOpenJobCards>>;
@@ -20,7 +20,7 @@ export function StockForm({
 }: {
   options: Options;
   kind: "receipt" | "issue" | "bus_return";
-  actionData?: { error?: string };
+  actionData?: { error?: string; lineErrors?: Record<number, string> };
   initialPartId?: string;
   initialStoreId?: string;
   openJobCards?: OpenJobCards;
@@ -43,15 +43,29 @@ export function StockForm({
       : (visibleCards.find((card) => card.storeId === initialStoreId)?.id ??
         "");
   const [jobCardId, setJobCardId] = useState(defaultCard);
-  const [partId, setPartId] = useState(initialPartId ?? "");
+  const [partIds, setPartIds] = useState<string[]>(
+    initialPartId ? [initialPartId] : [],
+  );
   const selectedCard = visibleCards.find((card) => card.id === jobCardId);
-  const unusualCount =
-    kind === "issue" && partId && selectedCard
-      ? (unusualCounts.find(
-          (row) => row.partId === partId && row.busId === selectedCard.busId,
-        )?.issueCount ?? 0)
-      : 0;
-  const unusualWarning = unusualCount >= unusualThreshold;
+  const unusualParts =
+    kind === "issue" && selectedCard
+      ? partIds.flatMap((partId) => {
+          if (!partId) return [];
+          const count =
+            unusualCounts.find(
+              (row) =>
+                row.partId === partId && row.busId === selectedCard.busId,
+            )?.issueCount ?? 0;
+          if (count < unusualThreshold) return [];
+          const part = options.parts.find((row) => row.id === partId);
+          return [
+            {
+              label: part ? `${part.sku} — ${part.name}` : partId,
+              count,
+            },
+          ];
+        })
+      : [];
 
   const newCardQuery = new URLSearchParams();
   if (initialStoreId) newCardQuery.set("store", initialStoreId);
@@ -152,33 +166,18 @@ export function StockForm({
             · {selectedCard.businessDate}
           </p>
         ) : null}
-        <label>
-          Part
-          <PartSelector
-            name="partId"
-            parts={options.parts}
-            defaultValue={initialPartId}
-            required
-            onChange={(id) => setPartId(id ?? "")}
-          />
-        </label>
-        <label>
-          Quantity
-          <input
-            type="number"
-            name="quantity"
-            min="0.001"
-            step="0.001"
-            required
-          />
-        </label>
-        {kind === "receipt" ? (
-          <label>
-            Unit cost (LKR)
-            <input type="number" name="unitCost" min="0" step="0.01" />
-          </label>
-        ) : null}
       </div>
+      <StockLineItems
+        parts={options.parts}
+        initialPartId={initialPartId}
+        onLinesChange={(rows) => setPartIds(rows.map((row) => row.partId))}
+        lineErrors={actionData?.lineErrors}
+        cost={
+          kind === "receipt"
+            ? { name: "unitCost", label: "Unit cost (LKR)" }
+            : undefined
+        }
+      />
       <label>
         Notes
         <textarea
@@ -187,10 +186,15 @@ export function StockForm({
           placeholder="Optional reference or comments"
         />
       </label>
-      {unusualWarning ? (
+      {unusualParts.length > 0 ? (
         <p className="form-error">
-          Unusual request: this part has been issued to{" "}
-          {selectedCard?.fleetNumber} {unusualCount} times in the last 30 days
+          Unusual request:{" "}
+          {unusualParts
+            .map(
+              (row) =>
+                `${row.label} has been issued to ${selectedCard?.fleetNumber} ${row.count} times in the last 30 days`,
+            )
+            .join("; ")}{" "}
           (threshold {unusualThreshold}).
         </p>
       ) : null}
