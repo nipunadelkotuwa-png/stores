@@ -9,6 +9,7 @@ import {
   auditEvents,
   documentSequences,
   inventoryBalances,
+  jobCards,
   parts,
   stockDocumentLines,
   stockDocuments,
@@ -30,6 +31,37 @@ export type Transaction = Parameters<
 
 type PreparedCommand = ReturnType<typeof prepareStockCommand>;
 
+async function assertOpenJobCard(
+  tx: Transaction,
+  type: StockType,
+  command: PreparedCommand,
+) {
+  if (type !== "BUS_ISSUE" && type !== "BUS_RETURN") return;
+  if (!command.jobCardId) {
+    throw new Error("An open job card is required to issue or return parts");
+  }
+  const [card] = await tx
+    .select({
+      id: jobCards.id,
+      status: jobCards.status,
+      storeId: jobCards.storeId,
+      busId: jobCards.busId,
+    })
+    .from(jobCards)
+    .where(eq(jobCards.id, command.jobCardId))
+    .limit(1);
+  if (!card) throw new Error("Job card not found");
+  if (card.status !== "OPEN") {
+    throw new Error("Job card must be open to post stock against it");
+  }
+  if (card.storeId !== command.storeId) {
+    throw new Error("Job card store does not match the stock document");
+  }
+  if (card.busId !== command.busId) {
+    throw new Error("Job card bus does not match the stock document");
+  }
+}
+
 function documentNumberPrefix(
   type: StockType | "REVERSAL",
   storeCode: string,
@@ -40,6 +72,8 @@ function documentNumberPrefix(
   else if (type === "BUS_ISSUE") kind = "ISS";
   else if (type === "BUS_RETURN") kind = "BSR";
   else if (type === "REVERSAL") kind = "REV";
+  else if (type === "TYRE_DAG_SEND") kind = "TDS";
+  else if (type === "TYRE_DAG_RECEIVE") kind = "TDR";
 
   return `${kind}-${storeCode}-${year}-`;
 }
@@ -127,6 +161,7 @@ export async function postStockInTransaction(
   if (partRows.length !== command.lines.length) {
     throw new Error("One or more parts are invalid");
   }
+  await assertOpenJobCard(tx, type, command);
   const partById = new Map(partRows.map((part) => [part.id, part]));
   const number = await nextDocumentNumber(
     tx,
@@ -143,6 +178,7 @@ export async function postStockInTransaction(
       storeId: command.storeId,
       supplierId: command.supplierId,
       busId: command.busId,
+      jobCardId: command.jobCardId,
       businessDate: command.businessDate,
       reason: command.reason,
       notes: command.notes,
@@ -155,6 +191,7 @@ export async function postStockInTransaction(
     const part = partById.get(line.partId)!;
     const delta =
       type === "BUS_ISSUE" ||
+      type === "TYRE_DAG_SEND" ||
       (type === "ADJUSTMENT" && command.direction === "decrease")
         ? line.quantity.negated()
         : line.quantity;
@@ -228,7 +265,11 @@ export async function postStock(actor: Actor, type: StockType, input: unknown) {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
     return postStockInTransaction(tx, actor, type, command);
   });
-  if (type === "BUS_ISSUE" || command.direction === "decrease") {
+  if (
+    type === "BUS_ISSUE" ||
+    type === "TYRE_DAG_SEND" ||
+    command.direction === "decrease"
+  ) {
     const { notifyLowStockForParts } =
       await import("~/lib/notifications.server");
     void notifyLowStockForParts(
@@ -373,6 +414,7 @@ export async function postReversal(
         storeId: original.storeId,
         busId: original.busId,
         supplierId: original.supplierId,
+        jobCardId: original.jobCardId,
         reversesDocumentId: original.id,
         businessDate: input.businessDate,
         reason: input.reason,

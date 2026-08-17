@@ -13,7 +13,8 @@ import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.dashboard";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  return getDashboard(await requireUser(request));
+  const actor = await requireUser(request);
+  return { ...(await getDashboard(actor)), canManage: actor.role === "ADMIN" };
 }
 
 function processTrendData(
@@ -85,9 +86,11 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="heading-actions">
-          <Link className="button button-secondary" to="/parts#add-part-form">
-            Add new item
-          </Link>
+          {loaderData.canManage ? (
+            <Link className="button button-secondary" to="/parts#add-part-form">
+              Add new item
+            </Link>
+          ) : null}
           <Link className="button button-secondary" to="/issues/new">
             Issue to bus
           </Link>
@@ -189,6 +192,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                     <th>Store</th>
                     <th>Part</th>
                     <th>On hand</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -210,6 +214,13 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                         >
                           ≤ {row.reorderLevel}
                         </span>
+                      </td>
+                      <td>
+                        <Link
+                          to={`/stock-in/new?part=${row.partId}&store=${row.storeId}`}
+                        >
+                          Stock in
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -261,6 +272,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                   <tr>
                     <th>Part</th>
                     <th>Quantity issued</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -271,6 +283,9 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                         <small>{row.part}</small>
                       </td>
                       <td className="quantity">{row.quantity}</td>
+                      <td>
+                        <Link to={`/issues/new?part=${row.partId}`}>Issue</Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

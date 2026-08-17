@@ -42,12 +42,13 @@ export default function PurchasesIndexPage({
                 <th>Supplier</th>
                 <th>Total (LKR)</th>
                 <th>Status</th>
+                <th>Receipt</th>
               </tr>
             </thead>
             <tbody>
               {loaderData.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>No purchases yet.</td>
+                  <td colSpan={7}>No purchases yet.</td>
                 </tr>
               ) : (
                 loaderData.rows.map((row) => (
@@ -59,6 +60,15 @@ export default function PurchasesIndexPage({
                     <td className="quantity">{row.total}</td>
                     <td>
                       <span className="badge success">{row.status}</span>
+                    </td>
+                    <td>
+                      {row.receiptDocumentId ? (
+                        <Link to={`/receipts/${row.receiptDocumentId}`}>
+                          View receipt
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 ))

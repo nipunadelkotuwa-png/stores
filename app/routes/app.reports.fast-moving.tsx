@@ -1,4 +1,4 @@
-import { Form, useSubmit } from "react-router";
+import { Form, Link, useSubmit } from "react-router";
 import { getFastMovingParts } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.fast-moving";
@@ -86,13 +86,14 @@ export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
                 <th style={{ textAlign: "right", padding: "0.5rem" }}>
                   Total Issued
                 </th>
+                <th className="no-print" />
               </tr>
             </thead>
             <tbody>
               {loaderData.rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={3}
+                    colSpan={4}
                     style={{ textAlign: "center", padding: "1rem" }}
                   >
                     No items issued in this period.
@@ -110,6 +111,9 @@ export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
                     <td style={{ padding: "0.5rem" }}>{row.part}</td>
                     <td style={{ padding: "0.5rem", textAlign: "right" }}>
                       {row.totalIssued}
+                    </td>
+                    <td className="no-print" style={{ padding: "0.5rem" }}>
+                      <Link to={`/issues/new?part=${row.partId}`}>Issue</Link>
                     </td>
                   </tr>
                 ))

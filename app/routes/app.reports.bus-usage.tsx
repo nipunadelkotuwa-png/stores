@@ -1,4 +1,4 @@
-import { Form, useSearchParams } from "react-router";
+import { Form, Link, useSearchParams } from "react-router";
 import { getBusUsage } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.bus-usage";
@@ -115,7 +115,11 @@ export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
                     <small>{row.registration ?? ""}</small>
                   </td>
                   <td>{row.store}</td>
-                  <td className="mono">{row.number}</td>
+                  <td>
+                    <Link to={`/receipts/${row.id}`} className="mono">
+                      {row.number}
+                    </Link>
+                  </td>
                   <td>
                     <strong>{row.sku}</strong>
                     <small>{row.part}</small>

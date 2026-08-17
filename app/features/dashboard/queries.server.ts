@@ -37,7 +37,9 @@ export async function getDashboard(actor: Actor) {
 
   const lowStockThresholds = await db
     .select({
+      storeId: stores.id,
       store: stores.name,
+      partId: parts.id,
       part: parts.name,
       sku: parts.sku,
       onHand: sql<string>`COALESCE(${inventoryBalances.onHand}, 0)`,
@@ -66,6 +68,7 @@ export async function getDashboard(actor: Actor) {
 
   const topConsumed = await db
     .select({
+      partId: parts.id,
       sku: parts.sku,
       part: parts.name,
       quantity: sql<string>`SUM(${stockMovements.quantityDelta} * -1)`,

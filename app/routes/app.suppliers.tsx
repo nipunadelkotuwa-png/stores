@@ -11,8 +11,8 @@ import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.suppliers";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request);
-  return { suppliers: await listSuppliers() };
+  const user = await requireUser(request);
+  return { suppliers: await listSuppliers(), canManage: user.role === "ADMIN" };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -79,7 +79,7 @@ export default function SuppliersPage({ loaderData }: Route.ComponentProps) {
       {actionData?.error ? (
         <p className="form-error">{actionData.error}</p>
       ) : null}
-      <div className="two-column">
+      <div className={loaderData.canManage ? "two-column" : undefined}>
         <section className="panel">
           <div className="table-wrap">
             <table>
@@ -90,7 +90,7 @@ export default function SuppliersPage({ loaderData }: Route.ComponentProps) {
                   <th>Phone</th>
                   <th>Email</th>
                   <th>Status</th>
-                  <th />
+                  {loaderData.canManage ? <th /> : null}
                 </tr>
               </thead>
               <tbody>
@@ -109,56 +109,60 @@ export default function SuppliersPage({ loaderData }: Route.ComponentProps) {
                         {supplier.active ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td>
-                      <Form method="post">
-                        <CsrfField />
-                        <input type="hidden" name="intent" value="toggle" />
-                        <input type="hidden" name="id" value={supplier.id} />
-                        <input
-                          type="hidden"
-                          name="active"
-                          value={String(supplier.active)}
-                        />
-                        <button className="text-button" type="submit">
-                          {supplier.active ? "Deactivate" : "Activate"}
-                        </button>
-                      </Form>
-                    </td>
+                    {loaderData.canManage ? (
+                      <td>
+                        <Form method="post">
+                          <CsrfField />
+                          <input type="hidden" name="intent" value="toggle" />
+                          <input type="hidden" name="id" value={supplier.id} />
+                          <input
+                            type="hidden"
+                            name="active"
+                            value={String(supplier.active)}
+                          />
+                          <button className="text-button" type="submit">
+                            {supplier.active ? "Deactivate" : "Activate"}
+                          </button>
+                        </Form>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </section>
-        <section className="panel form-panel">
-          <h2>Add supplier</h2>
-          <Form method="post" className="stack">
-            <CsrfField />
-            <input type="hidden" name="intent" value="create" />
-            <label>
-              Code
-              <input name="code" required />
-            </label>
-            <label>
-              Name
-              <input name="name" required />
-            </label>
-            <label>
-              Phone
-              <input name="phone" />
-            </label>
-            <label>
-              Email
-              <input name="email" type="email" />
-            </label>
-            <button
-              className="button button-primary"
-              disabled={navigation.state !== "idle"}
-            >
-              Add supplier
-            </button>
-          </Form>
-        </section>
+        {loaderData.canManage ? (
+          <section className="panel form-panel">
+            <h2>Add supplier</h2>
+            <Form method="post" className="stack">
+              <CsrfField />
+              <input type="hidden" name="intent" value="create" />
+              <label>
+                Code
+                <input name="code" required />
+              </label>
+              <label>
+                Name
+                <input name="name" required />
+              </label>
+              <label>
+                Phone
+                <input name="phone" />
+              </label>
+              <label>
+                Email
+                <input name="email" type="email" />
+              </label>
+              <button
+                className="button button-primary"
+                disabled={navigation.state !== "idle"}
+              >
+                Add supplier
+              </button>
+            </Form>
+          </section>
+        ) : null}
       </div>
     </>
   );

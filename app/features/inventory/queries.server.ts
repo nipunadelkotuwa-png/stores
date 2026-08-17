@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
 import { db } from "~/db/client.server";
 import {
+  auditEvents,
   buses,
   inventoryBalances,
   localPurchases,
@@ -12,6 +13,7 @@ import {
   storePartSettings,
   stores,
   suppliers,
+  users,
 } from "~/db/schema";
 import {
   getAuthorizedStoreIds,
@@ -60,14 +62,33 @@ export async function getTransactionOptions(actor: Actor) {
   }));
 }
 
+export async function getScanCatalog(actor: Actor) {
+  const [catalog, balances] = await Promise.all([
+    db
+      .select({
+        id: parts.id,
+        sku: parts.sku,
+        name: parts.name,
+        barcode: parts.barcode,
+      })
+      .from(parts)
+      .where(eq(parts.active, true))
+      .orderBy(asc(parts.sku)),
+    getBalances(actor),
+  ]);
+  return { catalog, balances };
+}
+
 export async function getBalances(actor: Actor) {
   const ids = await getAuthorizedStoreIds(actor);
   return db
     .select({
+      storeId: stores.id,
       store: stores.name,
       storeCode: stores.code,
       partId: parts.id,
       sku: parts.sku,
+      barcode: parts.barcode,
       part: parts.name,
       unit: parts.unit,
       onHand: inventoryBalances.onHand,
@@ -91,6 +112,7 @@ export async function getLowStock(actor: Actor) {
   const ids = await getAuthorizedStoreIds(actor);
   return db
     .select({
+      storeId: stores.id,
       store: stores.name,
       storeCode: stores.code,
       partId: parts.id,
@@ -118,8 +140,25 @@ export async function getLowStock(actor: Actor) {
     .orderBy(asc(stores.code), asc(parts.sku));
 }
 
-export async function getMovements(actor: Actor) {
+export async function getMovements(
+  actor: Actor,
+  filters?: { documentNumber?: string; purchaseNumber?: string },
+) {
   const ids = await getAuthorizedStoreIds(actor);
+  let documentNumber = filters?.documentNumber?.trim() || undefined;
+  if (!documentNumber && filters?.purchaseNumber) {
+    const [purchase] = await db
+      .select({ number: stockDocuments.documentNumber })
+      .from(localPurchases)
+      .innerJoin(
+        stockDocuments,
+        eq(localPurchases.receiptDocumentId, stockDocuments.id),
+      )
+      .where(eq(localPurchases.purchaseNumber, filters.purchaseNumber))
+      .limit(1);
+    documentNumber = purchase?.number;
+  }
+
   const rows = await db
     .select({
       id: stockDocuments.id,
@@ -136,12 +175,20 @@ export async function getMovements(actor: Actor) {
     .innerJoin(stockDocuments, eq(stockMovements.documentId, stockDocuments.id))
     .innerJoin(stores, eq(stockMovements.storeId, stores.id))
     .innerJoin(parts, eq(stockMovements.partId, parts.id))
-    .where(scopedStoreCondition(stockMovements.storeId, ids))
+    .where(
+      and(
+        scopedStoreCondition(stockMovements.storeId, ids),
+        documentNumber
+          ? eq(stockDocuments.documentNumber, documentNumber)
+          : undefined,
+      ),
+    )
     .orderBy(desc(stockMovements.occurredAt))
     .limit(REPORT_LIMIT + 1);
   return {
     rows: rows.slice(0, REPORT_LIMIT),
     truncated: rows.length > REPORT_LIMIT,
+    focus: documentNumber ?? null,
   };
 }
 
@@ -164,6 +211,7 @@ export async function getBusUsage(
 
   const rows = await db
     .select({
+      id: stockDocuments.id,
       date: stockDocuments.businessDate,
       number: stockDocuments.documentNumber,
       store: stores.name,
@@ -209,6 +257,7 @@ export async function getLocalPurchases(
     .select({
       id: localPurchases.id,
       number: localPurchases.purchaseNumber,
+      receiptDocumentId: localPurchases.receiptDocumentId,
       date: localPurchases.businessDate,
       store: stores.name,
       supplier: localPurchases.supplierNameSnapshot,
@@ -328,10 +377,10 @@ export async function getFastMovingParts(
 
   const results = await db
     .select({
+      partId: parts.id,
       sku: parts.sku,
       part: parts.name,
-      category: parts.categoryId,
-      totalIssued: sql<string>`sum(cast(abs(cast(${stockMovements.quantityDelta} as numeric)) as text))`,
+      totalIssued: sql<string>`SUM(${stockMovements.quantityDelta} * -1)`,
     })
     .from(stockMovements)
     .innerJoin(stockDocuments, eq(stockMovements.documentId, stockDocuments.id))
@@ -339,16 +388,36 @@ export async function getFastMovingParts(
     .where(
       and(
         eq(stockDocuments.type, "BUS_ISSUE"),
+        eq(stockDocuments.status, "POSTED"),
+        lt(stockMovements.quantityDelta, "0"),
         sql`${stockDocuments.businessDate} >= ${startDate}`,
         sql`${stockDocuments.businessDate} <= ${endDate}`,
         scopedStoreCondition(stockMovements.storeId, ids),
       ),
     )
-    .groupBy(parts.id, parts.sku, parts.name, parts.categoryId)
-    .orderBy(
-      desc(sql`sum(abs(cast(${stockMovements.quantityDelta} as numeric)))`),
-    )
+    .groupBy(parts.id, parts.sku, parts.name)
+    .orderBy(desc(sql`SUM(${stockMovements.quantityDelta} * -1)`))
     .limit(50);
 
   return results;
+}
+
+export async function getAuditEvents() {
+  return db
+    .select({
+      id: auditEvents.id,
+      occurredAt: auditEvents.occurredAt,
+      eventType: auditEvents.eventType,
+      entityType: auditEvents.entityType,
+      entityId: auditEvents.entityId,
+      outcome: auditEvents.outcome,
+      actor: users.displayName,
+      store: stores.name,
+      metadata: auditEvents.metadata,
+    })
+    .from(auditEvents)
+    .leftJoin(users, eq(auditEvents.actorId, users.id))
+    .leftJoin(stores, eq(auditEvents.storeId, stores.id))
+    .orderBy(desc(auditEvents.occurredAt))
+    .limit(REPORT_LIMIT);
 }

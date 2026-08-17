@@ -1,4 +1,4 @@
-import { Form, useSubmit } from "react-router";
+import { Form, Link, useSubmit } from "react-router";
 import { getDailyMovements } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.daily-movement";
@@ -82,7 +82,9 @@ export default function DailyMovementReport({
                     style={{ borderBottom: "1px solid #ccc" }}
                   >
                     <td style={{ padding: "0.5rem" }}>
-                      <span className="mono">{row.number}</span>
+                      <Link to={`/receipts/${row.id}`} className="mono">
+                        {row.number}
+                      </Link>
                       <br />
                       <small>{row.type.replace("_", " ")}</small>
                     </td>

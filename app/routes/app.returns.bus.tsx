@@ -5,13 +5,18 @@ import {
   postStock,
 } from "~/features/inventory/posting.server";
 import { getTransactionOptions } from "~/features/inventory/queries.server";
+import { listOpenJobCards } from "~/features/workshop/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.returns.bus";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const actor = await requireUser(request);
-  return getTransactionOptions(actor);
+  const [options, openJobCards] = await Promise.all([
+    getTransactionOptions(actor),
+    listOpenJobCards(actor),
+  ]);
+  return { options, openJobCards };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -42,15 +47,16 @@ export default function BusReturnPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Fleet usage</p>
           <h1>Bus Return</h1>
           <p className="muted">
-            Log items returning from a bus (unused parts, worn tires, etc.) back
-            into inventory.
+            Return unused parts or worn items from a bus against the open job
+            card.
           </p>
         </div>
       </div>
       <StockForm
-        options={loaderData}
+        options={loaderData.options}
         kind="bus_return"
         actionData={actionData}
+        openJobCards={loaderData.openJobCards}
       />
     </>
   );

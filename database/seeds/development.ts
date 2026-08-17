@@ -33,7 +33,12 @@ try {
   );
   await client.query(`
     INSERT INTO part_categories (code, name)
-    VALUES ('ENGINE', 'Engine'), ('BRAKE', 'Brakes'), ('ELECTRICAL', 'Electrical')
+    VALUES
+      ('ENGINE', 'Engine'),
+      ('BRAKE', 'Brakes'),
+      ('ELECTRICAL', 'Electrical'),
+      ('TYRE', 'Tyres'),
+      ('OIL', 'Oil')
     ON CONFLICT (code) DO NOTHING
   `);
   await client.query(`
@@ -65,6 +70,24 @@ try {
     ON CONFLICT (sku) DO NOTHING
   `);
   await client.query(`
+    INSERT INTO parts (sku, name, unit, brand, category_id)
+    SELECT 'TR-ORG-295', '295/80R22.5 original tyre', 'EA', 'Ceat', id
+    FROM part_categories WHERE code = 'TYRE'
+    ON CONFLICT (sku) DO NOTHING
+  `);
+  await client.query(`
+    INSERT INTO parts (sku, name, unit, brand, category_id)
+    SELECT 'TR-DAG1-295', '295/80R22.5 DAG1 retread', 'EA', 'Ceat', id
+    FROM part_categories WHERE code = 'TYRE'
+    ON CONFLICT (sku) DO NOTHING
+  `);
+  await client.query(`
+    INSERT INTO parts (sku, name, unit, brand, category_id)
+    SELECT 'OIL-15W40', 'Engine oil 15W-40', 'L', 'FleetGuard', id
+    FROM part_categories WHERE code = 'OIL'
+    ON CONFLICT (sku) DO NOTHING
+  `);
+  await client.query(`
     INSERT INTO store_part_settings (store_id, part_id, reorder_level, bin_location)
     SELECT s.id, p.id, levels.reorder_level::numeric(14,3), levels.bin_location
     FROM stores s
@@ -73,7 +96,10 @@ try {
       VALUES
         ('OIL-FILTER-01', '5', 'A-01'),
         ('BRAKE-PAD-F', '2', 'B-12'),
-        ('ALT-BELT-01', '3', 'C-04')
+        ('ALT-BELT-01', '3', 'C-04'),
+        ('TR-ORG-295', '4', 'T-01'),
+        ('TR-DAG1-295', '2', 'T-02'),
+        ('OIL-15W40', '40', 'L-01')
     ) AS levels(sku, reorder_level, bin_location)
     WHERE s.code IN ('CMB', 'KDY')
       AND p.sku = levels.sku

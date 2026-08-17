@@ -15,8 +15,12 @@ import { eq } from "drizzle-orm";
 import type { Route } from "./+types/app.parts";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request);
-  return { parts: await listParts(), categories: await listPartCategories() };
+  const user = await requireUser(request);
+  return {
+    parts: await listParts(),
+    categories: await listPartCategories(),
+    canManage: user.role === "ADMIN",
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -123,7 +127,7 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
       {actionData && "ok" in actionData && actionData.ok ? (
         <p className="muted">Saved.</p>
       ) : null}
-      <div className="two-column">
+      <div className={loaderData.canManage ? "two-column" : undefined}>
         <section className="panel">
           <div
             style={{
@@ -156,7 +160,7 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
                   <th>Unit</th>
                   <th>Brand</th>
                   <th>Status</th>
-                  <th />
+                  {loaderData.canManage ? <th /> : null}
                 </tr>
               </thead>
               <tbody>
@@ -187,72 +191,76 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
                           {part.active ? "Active" : "Inactive"}
                         </span>
                       </td>
-                      <td>
-                        <Form method="post">
-                          <CsrfField />
-                          <input type="hidden" name="intent" value="toggle" />
-                          <input type="hidden" name="id" value={part.id} />
-                          <input
-                            type="hidden"
-                            name="active"
-                            value={String(part.active)}
-                          />
-                          <button className="text-button" type="submit">
-                            {part.active ? "Deactivate" : "Activate"}
-                          </button>
-                        </Form>
-                      </td>
+                      {loaderData.canManage ? (
+                        <td>
+                          <Form method="post">
+                            <CsrfField />
+                            <input type="hidden" name="intent" value="toggle" />
+                            <input type="hidden" name="id" value={part.id} />
+                            <input
+                              type="hidden"
+                              name="active"
+                              value={String(part.active)}
+                            />
+                            <button className="text-button" type="submit">
+                              {part.active ? "Deactivate" : "Activate"}
+                            </button>
+                          </Form>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
               </tbody>
             </table>
           </div>
         </section>
-        <section className="panel form-panel" id="add-part-form">
-          <h2>Add spare part</h2>
-          <Form method="post" className="stack">
-            <CsrfField />
-            <input type="hidden" name="intent" value="create" />
-            <label>
-              SKU
-              <input name="sku" required />
-            </label>
-            <label>
-              Part name
-              <input name="name" required />
-            </label>
-            <label>
-              Unit
-              <input name="unit" defaultValue="EA" required />
-            </label>
-            <label>
-              Category
-              <select name="categoryId">
-                <option value="">-- Uncategorized --</option>
-                {loaderData.categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Barcode
-              <input
-                name="barcode"
-                value={scannedBarcode}
-                onChange={(e) => setScannedBarcode(e.target.value)}
-                placeholder="Scan or type..."
-              />
-            </label>
-            <button
-              className="button button-primary"
-              disabled={navigation.state !== "idle"}
-            >
-              Add part
-            </button>
-          </Form>
-        </section>
+        {loaderData.canManage ? (
+          <section className="panel form-panel" id="add-part-form">
+            <h2>Add spare part</h2>
+            <Form method="post" className="stack">
+              <CsrfField />
+              <input type="hidden" name="intent" value="create" />
+              <label>
+                SKU
+                <input name="sku" required />
+              </label>
+              <label>
+                Part name
+                <input name="name" required />
+              </label>
+              <label>
+                Unit
+                <input name="unit" defaultValue="EA" required />
+              </label>
+              <label>
+                Category
+                <select name="categoryId">
+                  <option value="">-- Uncategorized --</option>
+                  {loaderData.categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Barcode
+                <input
+                  name="barcode"
+                  value={scannedBarcode}
+                  onChange={(e) => setScannedBarcode(e.target.value)}
+                  placeholder="Scan or type..."
+                />
+              </label>
+              <button
+                className="button button-primary"
+                disabled={navigation.state !== "idle"}
+              >
+                Add part
+              </button>
+            </Form>
+          </section>
+        ) : null}
       </div>
     </>
   );

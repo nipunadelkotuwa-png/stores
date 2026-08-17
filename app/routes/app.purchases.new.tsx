@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Form, redirect, useActionData, useNavigation } from "react-router";
 import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
+import { PartSelector } from "~/components/part-selector";
 import { db } from "~/db/client.server";
 import { auditEvents, localPurchaseLines, localPurchases } from "~/db/schema";
 import {
@@ -66,6 +67,7 @@ export async function action({ request }: Route.ActionArgs) {
         .select({
           id: localPurchases.id,
           number: localPurchases.purchaseNumber,
+          receiptId: localPurchases.receiptDocumentId,
         })
         .from(localPurchases)
         .where(
@@ -140,8 +142,9 @@ export async function action({ request }: Route.ActionArgs) {
         storeId: value.storeId,
         metadata: { purchaseNumber: number, receiptNumber: receipt.number },
       });
-      return { id: purchase.id, number };
+      return { id: purchase.id, number, receiptId: receipt.id };
     });
+    if (result.receiptId) throw redirect(`/receipts/${result.receiptId}`);
     throw redirect(`/reports/movements?purchase=${result.number}`);
   } catch (error) {
     if (error instanceof Response) throw error;
@@ -207,14 +210,7 @@ export default function PurchasePage({ loaderData }: Route.ComponentProps) {
           </label>
           <label>
             Part
-            <select name="partId" required>
-              <option value="">Select part</option>
-              {loaderData.parts.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.sku} — {p.name}
-                </option>
-              ))}
-            </select>
+            <PartSelector name="partId" parts={loaderData.parts} required />
           </label>
           <label>
             Quantity

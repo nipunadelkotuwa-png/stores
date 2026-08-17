@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { getLowStock } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.alerts.low-stock";
@@ -36,6 +37,7 @@ export default function LowStockPage({ loaderData }: Route.ComponentProps) {
                 <th>On hand</th>
                 <th>Reorder at</th>
                 <th>Alert</th>
+                <th className="no-print" />
               </tr>
             </thead>
             <tbody>
@@ -48,6 +50,13 @@ export default function LowStockPage({ loaderData }: Route.ComponentProps) {
                   <td>{row.reorderLevel}</td>
                   <td>
                     <span className="badge danger">Reorder</span>
+                  </td>
+                  <td className="no-print">
+                    <Link
+                      to={`/stock-in/new?part=${row.partId}&store=${row.storeId}`}
+                    >
+                      Stock in
+                    </Link>
                   </td>
                 </tr>
               ))}

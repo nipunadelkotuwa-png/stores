@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { Form, useActionData, useNavigation } from "react-router";
+import { Form, Link, useActionData, useNavigation } from "react-router";
 import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
 import { db } from "~/db/client.server";
@@ -11,8 +11,8 @@ import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.buses";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request);
-  return { buses: await listBuses() };
+  const user = await requireUser(request);
+  return { buses: await listBuses(), canManage: user.role === "ADMIN" };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -73,14 +73,15 @@ export default function BusesPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Fleet</p>
           <h1>Buses</h1>
           <p className="muted">
-            Every stock issue is attributable to a fleet vehicle.
+            Every stock issue is attributable to a fleet vehicle. Open a bus for
+            job cards, tyre map, oil, and history.
           </p>
         </div>
       </div>
       {actionData?.error ? (
         <p className="form-error">{actionData.error}</p>
       ) : null}
-      <div className="two-column">
+      <div className={loaderData.canManage ? "two-column" : undefined}>
         <section className="panel">
           <div className="table-wrap">
             <table>
@@ -90,13 +91,15 @@ export default function BusesPage({ loaderData }: Route.ComponentProps) {
                   <th>Registration</th>
                   <th>Vehicle</th>
                   <th>Status</th>
-                  <th />
+                  {loaderData.canManage ? <th /> : null}
                 </tr>
               </thead>
               <tbody>
                 {loaderData.buses.map((bus) => (
                   <tr key={bus.id}>
-                    <td className="mono">{bus.fleetNumber}</td>
+                    <td className="mono">
+                      <Link to={`/buses/${bus.id}`}>{bus.fleetNumber}</Link>
+                    </td>
                     <td>{bus.registrationNumber ?? "—"}</td>
                     <td>
                       {[bus.make, bus.model].filter(Boolean).join(" ") || "—"}
@@ -106,56 +109,60 @@ export default function BusesPage({ loaderData }: Route.ComponentProps) {
                         {bus.active ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td>
-                      <Form method="post">
-                        <CsrfField />
-                        <input type="hidden" name="intent" value="toggle" />
-                        <input type="hidden" name="id" value={bus.id} />
-                        <input
-                          type="hidden"
-                          name="active"
-                          value={String(bus.active)}
-                        />
-                        <button className="text-button" type="submit">
-                          {bus.active ? "Deactivate" : "Activate"}
-                        </button>
-                      </Form>
-                    </td>
+                    {loaderData.canManage ? (
+                      <td>
+                        <Form method="post">
+                          <CsrfField />
+                          <input type="hidden" name="intent" value="toggle" />
+                          <input type="hidden" name="id" value={bus.id} />
+                          <input
+                            type="hidden"
+                            name="active"
+                            value={String(bus.active)}
+                          />
+                          <button className="text-button" type="submit">
+                            {bus.active ? "Deactivate" : "Activate"}
+                          </button>
+                        </Form>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </section>
-        <section className="panel form-panel">
-          <h2>Add bus</h2>
-          <Form method="post" className="stack">
-            <CsrfField />
-            <input type="hidden" name="intent" value="create" />
-            <label>
-              Fleet number
-              <input name="fleetNumber" required />
-            </label>
-            <label>
-              Registration
-              <input name="registrationNumber" />
-            </label>
-            <label>
-              Make
-              <input name="make" />
-            </label>
-            <label>
-              Model
-              <input name="model" />
-            </label>
-            <button
-              className="button button-primary"
-              disabled={navigation.state !== "idle"}
-            >
-              Add bus
-            </button>
-          </Form>
-        </section>
+        {loaderData.canManage ? (
+          <section className="panel form-panel">
+            <h2>Add bus</h2>
+            <Form method="post" className="stack">
+              <CsrfField />
+              <input type="hidden" name="intent" value="create" />
+              <label>
+                Fleet number
+                <input name="fleetNumber" required />
+              </label>
+              <label>
+                Registration
+                <input name="registrationNumber" />
+              </label>
+              <label>
+                Make
+                <input name="make" />
+              </label>
+              <label>
+                Model
+                <input name="model" />
+              </label>
+              <button
+                className="button button-primary"
+                disabled={navigation.state !== "idle"}
+              >
+                Add bus
+              </button>
+            </Form>
+          </section>
+        ) : null}
       </div>
     </>
   );

@@ -1,30 +1,52 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router";
-import { getBalances } from "~/features/inventory/queries.server";
+import { matchesScan } from "~/features/inventory/scan";
+import { getScanCatalog } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.scan";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request);
-  const balances = await getBalances(await requireUser(request));
-  return { balances };
+  const actor = await requireUser(request);
+  return getScanCatalog(actor);
 }
 
 export default function ScanPage({ loaderData }: Route.ComponentProps) {
   const [scannedBarcode, setScannedBarcode] = useState("");
-  const [scannedPart, setScannedPart] = useState<any>(null);
+  const [scannedPartId, setScannedPartId] = useState<string | null>(null);
+  const [selectedStoreId, setSelectedStoreId] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
+  const scannedPart = scannedPartId
+    ? loaderData.catalog.find((part) => part.id === scannedPartId)
+    : null;
+  const scannedBalances = scannedPartId
+    ? loaderData.balances.filter((row) => row.partId === scannedPartId)
+    : [];
+  const selectedBalance =
+    scannedBalances.find((row) => row.storeId === selectedStoreId) ??
+    (scannedBalances.length === 1 ? scannedBalances[0] : undefined);
+
   useEffect(() => {
-    // Keep focus on the hidden input to capture scanner input
+    if (!scannedPartId) {
+      setSelectedStoreId("");
+      return;
+    }
+    const rows = loaderData.balances.filter(
+      (row) => row.partId === scannedPartId,
+    );
+    setSelectedStoreId(rows.length === 1 ? rows[0].storeId : "");
+  }, [scannedPartId, loaderData.balances]);
+
+  useEffect(() => {
+    if (scannedPart) return;
     const focusInterval = setInterval(() => {
       if (document.activeElement !== inputRef.current) {
         inputRef.current?.focus();
       }
     }, 1000);
     return () => clearInterval(focusInterval);
-  }, []);
+  }, [scannedPart]);
 
   const handleScan = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -33,15 +55,24 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
 
     if (barcode) {
       setScannedBarcode(barcode);
-      // Try to find the part by SKU or Barcode
-      const found = loaderData.balances.find(
-        (b) => b.sku.toLowerCase() === barcode.toLowerCase(),
+      const found = loaderData.catalog.find((part) =>
+        matchesScan(part, barcode),
       );
-      setScannedPart(found || null);
+      setScannedPartId(found?.id ?? null);
     }
-    // Clear input for next scan
     e.currentTarget.reset();
   };
+
+  const storeQuery = selectedBalance ? `&store=${selectedBalance.storeId}` : "";
+  const issueUrl = scannedPart
+    ? `/issues/new?part=${scannedPart.id}${storeQuery}`
+    : "";
+  const stockInUrl = scannedPart
+    ? `/stock-in/new?part=${scannedPart.id}${storeQuery}`
+    : "";
+  const needsStorePick = scannedBalances.length > 1 && !selectedStoreId;
+  const canIssue =
+    Boolean(selectedBalance) && Number(selectedBalance?.onHand ?? 0) > 0;
 
   return (
     <>
@@ -50,7 +81,8 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Quick Action</p>
           <h1>Scan Barcode</h1>
           <p className="muted">
-            Scan a part's QR code or barcode to quickly issue or restock it.
+            Scan a part&apos;s QR code or barcode to quickly issue or restock
+            it.
           </p>
         </div>
       </div>
@@ -64,7 +96,6 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
           textAlign: "center",
         }}
       >
-        {/* Hidden form to capture barcode scanner input */}
         <form
           onSubmit={handleScan}
           style={{ position: "absolute", left: "-9999px" }}
@@ -102,7 +133,10 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
               <span className="mono">{scannedBarcode}</span>
             </p>
             <button
-              onClick={() => setScannedBarcode("")}
+              onClick={() => {
+                setScannedBarcode("");
+                setScannedPartId(null);
+              }}
               className="button button-secondary"
               style={{ marginTop: "1rem" }}
             >
@@ -134,33 +168,57 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
               </div>
               <div>
                 <p className="eyebrow">Name</p>
-                <p>{scannedPart.part}</p>
+                <p>{scannedPart.name}</p>
               </div>
-              <div>
-                <p className="eyebrow">Current Balance ({scannedPart.store})</p>
-                <p
-                  className={`quantity ${Number(scannedPart.onHand) <= (scannedPart.reorderLevel || 0) ? "danger" : "positive"}`}
-                  style={{ fontSize: "1.5rem" }}
-                >
-                  {scannedPart.onHand} {scannedPart.unit}
+              {scannedBalances.length > 1 ? (
+                <label>
+                  Store
+                  <select
+                    value={selectedStoreId}
+                    onChange={(e) => setSelectedStoreId(e.target.value)}
+                    required
+                  >
+                    <option value="">Select store</option>
+                    {scannedBalances.map((row) => (
+                      <option key={row.storeId} value={row.storeId}>
+                        {row.storeCode} — {row.store} ({row.onHand} {row.unit})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : selectedBalance ? (
+                <div>
+                  <p className="eyebrow">
+                    Current Balance ({selectedBalance.store})
+                  </p>
+                  <p
+                    className={`quantity ${Number(selectedBalance.onHand) <= Number(selectedBalance.reorderLevel ?? 0) ? "danger" : "positive"}`}
+                    style={{ fontSize: "1.5rem" }}
+                  >
+                    {selectedBalance.onHand} {selectedBalance.unit}
+                  </p>
+                </div>
+              ) : (
+                <p className="muted">
+                  No on-hand balance yet. Use Stock In to receive this part.
                 </p>
-              </div>
+              )}
             </div>
 
             <div style={{ display: "flex", gap: "1rem" }}>
               <button
-                onClick={() => navigate(`/issues/new?part=${scannedPart.sku}`)}
+                onClick={() => navigate(issueUrl)}
                 className="button button-primary"
                 style={{ flex: 1, padding: "1rem" }}
+                disabled={!canIssue || needsStorePick}
               >
                 Issue to Bus
               </button>
               <button
-                onClick={() =>
-                  navigate(`/stock-in/new?part=${scannedPart.sku}`)
-                }
+                onClick={() => navigate(stockInUrl)}
                 className="button button-secondary"
                 style={{ flex: 1, padding: "1rem" }}
+                disabled={needsStorePick}
               >
                 Stock In
               </button>
@@ -169,7 +227,8 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
             <button
               onClick={() => {
                 setScannedBarcode("");
-                setScannedPart(null);
+                setScannedPartId(null);
+                setSelectedStoreId("");
               }}
               className="text-button"
               style={{ marginTop: "2rem", width: "100%", textAlign: "center" }}

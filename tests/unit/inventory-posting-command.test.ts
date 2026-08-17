@@ -45,6 +45,20 @@ describe("prepareStockCommand", () => {
     expect(command.direction).toBe("increase");
   });
 
+  it("requires a job card for bus issues", () => {
+    expect(() =>
+      prepareStockCommand("BUS_ISSUE", {
+        storeId: "11111111-1111-4111-8111-111111111111",
+        busId: "33333333-3333-4333-8333-333333333333",
+        businessDate: "2026-07-21",
+        idempotencyKey: "0123456789abcdef",
+        lines: [
+          { partId: "22222222-2222-4222-8222-222222222222", quantity: "1" },
+        ],
+      }),
+    ).toThrow(/job card/i);
+  });
+
   it("requires a bus for bus issues", () => {
     expect(() =>
       prepareStockCommand("BUS_ISSUE", {

@@ -40,6 +40,10 @@ export const postStockSchema = z.object({
   storeId: z.string().uuid(),
   businessDate: z.string().date(),
   busId: z.string().uuid().optional(),
+  jobCardId: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z.string().uuid().optional(),
+  ),
   supplierId: z.string().uuid().optional(),
   /** ADJUSTMENT only: increase (default) or decrease on-hand. */
   direction: z.enum(["increase", "decrease"]).optional(),

@@ -1,4 +1,4 @@
-import { data } from "react-router";
+import { data, Link } from "react-router";
 import { getDocumentForReceipt } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.receipts.$id";
@@ -23,7 +23,10 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Transaction</p>
           <h1>Receipt {doc.number}</h1>
         </div>
-        <div>
+        <div className="heading-actions">
+          <Link to="/reports/movements" className="button button-secondary">
+            Movement ledger
+          </Link>
           <button
             className="button button-primary"
             onClick={() => window.print()}

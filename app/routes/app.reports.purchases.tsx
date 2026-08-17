@@ -1,4 +1,4 @@
-import { Form, useSearchParams } from "react-router";
+import { Form, Link, useSearchParams } from "react-router";
 import { getLocalPurchases } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.purchases";
@@ -101,12 +101,13 @@ export default function PurchasesReportPage({
                 <th>Supplier</th>
                 <th>Total (LKR)</th>
                 <th>Status</th>
+                <th>Receipt</th>
               </tr>
             </thead>
             <tbody>
               {loaderData.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <div className="empty-state">
                       <strong>No purchases found</strong>
                       <p>Try adjusting your filters.</p>
@@ -123,6 +124,15 @@ export default function PurchasesReportPage({
                     <td className="quantity">{row.total}</td>
                     <td>
                       <span className="badge success">{row.status}</span>
+                    </td>
+                    <td>
+                      {row.receiptDocumentId ? (
+                        <Link to={`/receipts/${row.receiptDocumentId}`}>
+                          View receipt
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 ))

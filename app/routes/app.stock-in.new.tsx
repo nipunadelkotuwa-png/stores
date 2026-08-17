@@ -44,7 +44,8 @@ export async function action({ request }: Route.ActionArgs) {
 export default function StockInPage({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const [params] = useSearchParams();
-  const part = params.get("part");
+  const part = params.get("part") || undefined;
+  const store = params.get("store") || undefined;
 
   return (
     <>
@@ -61,7 +62,8 @@ export default function StockInPage({ loaderData }: Route.ComponentProps) {
         options={loaderData}
         kind="receipt"
         actionData={actionData}
-        initialPartId={part || undefined}
+        initialPartId={part}
+        initialStoreId={store}
       />
     </>
   );

@@ -5,13 +5,20 @@ import {
   postStock,
 } from "~/features/inventory/posting.server";
 import { getTransactionOptions } from "~/features/inventory/queries.server";
+import { listOpenJobCards } from "~/features/workshop/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.issues.new";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const actor = await requireUser(request);
-  return getTransactionOptions(actor);
+  const url = new URL(request.url);
+  const storeId = url.searchParams.get("store") || undefined;
+  const [options, openJobCards] = await Promise.all([
+    getTransactionOptions(actor),
+    listOpenJobCards(actor, { storeId }),
+  ]);
+  return { options, openJobCards };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -36,7 +43,8 @@ export async function action({ request }: Route.ActionArgs) {
 export default function IssuePage({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const [params] = useSearchParams();
-  const part = params.get("part");
+  const part = params.get("part") || undefined;
+  const store = params.get("store") || undefined;
 
   return (
     <>
@@ -45,16 +53,18 @@ export default function IssuePage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Fleet usage</p>
           <h1>Issue parts to bus</h1>
           <p className="muted">
-            Stock cannot fall below zero. The bus and resulting balance are
-            recorded permanently.
+            Issues must be posted against an open job card. Stock cannot fall
+            below zero.
           </p>
         </div>
       </div>
       <StockForm
-        options={loaderData}
+        options={loaderData.options}
         kind="issue"
         actionData={actionData}
-        initialPartId={part || undefined}
+        initialPartId={part}
+        initialStoreId={store}
+        openJobCards={loaderData.openJobCards}
       />
     </>
   );

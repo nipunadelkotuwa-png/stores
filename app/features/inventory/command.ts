@@ -3,7 +3,12 @@ import Decimal from "decimal.js";
 import { postStockSchema } from "./schemas";
 
 export type StockType =
-  "STOCK_RECEIPT" | "BUS_ISSUE" | "BUS_RETURN" | "ADJUSTMENT";
+  | "STOCK_RECEIPT"
+  | "BUS_ISSUE"
+  | "BUS_RETURN"
+  | "ADJUSTMENT"
+  | "TYRE_DAG_SEND"
+  | "TYRE_DAG_RECEIVE";
 
 export function prepareStockCommand(type: StockType, input: unknown) {
   const command = postStockSchema.parse(input);
@@ -11,6 +16,9 @@ export function prepareStockCommand(type: StockType, input: unknown) {
     throw new Error(
       `Bus is required for a ${type.toLowerCase().replace("_", " ")}`,
     );
+  }
+  if ((type === "BUS_ISSUE" || type === "BUS_RETURN") && !command.jobCardId) {
+    throw new Error("An open job card is required to issue or return parts");
   }
   if (type === "ADJUSTMENT") {
     const reason = command.reason?.trim();

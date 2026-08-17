@@ -5,18 +5,21 @@ import { db } from "~/db/client.server";
 import { partCategories } from "~/db/schema";
 import { masterDataActionError } from "~/features/master-data/errors";
 import { listPartCategories } from "~/features/master-data/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requireAdmin, requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import { eq } from "drizzle-orm";
 import type { Route } from "./+types/app.categories";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request);
-  return { categories: await listPartCategories() };
+  const user = await requireUser(request);
+  return {
+    categories: await listPartCategories(),
+    canManage: user.role === "ADMIN",
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireUser(request);
+  await requireAdmin(request);
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "create");
@@ -80,7 +83,7 @@ export default function CategoriesPage({ loaderData }: Route.ComponentProps) {
       {actionData && "ok" in actionData && actionData.ok ? (
         <p className="muted">Saved.</p>
       ) : null}
-      <div className="two-column">
+      <div className={loaderData.canManage ? "two-column" : undefined}>
         <section className="panel">
           <h2>Category list</h2>
           <div className="table-wrap">
@@ -90,7 +93,7 @@ export default function CategoriesPage({ loaderData }: Route.ComponentProps) {
                   <th>Code</th>
                   <th>Name</th>
                   <th>Status</th>
-                  <th />
+                  {loaderData.canManage ? <th /> : null}
                 </tr>
               </thead>
               <tbody>
@@ -107,48 +110,52 @@ export default function CategoriesPage({ loaderData }: Route.ComponentProps) {
                         {category.active ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td>
-                      <Form method="post">
-                        <CsrfField />
-                        <input type="hidden" name="intent" value="toggle" />
-                        <input type="hidden" name="id" value={category.id} />
-                        <input
-                          type="hidden"
-                          name="active"
-                          value={String(category.active)}
-                        />
-                        <button className="text-button" type="submit">
-                          {category.active ? "Deactivate" : "Activate"}
-                        </button>
-                      </Form>
-                    </td>
+                    {loaderData.canManage ? (
+                      <td>
+                        <Form method="post">
+                          <CsrfField />
+                          <input type="hidden" name="intent" value="toggle" />
+                          <input type="hidden" name="id" value={category.id} />
+                          <input
+                            type="hidden"
+                            name="active"
+                            value={String(category.active)}
+                          />
+                          <button className="text-button" type="submit">
+                            {category.active ? "Deactivate" : "Activate"}
+                          </button>
+                        </Form>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </section>
-        <section className="panel form-panel" id="add-category-form">
-          <h2>Add category</h2>
-          <Form method="post" className="stack">
-            <CsrfField />
-            <input type="hidden" name="intent" value="create" />
-            <label>
-              Code
-              <input name="code" required />
-            </label>
-            <label>
-              Category name
-              <input name="name" required />
-            </label>
-            <button
-              className="button button-primary"
-              disabled={navigation.state !== "idle"}
-            >
-              Add category
-            </button>
-          </Form>
-        </section>
+        {loaderData.canManage ? (
+          <section className="panel form-panel" id="add-category-form">
+            <h2>Add category</h2>
+            <Form method="post" className="stack">
+              <CsrfField />
+              <input type="hidden" name="intent" value="create" />
+              <label>
+                Code
+                <input name="code" required />
+              </label>
+              <label>
+                Category name
+                <input name="name" required />
+              </label>
+              <button
+                className="button button-primary"
+                disabled={navigation.state !== "idle"}
+              >
+                Add category
+              </button>
+            </Form>
+          </section>
+        ) : null}
       </div>
     </>
   );

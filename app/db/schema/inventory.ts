@@ -16,6 +16,7 @@ import {
 import { stores, users } from "./auth";
 import { buses, parts, suppliers } from "./master-data";
 import { idColumn, timestamps } from "./common";
+import { jobCards } from "./workshop";
 
 export const stockDocumentType = pgEnum("stock_document_type", [
   "STOCK_RECEIPT",
@@ -23,6 +24,8 @@ export const stockDocumentType = pgEnum("stock_document_type", [
   "BUS_RETURN",
   "ADJUSTMENT",
   "REVERSAL",
+  "TYRE_DAG_SEND",
+  "TYRE_DAG_RECEIVE",
 ]);
 
 export const documentStatus = pgEnum("document_status", ["DRAFT", "POSTED"]);
@@ -58,6 +61,7 @@ export const stockDocuments = pgTable(
       .notNull(),
     supplierId: uuid("supplier_id").references(() => suppliers.id),
     busId: uuid("bus_id").references(() => buses.id),
+    jobCardId: uuid("job_card_id").references(() => jobCards.id),
     reversesDocumentId: uuid("reverses_document_id").references(
       (): AnyPgColumn => stockDocuments.id,
     ),
@@ -82,9 +86,14 @@ export const stockDocuments = pgTable(
       table.idempotencyKey,
     ),
     uniqueIndex("stock_documents_reversal_unique").on(table.reversesDocumentId),
+    index("stock_documents_job_card_idx").on(table.jobCardId),
     check(
       "bus_issue_requires_bus",
       sql`${table.type} <> 'BUS_ISSUE' OR ${table.busId} IS NOT NULL`,
+    ),
+    check(
+      "bus_return_requires_bus",
+      sql`${table.type} <> 'BUS_RETURN' OR ${table.busId} IS NOT NULL`,
     ),
     check(
       "reversal_requires_original",

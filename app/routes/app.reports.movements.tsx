@@ -1,9 +1,15 @@
+import { Link } from "react-router";
+import { movementFiltersFromSearch } from "~/features/inventory/movement-filters";
 import { getMovements } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.movements";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  return getMovements(await requireUser(request));
+  const url = new URL(request.url);
+  return getMovements(
+    await requireUser(request),
+    movementFiltersFromSearch(url.searchParams),
+  );
 }
 
 export default function MovementsPage({ loaderData }: Route.ComponentProps) {
@@ -26,6 +32,12 @@ export default function MovementsPage({ loaderData }: Route.ComponentProps) {
           </button>
         </div>
       </div>
+      {loaderData.focus ? (
+        <p className="muted no-print">
+          Showing movements for <span className="mono">{loaderData.focus}</span>
+          . <Link to="/reports/movements">Show all movements</Link>
+        </p>
+      ) : null}
       {loaderData.truncated ? (
         <p className="muted">
           Showing the latest {loaderData.rows.length} movements. Older rows are
@@ -46,11 +58,40 @@ export default function MovementsPage({ loaderData }: Route.ComponentProps) {
               </tr>
             </thead>
             <tbody>
+              {loaderData.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="empty-state">
+                      <strong>
+                        {loaderData.focus
+                          ? `No movements for ${loaderData.focus}`
+                          : "No movements yet"}
+                      </strong>
+                      <p>
+                        {loaderData.focus ? (
+                          <Link to="/reports/movements">
+                            Show all movements
+                          </Link>
+                        ) : (
+                          "Post a receipt or issue to build the ledger."
+                        )}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
               {loaderData.rows.map((row, index) => (
-                <tr key={`${row.number}-${row.sku}-${index}`}>
+                <tr
+                  key={`${row.number}-${row.sku}-${index}`}
+                  className={
+                    loaderData.focus === row.number ? "row-focus" : undefined
+                  }
+                >
                   <td>{row.date}</td>
                   <td>
-                    <span className="mono">{row.number}</span>
+                    <Link to={`/receipts/${row.id}`} className="mono">
+                      {row.number}
+                    </Link>
                     <small>{row.type.replaceAll("_", " ")}</small>
                   </td>
                   <td>{row.store}</td>

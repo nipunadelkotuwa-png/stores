@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { getBalances } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.balances";
@@ -47,6 +48,7 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
                 <th>Part</th>
                 <th>On hand</th>
                 <th>Reorder level</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -71,6 +73,19 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
                       {row.onHand} {row.unit}
                     </td>
                     <td>{row.reorderLevel ?? "Not set"}</td>
+                    <td>
+                      <Link
+                        to={`/issues/new?part=${row.partId}&store=${row.storeId}`}
+                      >
+                        Issue
+                      </Link>
+                      {" · "}
+                      <Link
+                        to={`/stock-in/new?part=${row.partId}&store=${row.storeId}`}
+                      >
+                        Stock in
+                      </Link>
+                    </td>
                   </tr>
                 ))}
             </tbody>

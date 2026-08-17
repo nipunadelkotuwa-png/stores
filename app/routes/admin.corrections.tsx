@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Form, redirect, useActionData, useNavigation } from "react-router";
 import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
+import { PartSelector } from "~/components/part-selector";
 import {
   inventoryActionError,
   postReversal,
@@ -136,14 +137,11 @@ export default function CorrectionsPage({ loaderData }: Route.ComponentProps) {
             </label>
             <label>
               Part
-              <select name="partId" required>
-                <option value="">Select part</option>
-                {loaderData.options.parts.map((part) => (
-                  <option key={part.id} value={part.id}>
-                    {part.sku} — {part.name}
-                  </option>
-                ))}
-              </select>
+              <PartSelector
+                name="partId"
+                parts={loaderData.options.parts}
+                required
+              />
             </label>
             <label>
               Direction

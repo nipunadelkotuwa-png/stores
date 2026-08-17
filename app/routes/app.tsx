@@ -27,6 +27,12 @@ const operationsNav = [
   ["/alerts/low-stock", "Low stock"],
 ] as const;
 
+const workshopNav = [
+  ["/job-cards", "Job cards"],
+  ["/tyres", "Tyres"],
+  ["/tyres/dag", "DAG"],
+] as const;
+
 const masterDataNav = [
   ["/parts", "Parts"],
   ["/categories", "Categories"],
@@ -60,6 +66,19 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
               key={to}
               to={to}
               end={to === "/" || to === "/purchases"}
+              className={({ isActive }) =>
+                isActive ? "nav-link active" : "nav-link"
+              }
+            >
+              {label}
+            </NavLink>
+          ))}
+
+          <p className="nav-section">Workshop</p>
+          {workshopNav.map(([to, label]) => (
+            <NavLink
+              key={to}
+              to={to}
               className={({ isActive }) =>
                 isActive ? "nav-link active" : "nav-link"
               }
@@ -128,6 +147,14 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
                 }
               >
                 Corrections
+              </NavLink>
+              <NavLink
+                to="/admin/audit"
+                className={({ isActive }) =>
+                  isActive ? "nav-link active" : "nav-link"
+                }
+              >
+                Audit log
               </NavLink>
             </>
           ) : null}
