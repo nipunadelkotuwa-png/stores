@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Form, Link, useActionData, useNavigation } from "react-router";
 import { CsrfField } from "~/components/csrf-field";
+import { USABLE_TYRE_STAGES } from "~/features/workshop/constants";
+import { skuMatchesLifecycleStage } from "~/features/workshop/tyre-lifecycle";
 import { workshopActionError } from "~/features/workshop/errors";
 import {
   listCategoryParts,
@@ -11,18 +13,25 @@ import {
   receiveTyreFromDag,
   sendTyreToDag,
 } from "~/features/workshop/tyres.server";
+import { listSuppliers } from "~/features/master-data/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.tyres.dag";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const actor = await requireUser(request);
-  const [inStore, atDag, tyreParts] = await Promise.all([
+  const [inStore, atDag, tyreParts, suppliers] = await Promise.all([
     listInStoreTyres(actor),
     listTyresAtDag(actor),
     listCategoryParts("TYRE"),
+    listSuppliers(),
   ]);
-  return { inStore, atDag, tyreParts };
+  return {
+    inStore,
+    atDag,
+    tyreParts,
+    suppliers: suppliers.filter((row) => row.active),
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -50,23 +59,31 @@ export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const [sendKey] = useState(() => crypto.randomUUID());
   const [receiveKey] = useState(() => crypto.randomUUID());
+  const [toStage, setToStage] =
+    useState<(typeof USABLE_TYRE_STAGES)[number]>("DAG1");
   const busy = navigation.state !== "idle";
   const today = new Date().toISOString().slice(0, 10);
+  const stageParts = loaderData.tyreParts.filter((part) =>
+    skuMatchesLifecycleStage(part.sku, toStage),
+  );
 
   return (
     <>
       <div className="page-heading">
         <div>
           <p className="eyebrow">Workshop</p>
-          <h1>DAG send / receive</h1>
+          <h1>DAG send / return</h1>
           <p className="muted">
-            Send a store serial to retread. When it returns, receive it as the
-            next stage (ORG → DAG1 → DAG2 → DAG3). DAG3 comes back as scrap.
+            Send a store serial to a retread supplier. On return, choose the
+            resulting stage (ORG, DAG1–3, or REBUILD) and matching SKU.
           </p>
         </div>
         <div className="heading-actions">
           <Link className="button button-secondary" to="/tyres">
             Tyre register
+          </Link>
+          <Link className="button button-secondary" to="/reports/dag-out">
+            DAG out summary
           </Link>
         </div>
       </div>
@@ -78,7 +95,7 @@ export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
         <p className="muted">Tyre sent to DAG.</p>
       ) : null}
       {actionData?.ok === "received" ? (
-        <p className="muted">Tyre received from DAG.</p>
+        <p className="muted">Tyre returned from DAG.</p>
       ) : null}
 
       <div className="two-column">
@@ -104,6 +121,17 @@ export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
                 </select>
               </label>
               <label>
+                DAG supplier
+                <select name="supplierId" required>
+                  <option value="">Select supplier</option>
+                  {loaderData.suppliers.map((supplier) => (
+                    <option key={supplier.id} value={supplier.id}>
+                      {supplier.code} — {supplier.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 Business date
                 <input
                   type="date"
@@ -124,7 +152,7 @@ export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
         </section>
 
         <section className="panel form-panel">
-          <h2>Receive from DAG</h2>
+          <h2>DAG return</h2>
           {loaderData.atDag.length === 0 ? (
             <p className="muted">No tyres currently at DAG.</p>
           ) : (
@@ -138,22 +166,46 @@ export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
                   <option value="">Select serial</option>
                   {loaderData.atDag.map((tyre) => (
                     <option key={tyre.id} value={tyre.id}>
-                      {tyre.serialNumber} — {tyre.stage} → {tyre.nextStage} (
-                      {tyre.store})
+                      {tyre.serialNumber} — {tyre.stage} ({tyre.store})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Return as stage
+                <select
+                  name="toStage"
+                  required
+                  value={toStage}
+                  onChange={(event) =>
+                    setToStage(
+                      event.target.value as (typeof USABLE_TYRE_STAGES)[number],
+                    )
+                  }
+                >
+                  {USABLE_TYRE_STAGES.map((stage) => (
+                    <option key={stage} value={stage}>
+                      {stage}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
                 Receive as SKU
-                <select name="targetPartId">
-                  <option value="">Required unless scrap</option>
-                  {loaderData.tyreParts.map((part) => (
+                <select name="targetPartId" required>
+                  <option value="">Select SKU</option>
+                  {stageParts.map((part) => (
                     <option key={part.id} value={part.id}>
                       {part.sku} — {part.name}
                     </option>
                   ))}
                 </select>
+                {stageParts.length === 0 ? (
+                  <span className="muted">
+                    No tyre SKU matches stage {toStage}. Create one before
+                    receiving.
+                  </span>
+                ) : null}
               </label>
               <label>
                 Business date
@@ -169,7 +221,7 @@ export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
                 <textarea name="notes" rows={2} />
               </label>
               <button className="button button-primary" disabled={busy}>
-                Receive from DAG
+                Receive DAG return
               </button>
             </Form>
           )}

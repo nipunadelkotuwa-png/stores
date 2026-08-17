@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { prepareStockCommand } from "../../app/features/inventory/command";
+import {
+  isStockDecrease,
+  prepareStockCommand,
+} from "../../app/features/inventory/command";
 import { postStockSchema } from "../../app/features/inventory/schemas";
 
 describe("postStockSchema direction", () => {
@@ -70,5 +73,37 @@ describe("prepareStockCommand", () => {
         ],
       }),
     ).toThrow(/bus/i);
+  });
+
+  it("treats disposal and transfer-out as stock decreases", () => {
+    expect(isStockDecrease("TYRE_DISPOSAL", "increase")).toBe(true);
+    expect(isStockDecrease("TRANSFER_OUT", "increase")).toBe(true);
+    expect(isStockDecrease("TRANSFER_IN", "increase")).toBe(false);
+  });
+
+  it("requires a destination store for transfer out", () => {
+    expect(() =>
+      prepareStockCommand("TRANSFER_OUT", {
+        storeId: "11111111-1111-4111-8111-111111111111",
+        businessDate: "2026-07-21",
+        idempotencyKey: "0123456789abcdef",
+        lines: [
+          { partId: "22222222-2222-4222-8222-222222222222", quantity: "1" },
+        ],
+      }),
+    ).toThrow(/destination/i);
+  });
+
+  it("requires a DAG supplier on send", () => {
+    expect(() =>
+      prepareStockCommand("TYRE_DAG_SEND", {
+        storeId: "11111111-1111-4111-8111-111111111111",
+        businessDate: "2026-07-21",
+        idempotencyKey: "0123456789abcdef",
+        lines: [
+          { partId: "22222222-2222-4222-8222-222222222222", quantity: "1" },
+        ],
+      }),
+    ).toThrow(/supplier/i);
   });
 });

@@ -26,9 +26,17 @@ export const stockDocumentType = pgEnum("stock_document_type", [
   "REVERSAL",
   "TYRE_DAG_SEND",
   "TYRE_DAG_RECEIVE",
+  "TYRE_DISPOSAL",
+  "TRANSFER_OUT",
+  "TRANSFER_IN",
 ]);
 
-export const documentStatus = pgEnum("document_status", ["DRAFT", "POSTED"]);
+export const documentStatus = pgEnum("document_status", [
+  "DRAFT",
+  "PENDING_APPROVAL",
+  "POSTED",
+  "REJECTED",
+]);
 
 export const documentSequences = pgTable(
   "document_sequences",
@@ -65,6 +73,16 @@ export const stockDocuments = pgTable(
     reversesDocumentId: uuid("reverses_document_id").references(
       (): AnyPgColumn => stockDocuments.id,
     ),
+    destinationStoreId: uuid("destination_store_id").references(
+      () => stores.id,
+    ),
+    linkedDocumentId: uuid("linked_document_id").references(
+      (): AnyPgColumn => stockDocuments.id,
+    ),
+    lastApprovalError: text("last_approval_error"),
+    lastApprovalAttemptedAt: timestamp("last_approval_attempted_at", {
+      withTimezone: true,
+    }),
     businessDate: text("business_date").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true })
       .defaultNow()
@@ -86,7 +104,9 @@ export const stockDocuments = pgTable(
       table.idempotencyKey,
     ),
     uniqueIndex("stock_documents_reversal_unique").on(table.reversesDocumentId),
+    uniqueIndex("stock_documents_linked_unique").on(table.linkedDocumentId),
     index("stock_documents_job_card_idx").on(table.jobCardId),
+    index("stock_documents_status_idx").on(table.status, table.type),
     check(
       "bus_issue_requires_bus",
       sql`${table.type} <> 'BUS_ISSUE' OR ${table.busId} IS NOT NULL`,
@@ -98,6 +118,18 @@ export const stockDocuments = pgTable(
     check(
       "reversal_requires_original",
       sql`${table.type} <> 'REVERSAL' OR ${table.reversesDocumentId} IS NOT NULL`,
+    ),
+    check(
+      "transfer_out_requires_destination",
+      sql`${table.type} <> 'TRANSFER_OUT' OR (${table.destinationStoreId} IS NOT NULL AND ${table.destinationStoreId} <> ${table.storeId})`,
+    ),
+    check(
+      "transfer_in_requires_link",
+      sql`${table.type} <> 'TRANSFER_IN' OR ${table.linkedDocumentId} IS NOT NULL`,
+    ),
+    check(
+      "dag_send_requires_supplier",
+      sql`${table.type} <> 'TYRE_DAG_SEND' OR ${table.supplierId} IS NOT NULL`,
     ),
   ],
 );

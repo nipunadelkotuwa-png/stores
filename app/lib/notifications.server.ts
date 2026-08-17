@@ -1,11 +1,13 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "~/db/client.server";
 import {
   inventoryBalances,
+  notifications,
   parts,
   storePartSettings,
   stores,
+  users,
 } from "~/db/schema";
 import {
   getAuthorizedStoreIds,
@@ -104,4 +106,66 @@ export async function notifyLowStockForParts(
       await dispatchLowStockNotification(actor, alert);
     }
   }
+}
+
+type InboxPayload = {
+  type: string;
+  title: string;
+  body: string;
+  href?: string;
+};
+
+export async function notifyUser(userId: string, payload: InboxPayload) {
+  await db.insert(notifications).values({
+    userId,
+    type: payload.type,
+    title: payload.title,
+    body: payload.body,
+    href: payload.href ?? null,
+  });
+}
+
+export async function notifyAdmins(payload: InboxPayload) {
+  const admins = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.role, "ADMIN"), eq(users.status, "ACTIVE")));
+  if (admins.length === 0) return;
+  await db.insert(notifications).values(
+    admins.map((admin) => ({
+      userId: admin.id,
+      type: payload.type,
+      title: payload.title,
+      body: payload.body,
+      href: payload.href ?? null,
+    })),
+  );
+}
+
+export async function listInbox(userId: string, limit = 20) {
+  const rows = await db
+    .select()
+    .from(notifications)
+    .where(eq(notifications.userId, userId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit);
+  const [unread] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(notifications)
+    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+  return { items: rows, unreadCount: Number(unread?.count ?? 0) };
+}
+
+export async function markNotificationRead(userId: string, id: string) {
+  await db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(and(eq(notifications.id, id), eq(notifications.userId, userId)));
+}
+
+export async function markAllNotificationsRead(userId: string) {
+  await db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
 }

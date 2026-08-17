@@ -27,6 +27,7 @@ export const tyreLifecycleStage = pgEnum("tyre_lifecycle_stage", [
   "DAG1",
   "DAG2",
   "DAG3",
+  "REBUILD",
   "SCRAP",
 ]);
 
@@ -34,6 +35,8 @@ export const tyreAssetStatus = pgEnum("tyre_asset_status", [
   "IN_STORE",
   "FITTED",
   "AT_DAG",
+  "IN_TRANSIT",
+  "DISPOSED",
   "SCRAPPED",
 ]);
 
@@ -55,6 +58,9 @@ export const tyreEventType = pgEnum("tyre_event_type", [
   "SEND_DAG",
   "RECEIVE_DAG",
   "SCRAP",
+  "DISPOSE",
+  "TRANSFER_OUT",
+  "TRANSFER_IN",
 ]);
 
 export const jobCardSequences = pgTable(
@@ -145,6 +151,10 @@ export const tyres = pgTable(
     check(
       "tyres_in_store_has_store",
       sql`${table.status} <> 'IN_STORE' OR ${table.storeId} IS NOT NULL`,
+    ),
+    check(
+      "tyres_in_transit_has_store",
+      sql`${table.status} <> 'IN_TRANSIT' OR ${table.storeId} IS NOT NULL`,
     ),
   ],
 );

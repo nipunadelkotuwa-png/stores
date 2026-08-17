@@ -8,7 +8,23 @@ export type StockType =
   | "BUS_RETURN"
   | "ADJUSTMENT"
   | "TYRE_DAG_SEND"
-  | "TYRE_DAG_RECEIVE";
+  | "TYRE_DAG_RECEIVE"
+  | "TYRE_DISPOSAL"
+  | "TRANSFER_OUT"
+  | "TRANSFER_IN";
+
+export function isStockDecrease(
+  type: StockType,
+  direction: "increase" | "decrease",
+) {
+  return (
+    type === "BUS_ISSUE" ||
+    type === "TYRE_DAG_SEND" ||
+    type === "TYRE_DISPOSAL" ||
+    type === "TRANSFER_OUT" ||
+    (type === "ADJUSTMENT" && direction === "decrease")
+  );
+}
 
 export function prepareStockCommand(type: StockType, input: unknown) {
   const command = postStockSchema.parse(input);
@@ -25,6 +41,20 @@ export function prepareStockCommand(type: StockType, input: unknown) {
     if (!reason || reason.length < 3) {
       throw new Error("A reason of at least 3 characters is required");
     }
+  }
+  if (type === "TYRE_DAG_SEND" && !command.supplierId) {
+    throw new Error("A DAG supplier is required");
+  }
+  if (type === "TRANSFER_OUT") {
+    if (!command.destinationStoreId) {
+      throw new Error("Destination store is required for a transfer");
+    }
+    if (command.destinationStoreId === command.storeId) {
+      throw new Error("Destination store must be different from the source");
+    }
+  }
+  if (type === "TRANSFER_IN" && !command.linkedDocumentId) {
+    throw new Error("Transfer in must link to a transfer-out document");
   }
   const combined = new Map<
     string,

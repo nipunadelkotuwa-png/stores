@@ -1,5 +1,6 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router";
+import { CameraBarcodeScan } from "~/components/camera-barcode-scan";
 import { matchesScan } from "~/features/inventory/scan";
 import { getScanCatalog } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
@@ -48,18 +49,23 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
     return () => clearInterval(focusInterval);
   }, [scannedPart]);
 
+  const applyBarcode = useCallback(
+    (barcode: string) => {
+      const trimmed = barcode.trim();
+      if (!trimmed) return;
+      setScannedBarcode(trimmed);
+      const found = loaderData.catalog.find((part) =>
+        matchesScan(part, trimmed),
+      );
+      setScannedPartId(found?.id ?? null);
+    },
+    [loaderData.catalog],
+  );
+
   const handleScan = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const barcode = String(formData.get("barcode")).trim();
-
-    if (barcode) {
-      setScannedBarcode(barcode);
-      const found = loaderData.catalog.find((part) =>
-        matchesScan(part, barcode),
-      );
-      setScannedPartId(found?.id ?? null);
-    }
+    applyBarcode(String(formData.get("barcode")));
     e.currentTarget.reset();
   };
 
@@ -81,8 +87,8 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Quick Action</p>
           <h1>Scan Barcode</h1>
           <p className="muted">
-            Scan a part&apos;s QR code or barcode to quickly issue or restock
-            it.
+            Scan a part&apos;s QR code or barcode with a wedge scanner or the
+            phone camera.
           </p>
         </div>
       </div>
@@ -121,7 +127,10 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
               <line x1="8" y1="12" x2="16" y2="12"></line>
             </svg>
             <strong>Ready to scan</strong>
-            <p>Point your barcode/QR scanner at a label...</p>
+            <p>Point your barcode/QR scanner at a label, or use the camera.</p>
+            <div style={{ marginTop: "1rem" }}>
+              <CameraBarcodeScan onDetected={applyBarcode} />
+            </div>
           </div>
         )}
 

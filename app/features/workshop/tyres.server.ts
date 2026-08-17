@@ -1,7 +1,13 @@
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "~/db/client.server";
-import { auditEvents, inventoryBalances, tyreEvents, tyres } from "~/db/schema";
+import {
+  auditEvents,
+  inventoryBalances,
+  parts,
+  tyreEvents,
+  tyres,
+} from "~/db/schema";
 import type { Actor } from "~/lib/auth/authorization.server";
 import { requireStoreAccess } from "~/lib/auth/authorization.server";
 import {
@@ -13,12 +19,17 @@ import { requirePartCategory } from "./category.server";
 import { WorkshopError } from "./errors";
 import { loadOpenJobCard } from "./job-cards.server";
 import {
+  disposeTyreSchema,
   fitTyreSchema,
   receiveTyreFromDagSchema,
   registerTyreSchema,
   sendTyreToDagSchema,
 } from "./schemas";
-import { canSendToDag, nextDagStage, receiveIsScrap } from "./tyre-lifecycle";
+import {
+  canSendToDag,
+  isOperableInStore,
+  skuMatchesLifecycleStage,
+} from "./tyre-lifecycle";
 
 async function inStoreCount(tx: Transaction, storeId: string, partId: string) {
   const [row] = await tx
@@ -51,9 +62,6 @@ async function onHand(tx: Transaction, storeId: string, partId: string) {
 export async function registerTyre(actor: Actor, input: unknown) {
   const command = registerTyreSchema.parse(input);
   await requireStoreAccess(actor, command.storeId);
-  if (command.lifecycleStage === "SCRAP") {
-    throw new WorkshopError("Cannot register a scrapped tyre into store");
-  }
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
@@ -112,7 +120,10 @@ export async function fitOrReplaceTyre(actor: Actor, input: unknown) {
       .where(eq(tyres.id, command.tyreId))
       .limit(1);
     if (!incoming) throw new WorkshopError("Tyre not found");
-    if (incoming.status !== "IN_STORE" || incoming.storeId !== card.storeId) {
+    if (
+      !isOperableInStore(incoming.status) ||
+      incoming.storeId !== card.storeId
+    ) {
       throw new WorkshopError("Tyre must be in stock at this job card's store");
     }
 
@@ -236,7 +247,7 @@ export async function sendTyreToDag(actor: Actor, input: unknown) {
       .where(eq(tyres.id, command.tyreId))
       .limit(1);
     if (!tyre) throw new WorkshopError("Tyre not found");
-    if (tyre.status !== "IN_STORE" || !tyre.storeId) {
+    if (!isOperableInStore(tyre.status) || !tyre.storeId) {
       throw new WorkshopError("Tyre must be in store stock to send to DAG");
     }
     if (!canSendToDag(tyre.lifecycleStage)) {
@@ -250,6 +261,7 @@ export async function sendTyreToDag(actor: Actor, input: unknown) {
       "TYRE_DAG_SEND",
       prepareStockCommand("TYRE_DAG_SEND", {
         storeId: tyre.storeId,
+        supplierId: command.supplierId,
         businessDate: command.businessDate,
         reason: `DAG send ${tyre.serialNumber}`,
         notes: command.notes,
@@ -300,42 +312,18 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
     }
     await requireStoreAccess(actor, tyre.storeId);
 
-    const nextStage = nextDagStage(tyre.lifecycleStage);
-    if (receiveIsScrap(tyre.lifecycleStage) || nextStage === "SCRAP") {
-      await tx
-        .update(tyres)
-        .set({
-          status: "SCRAPPED",
-          lifecycleStage: "SCRAP",
-          storeId: null,
-          currentBusId: null,
-          currentPosition: null,
-        })
-        .where(eq(tyres.id, tyre.id));
-      await tx.insert(tyreEvents).values({
-        tyreId: tyre.id,
-        type: "SCRAP",
-        storeId: tyre.storeId,
-        fromStage: tyre.lifecycleStage,
-        toStage: "SCRAP",
-        notes: command.notes || "Received from DAG as scrap",
-        createdBy: actor.id,
-      });
-      await tx.insert(auditEvents).values({
-        actorId: actor.id,
-        eventType: "TYRE_SCRAPPED",
-        entityType: "tyre",
-        entityId: tyre.id,
-        storeId: tyre.storeId,
-        metadata: { serialNumber: tyre.serialNumber },
-      });
-      return { id: tyre.id, documentId: null, stage: "SCRAP" as const };
-    }
-
-    if (!command.targetPartId) {
-      throw new WorkshopError("Select the DAG SKU to receive this tyre as");
-    }
     await requirePartCategory(tx, command.targetPartId, "TYRE");
+    const [targetPart] = await tx
+      .select({ sku: parts.sku })
+      .from(parts)
+      .where(eq(parts.id, command.targetPartId))
+      .limit(1);
+    if (!targetPart) throw new WorkshopError("Target tyre SKU not found");
+    if (!skuMatchesLifecycleStage(targetPart.sku, command.toStage)) {
+      throw new WorkshopError(
+        `SKU ${targetPart.sku} does not match return stage ${command.toStage}`,
+      );
+    }
 
     const posted = await postStockInTransaction(
       tx,
@@ -344,7 +332,7 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
       prepareStockCommand("TYRE_DAG_RECEIVE", {
         storeId: tyre.storeId,
         businessDate: command.businessDate,
-        reason: `DAG receive ${tyre.serialNumber} as ${nextStage}`,
+        reason: `DAG return ${tyre.serialNumber} as ${command.toStage}`,
         notes: command.notes,
         idempotencyKey: command.idempotencyKey,
         lines: [{ partId: command.targetPartId, quantity: "1" }],
@@ -356,7 +344,7 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
       .set({
         status: "IN_STORE",
         partId: command.targetPartId,
-        lifecycleStage: nextStage,
+        lifecycleStage: command.toStage,
       })
       .where(eq(tyres.id, tyre.id));
 
@@ -366,7 +354,7 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
       stockDocumentId: posted.id,
       storeId: tyre.storeId,
       fromStage: tyre.lifecycleStage,
-      toStage: nextStage,
+      toStage: command.toStage,
       notes: command.notes || null,
       createdBy: actor.id,
     });
@@ -378,10 +366,70 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
       storeId: tyre.storeId,
       metadata: {
         serialNumber: tyre.serialNumber,
-        stage: nextStage,
+        stage: command.toStage,
         documentId: posted.id,
       },
     });
-    return { id: tyre.id, documentId: posted.id, stage: nextStage };
+    return { id: tyre.id, documentId: posted.id, stage: command.toStage };
+  });
+}
+
+export async function disposeTyre(actor: Actor, input: unknown) {
+  const command = disposeTyreSchema.parse(input);
+
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+    const [tyre] = await tx
+      .select()
+      .from(tyres)
+      .where(eq(tyres.id, command.tyreId))
+      .limit(1);
+    if (!tyre) throw new WorkshopError("Tyre not found");
+    if (!isOperableInStore(tyre.status) || !tyre.storeId) {
+      throw new WorkshopError("Tyre must be in store stock to dispose");
+    }
+    await requireStoreAccess(actor, tyre.storeId);
+
+    const posted = await postStockInTransaction(
+      tx,
+      actor,
+      "TYRE_DISPOSAL",
+      prepareStockCommand("TYRE_DISPOSAL", {
+        storeId: tyre.storeId,
+        businessDate: command.businessDate,
+        reason: `Dispose ${tyre.serialNumber}`,
+        notes: command.notes,
+        idempotencyKey: command.idempotencyKey,
+        lines: [{ partId: tyre.partId, quantity: "1" }],
+      }),
+    );
+
+    await tx
+      .update(tyres)
+      .set({
+        status: "DISPOSED",
+        currentBusId: null,
+        currentPosition: null,
+      })
+      .where(eq(tyres.id, tyre.id));
+
+    await tx.insert(tyreEvents).values({
+      tyreId: tyre.id,
+      type: "DISPOSE",
+      stockDocumentId: posted.id,
+      storeId: tyre.storeId,
+      fromStage: tyre.lifecycleStage,
+      notes: command.notes || null,
+      createdBy: actor.id,
+    });
+    await tx.insert(auditEvents).values({
+      actorId: actor.id,
+      eventType: "TYRE_DISPOSED",
+      entityType: "tyre",
+      entityId: tyre.id,
+      storeId: tyre.storeId,
+      metadata: { serialNumber: tyre.serialNumber, documentId: posted.id },
+    });
+    return { id: tyre.id, documentId: posted.id };
   });
 }

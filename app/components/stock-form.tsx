@@ -15,6 +15,8 @@ export function StockForm({
   initialPartId,
   initialStoreId,
   openJobCards = [],
+  unusualCounts = [],
+  unusualThreshold = 3,
 }: {
   options: Options;
   kind: "receipt" | "issue" | "bus_return";
@@ -22,6 +24,12 @@ export function StockForm({
   initialPartId?: string;
   initialStoreId?: string;
   openJobCards?: OpenJobCards;
+  unusualCounts?: {
+    partId: string;
+    busId: string | null;
+    issueCount: number;
+  }[];
+  unusualThreshold?: number;
 }) {
   const navigation = useNavigation();
   const [idempotencyKey] = useState(() => crypto.randomUUID());
@@ -35,7 +43,15 @@ export function StockForm({
       : (visibleCards.find((card) => card.storeId === initialStoreId)?.id ??
         "");
   const [jobCardId, setJobCardId] = useState(defaultCard);
+  const [partId, setPartId] = useState(initialPartId ?? "");
   const selectedCard = visibleCards.find((card) => card.id === jobCardId);
+  const unusualCount =
+    kind === "issue" && partId && selectedCard
+      ? (unusualCounts.find(
+          (row) => row.partId === partId && row.busId === selectedCard.busId,
+        )?.issueCount ?? 0)
+      : 0;
+  const unusualWarning = unusualCount >= unusualThreshold;
 
   const newCardQuery = new URLSearchParams();
   if (initialStoreId) newCardQuery.set("store", initialStoreId);
@@ -143,6 +159,7 @@ export function StockForm({
             parts={options.parts}
             defaultValue={initialPartId}
             required
+            onChange={(id) => setPartId(id ?? "")}
           />
         </label>
         <label>
@@ -170,6 +187,13 @@ export function StockForm({
           placeholder="Optional reference or comments"
         />
       </label>
+      {unusualWarning ? (
+        <p className="form-error">
+          Unusual request: this part has been issued to{" "}
+          {selectedCard?.fleetNumber} {unusualCount} times in the last 30 days
+          (threshold {unusualThreshold}).
+        </p>
+      ) : null}
       {actionData?.error ? (
         <p className="form-error">{actionData.error}</p>
       ) : null}
@@ -184,9 +208,11 @@ export function StockForm({
           }
         >
           {navigation.state === "submitting"
-            ? "Posting…"
+            ? kind === "issue"
+              ? "Submitting…"
+              : "Posting…"
             : kind === "issue"
-              ? "Post bus issue"
+              ? "Submit for approval"
               : kind === "bus_return"
                 ? "Post bus return"
                 : "Post stock receipt"}

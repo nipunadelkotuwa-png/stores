@@ -11,11 +11,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       status: 404,
     });
   }
-  return { doc };
+  return { doc, isAdmin: actor.role === "ADMIN" };
 }
 
 export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
-  const { doc } = loaderData;
+  const { doc, isAdmin } = loaderData;
   return (
     <>
       <div className="page-heading no-print">
@@ -59,7 +59,10 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
               <strong>Document Number:</strong> {doc.number}
             </p>
             <p>
-              <strong>Type:</strong> {doc.type.replace("_", " ")}
+              <strong>Type:</strong> {doc.type.replaceAll("_", " ")}
+            </p>
+            <p>
+              <strong>Status:</strong> {doc.status.replaceAll("_", " ")}
             </p>
             <p>
               <strong>Date:</strong> {doc.date}
@@ -116,6 +119,30 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
             </tbody>
           </table>
         </div>
+
+        {doc.status === "PENDING_APPROVAL" ? (
+          <p className="badge warning">
+            Awaiting approval — stock not deducted yet
+          </p>
+        ) : null}
+        {doc.status === "REJECTED" ? (
+          <p className="badge danger">Rejected</p>
+        ) : null}
+        {doc.lastApprovalAttemptedAt ? (
+          <p className="muted">
+            Last approval attempt:{" "}
+            {new Date(doc.lastApprovalAttemptedAt).toLocaleString()}
+          </p>
+        ) : null}
+        {doc.lastApprovalError ? (
+          <p className="form-error">{doc.lastApprovalError}</p>
+        ) : null}
+        {isAdmin &&
+        (doc.status === "PENDING_APPROVAL" || doc.status === "REJECTED") ? (
+          <p className="no-print">
+            <Link to="/approvals">Open approvals</Link>
+          </p>
+        ) : null}
 
         {doc.reason && (
           <div

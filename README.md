@@ -316,19 +316,25 @@ Compose can also override `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, a
 
 ## Development seed
 
-`pnpm db:seed` is **blocked in production**. It upserts:
+`pnpm db:seed` is **blocked in production**. It upserts master data and, on the first run, posts mock workshop/inventory history (skipped if seed documents already exist):
 
-| Entity     | Seed value                                                                               |
-| ---------- | ---------------------------------------------------------------------------------------- |
-| Stores     | `CMB` Colombo Central Store, `KDY` Kandy Store                                           |
-| Admin      | `admin@dsgunasekara.local` / `ChangeMe123!` (or `DEV_ADMIN_PASSWORD`)                    |
-| Categories | Engine, Brakes, Electrical, Tyres, Oil                                                   |
-| Parts      | Engine oil filter, front brake pad set, alternator belt, original/DAG1 tyres, 15W-40 oil |
-| Supplier   | `LOCAL-001` Local Supplier                                                               |
-| Bus        | `BUS-001` / `WP-NA-0001` Ashok Leyland Viking                                            |
-| Reorder    | Per-part levels and bin locations for both stores                                        |
+| Entity | Seed value |
+| --- | --- |
+| Stores | `CMB` Colombo Central Store, `KDY` Kandy Store |
+| Admin | `admin@dsgunasekara.local` / `ChangeMe123!` (or `DEV_ADMIN_PASSWORD`) |
+| Operator | `operator@dsgunasekara.local` / same password, assigned to Colombo |
+| Categories | Engine, Brakes, Electrical, Tyres, Oil |
+| Parts | Filters, brake pads/shoes, belt, battery, headlamp, ORG/DAG1/DAG2 tyres, 15W-40 and gear oil (with barcodes) |
+| Suppliers | Local Supplier, Ceat Kelani Tyres, Lanka IOC Lubricants |
+| Buses | `BUS-001` … `BUS-006` (Leyland / Tata, WP / CP / KY / NW plates) |
+| Reorder | Per-part levels and bin locations for both stores |
+| Stock | Opening receipts, bus issues, DAG send/receive, balances |
+| Purchases | One posted Ceat tyre purchase linked to a Colombo receipt |
+| Job cards | Three closed cards plus one open card on `BUS-003` |
+| Tyres | Serials fitted on `BUS-001`, in-store ORG stock, one casing at DAG, one DAG1 returned |
+| Oil | 18 L change logged on `BUS-001` |
 
-The admin is created with `must_change_password = true`. You will be sent to `/change-password` on first login.
+The admin is created with `must_change_password = true`. You will be sent to `/change-password` on first login. Re-running the seed does **not** reset an existing admin password.
 
 ---
 

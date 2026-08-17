@@ -1,5 +1,7 @@
 import { Form, NavLink, Outlet } from "react-router";
 
+import { NotificationBell } from "~/components/notification-bell";
+import { countPendingApprovals } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { getSessionRecord } from "~/lib/auth/session.server";
 import type { Route } from "./+types/app";
@@ -8,9 +10,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const record = await getSessionRecord(request);
   if (!record) throw new Response(null, { status: 401 });
+  const pendingApprovals =
+    user.role === "ADMIN" ? await countPendingApprovals(user) : 0;
   return {
     user: { displayName: user.displayName, role: user.role },
     csrf: record.session.csrfSecret,
+    pendingApprovals,
   };
 }
 
@@ -22,6 +27,7 @@ const operationsNav = [
   ["/issues/new", "Bus issue"],
   ["/returns/bus", "Bus Return"],
   ["/returns", "Returns & Reversals"],
+  ["/transfers", "Transfers"],
   ["/tires/conversion", "Tire Conversion"],
   ["/purchases", "Purchases"],
   ["/alerts/low-stock", "Low stock"],
@@ -43,8 +49,13 @@ const masterDataNav = [
 const reportsNavigation = [
   ["/reports/movements", "Movements"],
   ["/reports/daily-movement", "Daily Movement"],
+  ["/reports/daily-issues", "Daily Issues"],
+  ["/reports/item-usage", "Item usage"],
+  ["/reports/unusual-issues", "Unusual issues"],
   ["/reports/fast-moving", "Fast Moving Items"],
   ["/reports/bus-usage", "Bus usage"],
+  ["/reports/dag-out", "DAG out"],
+  ["/reports/transfers", "Transfers"],
   ["/reports/purchases", "Purchases"],
 ] as const;
 
@@ -73,6 +84,22 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
               {label}
             </NavLink>
           ))}
+
+          {loaderData.user.role === "ADMIN" ? (
+            <NavLink
+              to="/approvals"
+              className={({ isActive }) =>
+                isActive ? "nav-link active" : "nav-link"
+              }
+            >
+              Approvals
+              {loaderData.pendingApprovals > 0 ? (
+                <span className="badge danger" style={{ marginLeft: "0.4rem" }}>
+                  {loaderData.pendingApprovals}
+                </span>
+              ) : null}
+            </NavLink>
+          ) : null}
 
           <p className="nav-section">Workshop</p>
           {workshopNav.map(([to, label]) => (
@@ -176,6 +203,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             <p className="eyebrow">Fleet spare-parts control</p>
             <span className="muted">Secure · Audited · Location-aware</span>
           </div>
+          <NotificationBell csrf={loaderData.csrf} />
         </header>
         <main className="content">
           <Outlet />

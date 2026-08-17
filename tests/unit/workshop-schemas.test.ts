@@ -1,31 +1,63 @@
 import { describe, expect, it } from "vitest";
 import {
   closeJobCardSchema,
+  disposeTyreSchema,
   fitTyreSchema,
   openJobCardSchema,
+  receiveTyreFromDagSchema,
   recordOilChangeSchema,
   registerTyreSchema,
+  sendTyreToDagSchema,
 } from "../../app/features/workshop/schemas";
 import {
+  UNUSUAL_ISSUE_THRESHOLD,
+  UNUSUAL_ISSUE_WINDOW_DAYS,
+} from "../../app/features/workshop/constants";
+import {
   canSendToDag,
+  isOperableInStore,
   nextDagStage,
-  receiveIsScrap,
+  skuMatchesLifecycleStage,
 } from "../../app/features/workshop/tyre-lifecycle";
 
 describe("nextDagStage", () => {
-  it("advances ORG through DAG stages then scrap", () => {
+  it("advances ORG through DAG and rebuild then scrap", () => {
     expect(nextDagStage("ORG")).toBe("DAG1");
     expect(nextDagStage("DAG1")).toBe("DAG2");
     expect(nextDagStage("DAG2")).toBe("DAG3");
-    expect(nextDagStage("DAG3")).toBe("SCRAP");
+    expect(nextDagStage("DAG3")).toBe("REBUILD");
+    expect(nextDagStage("REBUILD")).toBe("SCRAP");
     expect(nextDagStage("SCRAP")).toBe("SCRAP");
   });
 
-  it("treats DAG3 receive as scrap and blocks sending scrap", () => {
-    expect(receiveIsScrap("DAG3")).toBe(true);
-    expect(receiveIsScrap("DAG2")).toBe(false);
+  it("allows sending rebuild casings but not scrap", () => {
     expect(canSendToDag("ORG")).toBe(true);
+    expect(canSendToDag("REBUILD")).toBe(true);
     expect(canSendToDag("SCRAP")).toBe(false);
+  });
+
+  it("blocks fit, DAG send, and dispose unless the serial is in store", () => {
+    expect(isOperableInStore("IN_STORE")).toBe(true);
+    expect(isOperableInStore("IN_TRANSIT")).toBe(false);
+    expect(isOperableInStore("AT_DAG")).toBe(false);
+    expect(isOperableInStore("DISPOSED")).toBe(false);
+  });
+
+  it("matches tyre SKUs to the chosen DAG return stage", () => {
+    expect(skuMatchesLifecycleStage("TR-ORG-295", "ORG")).toBe(true);
+    expect(skuMatchesLifecycleStage("TR-DAG1-295", "DAG1")).toBe(true);
+    expect(skuMatchesLifecycleStage("TR-REBUILD-295", "REBUILD")).toBe(true);
+    expect(skuMatchesLifecycleStage("TR-DAG1-295", "DAG")).toBe(false);
+    expect(skuMatchesLifecycleStage("TR-ORG-295", "DAG1")).toBe(false);
+  });
+});
+
+describe("unusual issue threshold", () => {
+  it("flags three or more issues in a 30-day window, including pending", () => {
+    expect(UNUSUAL_ISSUE_THRESHOLD).toBe(3);
+    expect(UNUSUAL_ISSUE_WINDOW_DAYS).toBe(30);
+    expect(2 >= UNUSUAL_ISSUE_THRESHOLD).toBe(false);
+    expect(3 >= UNUSUAL_ISSUE_THRESHOLD).toBe(true);
   });
 });
 
@@ -88,6 +120,48 @@ describe("workshop schemas", () => {
         storeId: "11111111-1111-4111-8111-111111111111",
         partId: "22222222-2222-4222-8222-222222222222",
         serialNumber: "SN-1",
+      }).success,
+    ).toBe(true);
+    expect(
+      registerTyreSchema.safeParse({
+        storeId: "11111111-1111-4111-8111-111111111111",
+        partId: "22222222-2222-4222-8222-222222222222",
+        serialNumber: "SN-1",
+        lifecycleStage: "SCRAP",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires supplier and chosen return stage for DAG", () => {
+    expect(
+      sendTyreToDagSchema.safeParse({
+        tyreId: "55555555-5555-4555-8555-555555555555",
+        businessDate: "2026-08-17",
+        idempotencyKey: "0123456789abcdef",
+      }).success,
+    ).toBe(false);
+    expect(
+      sendTyreToDagSchema.safeParse({
+        tyreId: "55555555-5555-4555-8555-555555555555",
+        supplierId: "66666666-6666-4666-8666-666666666666",
+        businessDate: "2026-08-17",
+        idempotencyKey: "0123456789abcdef",
+      }).success,
+    ).toBe(true);
+    expect(
+      receiveTyreFromDagSchema.safeParse({
+        tyreId: "55555555-5555-4555-8555-555555555555",
+        toStage: "REBUILD",
+        targetPartId: "22222222-2222-4222-8222-222222222222",
+        businessDate: "2026-08-17",
+        idempotencyKey: "0123456789abcdef",
+      }).success,
+    ).toBe(true);
+    expect(
+      disposeTyreSchema.safeParse({
+        tyreId: "55555555-5555-4555-8555-555555555555",
+        businessDate: "2026-08-17",
+        idempotencyKey: "0123456789abcdef",
       }).success,
     ).toBe(true);
   });

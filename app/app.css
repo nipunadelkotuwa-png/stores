@@ -694,8 +694,52 @@ td a {
   padding-bottom: 0.85rem;
   border-bottom: 1px solid var(--line);
 }
+.notification-bell {
+  position: relative;
+}
+.notification-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  width: min(360px, 90vw);
+  max-height: 420px;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  z-index: 50;
+}
+.notification-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+.notification-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.notification-panel li {
+  display: grid;
+  gap: 0.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+.notification-panel li span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
 @media print {
   .label-card-hidden {
+    display: none !important;
+  }
+  .notification-bell {
     display: none !important;
   }
 }

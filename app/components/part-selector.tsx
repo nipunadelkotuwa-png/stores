@@ -8,6 +8,7 @@ export type PartOption = {
   barcode: string | null;
   categoryId?: string | null;
   categoryName?: string | null;
+  categoryCode?: string | null;
 };
 
 interface PartSelectorProps {
@@ -15,6 +16,7 @@ interface PartSelectorProps {
   parts: PartOption[];
   defaultValue?: string;
   required?: boolean;
+  onChange?: (partId: string | null) => void;
 }
 
 export function PartSelector({
@@ -22,6 +24,7 @@ export function PartSelector({
   parts,
   defaultValue,
   required = false,
+  onChange,
 }: PartSelectorProps) {
   const allOptions = parts.map((p) => ({
     value: p.id,
@@ -75,7 +78,11 @@ export function PartSelector({
       <Select
         options={options}
         defaultValue={initialValue}
-        onChange={(val) => setSelected(val as { value: string } | null)}
+        onChange={(val) => {
+          const next = val as { value: string } | null;
+          setSelected(next);
+          onChange?.(next?.value ?? null);
+        }}
         filterOption={customFilter}
         placeholder="Search by name, SKU, or scan barcode..."
         isClearable

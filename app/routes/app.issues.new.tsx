@@ -2,9 +2,13 @@ import { redirect, useActionData, useSearchParams } from "react-router";
 import { StockForm } from "~/components/stock-form";
 import {
   inventoryActionError,
-  postStock,
+  submitIssueForApproval,
 } from "~/features/inventory/posting.server";
-import { getTransactionOptions } from "~/features/inventory/queries.server";
+import {
+  getRepetitiveIssueCounts,
+  getTransactionOptions,
+} from "~/features/inventory/queries.server";
+import { UNUSUAL_ISSUE_THRESHOLD } from "~/features/workshop/constants";
 import { listOpenJobCards } from "~/features/workshop/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
@@ -14,11 +18,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   const actor = await requireUser(request);
   const url = new URL(request.url);
   const storeId = url.searchParams.get("store") || undefined;
-  const [options, openJobCards] = await Promise.all([
+  const [options, openJobCards, unusualCounts] = await Promise.all([
     getTransactionOptions(actor),
     listOpenJobCards(actor, { storeId }),
+    getRepetitiveIssueCounts(actor),
   ]);
-  return { options, openJobCards };
+  return {
+    options,
+    openJobCards,
+    unusualCounts,
+    unusualThreshold: UNUSUAL_ISSUE_THRESHOLD,
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -27,7 +37,7 @@ export async function action({ request }: Route.ActionArgs) {
   await requireValidCsrf(request, formData);
   const form = Object.fromEntries(formData);
   try {
-    const result = await postStock(actor, "BUS_ISSUE", {
+    const result = await submitIssueForApproval(actor, {
       ...form,
       lines: [{ partId: form.partId, quantity: form.quantity }],
     });
@@ -35,7 +45,7 @@ export async function action({ request }: Route.ActionArgs) {
   } catch (error) {
     if (error instanceof Response) throw error;
     return {
-      error: inventoryActionError(error, "Unable to post issue"),
+      error: inventoryActionError(error, "Unable to submit issue"),
     };
   }
 }
@@ -53,8 +63,9 @@ export default function IssuePage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Fleet usage</p>
           <h1>Issue parts to bus</h1>
           <p className="muted">
-            Issues must be posted against an open job card. Stock cannot fall
-            below zero.
+            Issues must be posted against an open job card. An administrator
+            must approve this issue before stock is deducted. Parts issued from
+            a job card still post immediately.
           </p>
         </div>
       </div>
@@ -65,6 +76,8 @@ export default function IssuePage({ loaderData }: Route.ComponentProps) {
         initialPartId={part}
         initialStoreId={store}
         openJobCards={loaderData.openJobCards}
+        unusualCounts={loaderData.unusualCounts}
+        unusualThreshold={loaderData.unusualThreshold}
       />
     </>
   );

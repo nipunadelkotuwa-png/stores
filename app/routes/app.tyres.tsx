@@ -14,7 +14,7 @@ import {
   listCategoryParts,
   listTyres,
 } from "~/features/workshop/queries.server";
-import { registerTyre } from "~/features/workshop/tyres.server";
+import { registerTyre, disposeTyre } from "~/features/workshop/tyres.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.tyres";
@@ -37,11 +37,23 @@ export async function action({ request }: Route.ActionArgs) {
   const actor = await requireUser(request);
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
+  const intent = String(formData.get("intent") ?? "register");
   try {
+    if (intent === "dispose") {
+      await disposeTyre(actor, Object.fromEntries(formData));
+      return { ok: true, disposed: true };
+    }
     await registerTyre(actor, Object.fromEntries(formData));
     return { ok: true };
   } catch (error) {
-    return { error: workshopActionError(error, "Unable to register tyre") };
+    return {
+      error: workshopActionError(
+        error,
+        intent === "dispose"
+          ? "Unable to dispose tyre"
+          : "Unable to register tyre",
+      ),
+    };
   }
 }
 
@@ -58,12 +70,13 @@ export default function TyresPage({ loaderData }: Route.ComponentProps) {
           <h1>Tyres</h1>
           <p className="muted">
             Register serials against on-hand tyre stock, then fit them from a
-            job card. DAG send/receive is a separate step.
+            job card. Dispose writes off an in-store serial. DAG send/return is
+            a separate step.
           </p>
         </div>
         <div className="heading-actions">
           <Link className="button button-secondary" to="/tyres/dag">
-            DAG send / receive
+            DAG send / return
           </Link>
         </div>
       </div>
@@ -93,6 +106,8 @@ export default function TyresPage({ loaderData }: Route.ComponentProps) {
                 <option value="IN_STORE">In store</option>
                 <option value="FITTED">Fitted</option>
                 <option value="AT_DAG">At DAG</option>
+                <option value="IN_TRANSIT">In transit</option>
+                <option value="DISPOSED">Disposed</option>
                 <option value="SCRAPPED">Scrapped</option>
               </select>
             </label>
@@ -109,12 +124,13 @@ export default function TyresPage({ loaderData }: Route.ComponentProps) {
                   <th>Stage</th>
                   <th>Status</th>
                   <th>Location</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {loaderData.tyres.length === 0 ? (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <div className="empty-state">
                         <strong>No tyres registered</strong>
                         <p>Receive tyre stock, then register each serial.</p>
@@ -136,6 +152,36 @@ export default function TyresPage({ loaderData }: Route.ComponentProps) {
                         {tyre.status === "FITTED"
                           ? `${tyre.fleetNumber ?? "Bus"} · ${tyre.position}`
                           : (tyre.store ?? "—")}
+                      </td>
+                      <td>
+                        {tyre.status === "IN_STORE" ? (
+                          <Form method="post">
+                            <CsrfField />
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="dispose"
+                            />
+                            <input
+                              type="hidden"
+                              name="tyreId"
+                              value={tyre.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="businessDate"
+                              value={new Date().toISOString().slice(0, 10)}
+                            />
+                            <input
+                              type="hidden"
+                              name="idempotencyKey"
+                              value={`dispose-${tyre.id}`}
+                            />
+                            <button className="text-button" type="submit">
+                              Dispose
+                            </button>
+                          </Form>
+                        ) : null}
                       </td>
                     </tr>
                   ))
@@ -201,7 +247,13 @@ export default function TyresPage({ loaderData }: Route.ComponentProps) {
               {actionData?.error ? (
                 <p className="form-error">{actionData.error}</p>
               ) : null}
-              {actionData?.ok ? (
+              {actionData?.ok &&
+              "disposed" in actionData &&
+              actionData.disposed ? (
+                <p className="muted">Tyre disposed.</p>
+              ) : null}
+              {actionData?.ok &&
+              !("disposed" in actionData && actionData.disposed) ? (
                 <p className="muted">Serial registered.</p>
               ) : null}
               <button

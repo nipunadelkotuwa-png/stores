@@ -149,6 +149,22 @@ export async function closeJobCard(actor: Actor, input: unknown) {
     const card = await loadOpenJobCard(tx, command.jobCardId);
     await requireStoreAccess(actor, card.storeId);
 
+    const [pending] = await tx
+      .select({ id: stockDocuments.id })
+      .from(stockDocuments)
+      .where(
+        and(
+          eq(stockDocuments.jobCardId, card.id),
+          eq(stockDocuments.status, "PENDING_APPROVAL"),
+        ),
+      )
+      .limit(1);
+    if (pending) {
+      throw new WorkshopError(
+        "Cannot close while a bus issue is awaiting approval",
+      );
+    }
+
     const [updated] = await tx
       .update(jobCards)
       .set({

@@ -10,6 +10,7 @@ import {
   stockDocumentLines,
   stockDocuments,
   stores,
+  suppliers,
   tyreEvents,
   tyres,
   users,
@@ -20,7 +21,6 @@ import {
   type Actor,
 } from "~/lib/auth/authorization.server";
 import { TYRE_POSITIONS, type TyrePosition } from "./constants";
-import { nextDagStage } from "./tyre-lifecycle";
 
 const LIST_LIMIT = 200;
 
@@ -247,7 +247,13 @@ export async function listTyres(
         filters?.status
           ? eq(
               tyres.status,
-              filters.status as "IN_STORE" | "FITTED" | "AT_DAG" | "SCRAPPED",
+              filters.status as
+                | "IN_STORE"
+                | "FITTED"
+                | "AT_DAG"
+                | "IN_TRANSIT"
+                | "DISPOSED"
+                | "SCRAPPED",
             )
           : undefined,
         filters?.serial
@@ -273,7 +279,6 @@ export async function listTyresAtDag(actor: Actor) {
       sku: parts.sku,
       part: parts.name,
       stage: tyres.lifecycleStage,
-      nextStage: sql<string>`${tyres.lifecycleStage}`,
       store: stores.code,
       storeId: tyres.storeId,
     })
@@ -283,13 +288,7 @@ export async function listTyresAtDag(actor: Actor) {
     .where(
       and(eq(tyres.status, "AT_DAG"), scopedStoreCondition(tyres.storeId, ids)),
     )
-    .orderBy(asc(tyres.serialNumber))
-    .then((rows) =>
-      rows.map((row) => ({
-        ...row,
-        nextStage: nextDagStage(row.stage),
-      })),
-    );
+    .orderBy(asc(tyres.serialNumber));
 }
 
 export async function listInStoreTyres(actor: Actor) {
@@ -363,4 +362,84 @@ export async function getJobCardFormOptions(actor: Actor) {
       .orderBy(asc(buses.fleetNumber)),
   ]);
   return { stores: storeRows, buses: busRows };
+}
+
+export async function getDagOutSummary(
+  actor: Actor,
+  filters?: {
+    supplierId?: string;
+    storeId?: string;
+    sentFrom?: string;
+    sentTo?: string;
+  },
+) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const sendEvents = db
+    .selectDistinctOn([tyreEvents.tyreId], {
+      tyreId: tyreEvents.tyreId,
+      occurredAt: tyreEvents.occurredAt,
+      documentId: tyreEvents.stockDocumentId,
+    })
+    .from(tyreEvents)
+    .where(eq(tyreEvents.type, "SEND_DAG"))
+    .orderBy(tyreEvents.tyreId, desc(tyreEvents.occurredAt))
+    .as("send_events");
+
+  const rows = await db
+    .select({
+      tyreId: tyres.id,
+      serialNumber: tyres.serialNumber,
+      stage: tyres.lifecycleStage,
+      sku: parts.sku,
+      store: stores.code,
+      storeId: tyres.storeId,
+      supplierId: suppliers.id,
+      supplier: suppliers.name,
+      sentAt: sendEvents.occurredAt,
+      documentId: sendEvents.documentId,
+    })
+    .from(tyres)
+    .innerJoin(parts, eq(tyres.partId, parts.id))
+    .innerJoin(stores, eq(tyres.storeId, stores.id))
+    .innerJoin(sendEvents, eq(sendEvents.tyreId, tyres.id))
+    .leftJoin(stockDocuments, eq(stockDocuments.id, sendEvents.documentId))
+    .leftJoin(suppliers, eq(stockDocuments.supplierId, suppliers.id))
+    .where(
+      and(
+        eq(tyres.status, "AT_DAG"),
+        scopedStoreCondition(tyres.storeId, ids),
+        filters?.supplierId ? eq(suppliers.id, filters.supplierId) : undefined,
+        filters?.storeId ? eq(tyres.storeId, filters.storeId) : undefined,
+        filters?.sentFrom
+          ? sql`${sendEvents.occurredAt}::date >= ${filters.sentFrom}`
+          : undefined,
+        filters?.sentTo
+          ? sql`${sendEvents.occurredAt}::date <= ${filters.sentTo}`
+          : undefined,
+      ),
+    )
+    .orderBy(asc(suppliers.name), asc(tyres.serialNumber));
+
+  const bySupplier = new Map<
+    string,
+    {
+      supplierId: string | null;
+      supplier: string;
+      count: number;
+      tyres: typeof rows;
+    }
+  >();
+  for (const row of rows) {
+    const key = row.supplierId ?? "unassigned";
+    const current = bySupplier.get(key) ?? {
+      supplierId: row.supplierId,
+      supplier: row.supplier ?? "No supplier",
+      count: 0,
+      tyres: [],
+    };
+    current.count += 1;
+    current.tyres.push(row);
+    bySupplier.set(key, current);
+  }
+  return { groups: [...bySupplier.values()], total: rows.length };
 }

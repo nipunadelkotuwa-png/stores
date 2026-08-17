@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TYRE_POSITIONS, TYRE_STAGES } from "./constants";
+import { TYRE_POSITIONS, USABLE_TYRE_STAGES } from "./constants";
 
 const optionalKmSchema = z
   .union([z.string(), z.number()])
@@ -50,7 +50,7 @@ export const registerTyreSchema = z.object({
   storeId: z.string().uuid(),
   partId: z.string().uuid(),
   serialNumber: z.string().trim().min(2).max(80),
-  lifecycleStage: z.enum(TYRE_STAGES).default("ORG"),
+  lifecycleStage: z.enum(USABLE_TYRE_STAGES).default("ORG"),
   notes: z.string().trim().max(1000).optional(),
 });
 
@@ -63,6 +63,7 @@ export const fitTyreSchema = z.object({
 
 export const sendTyreToDagSchema = z.object({
   tyreId: z.string().uuid(),
+  supplierId: z.string().uuid(),
   businessDate: z.string().date(),
   notes: z.string().trim().max(1000).optional(),
   idempotencyKey: z.string().min(16).max(100),
@@ -70,10 +71,15 @@ export const sendTyreToDagSchema = z.object({
 
 export const receiveTyreFromDagSchema = z.object({
   tyreId: z.string().uuid(),
-  targetPartId: z.preprocess(
-    (value) => (value === "" || value === undefined ? undefined : value),
-    z.string().uuid().optional(),
-  ),
+  toStage: z.enum(USABLE_TYRE_STAGES),
+  targetPartId: z.string().uuid(),
+  businessDate: z.string().date(),
+  notes: z.string().trim().max(1000).optional(),
+  idempotencyKey: z.string().min(16).max(100),
+});
+
+export const disposeTyreSchema = z.object({
+  tyreId: z.string().uuid(),
   businessDate: z.string().date(),
   notes: z.string().trim().max(1000).optional(),
   idempotencyKey: z.string().min(16).max(100),

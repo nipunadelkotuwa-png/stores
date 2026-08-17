@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "~/db/client.server";
 import {
   auditEvents,
@@ -13,6 +14,8 @@ import {
   storePartSettings,
   stores,
   suppliers,
+  tyreEvents,
+  tyres,
   users,
 } from "~/db/schema";
 import {
@@ -20,6 +23,10 @@ import {
   scopedStoreCondition,
   type Actor,
 } from "~/lib/auth/authorization.server";
+import {
+  UNUSUAL_ISSUE_THRESHOLD,
+  UNUSUAL_ISSUE_WINDOW_DAYS,
+} from "~/features/workshop/constants";
 
 const REPORT_LIMIT = 250;
 
@@ -39,6 +46,7 @@ export async function getTransactionOptions(actor: Actor) {
         barcode: parts.barcode,
         categoryId: parts.categoryId,
         categoryName: partCategories.name,
+        categoryCode: partCategories.code,
       })
       .from(parts)
       .leftJoin(partCategories, eq(parts.categoryId, partCategories.id))
@@ -200,6 +208,7 @@ export async function getBusUsage(
 
   const conditions = [
     eq(stockDocuments.type, "BUS_ISSUE"),
+    eq(stockDocuments.status, "POSTED"),
     scopedStoreCondition(stockDocuments.storeId, ids),
   ];
 
@@ -315,6 +324,10 @@ export async function getDocumentForReceipt(actor: Actor, id: string) {
       bus: buses.fleetNumber,
       postedAt: stockDocuments.postedAt,
       reason: stockDocuments.reason,
+      status: stockDocuments.status,
+      lastApprovalError: stockDocuments.lastApprovalError,
+      lastApprovalAttemptedAt: stockDocuments.lastApprovalAttemptedAt,
+      createdBy: stockDocuments.createdBy,
     })
     .from(stockDocuments)
     .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
@@ -322,7 +335,14 @@ export async function getDocumentForReceipt(actor: Actor, id: string) {
     .where(
       and(
         eq(stockDocuments.id, id),
-        scopedStoreCondition(stockDocuments.storeId, ids),
+        ids === null
+          ? undefined
+          : ids.length === 0
+            ? sql`false`
+            : or(
+                inArray(stockDocuments.storeId, ids),
+                inArray(stockDocuments.destinationStoreId, ids),
+              ),
       ),
     );
 
@@ -420,4 +440,330 @@ export async function getAuditEvents() {
     .leftJoin(stores, eq(auditEvents.storeId, stores.id))
     .orderBy(desc(auditEvents.occurredAt))
     .limit(REPORT_LIMIT);
+}
+
+export async function getPendingIssues(actor: Actor) {
+  const ids = await getAuthorizedStoreIds(actor);
+  return db
+    .select({
+      id: stockDocuments.id,
+      number: stockDocuments.documentNumber,
+      date: stockDocuments.businessDate,
+      store: stores.name,
+      storeCode: stores.code,
+      fleetNumber: buses.fleetNumber,
+      createdBy: users.displayName,
+      lastApprovalError: stockDocuments.lastApprovalError,
+      lastApprovalAttemptedAt: stockDocuments.lastApprovalAttemptedAt,
+      sku: parts.sku,
+      part: parts.name,
+      quantity: stockDocumentLines.quantity,
+    })
+    .from(stockDocuments)
+    .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
+    .innerJoin(users, eq(stockDocuments.createdBy, users.id))
+    .leftJoin(buses, eq(stockDocuments.busId, buses.id))
+    .innerJoin(
+      stockDocumentLines,
+      eq(stockDocumentLines.documentId, stockDocuments.id),
+    )
+    .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
+    .where(
+      and(
+        eq(stockDocuments.type, "BUS_ISSUE"),
+        eq(stockDocuments.status, "PENDING_APPROVAL"),
+        scopedStoreCondition(stockDocuments.storeId, ids),
+      ),
+    )
+    .orderBy(desc(stockDocuments.createdAt));
+}
+
+export async function countPendingApprovals(actor: Actor) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const [row] = await db
+    .select({
+      count: sql<number>`count(distinct ${stockDocuments.id})::int`,
+    })
+    .from(stockDocuments)
+    .where(
+      and(
+        eq(stockDocuments.type, "BUS_ISSUE"),
+        eq(stockDocuments.status, "PENDING_APPROVAL"),
+        scopedStoreCondition(stockDocuments.storeId, ids),
+      ),
+    );
+  return Number(row?.count ?? 0);
+}
+
+export async function getItemUsage(
+  actor: Actor,
+  filters?: { start?: string; end?: string; storeId?: string },
+) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const rows = await db
+    .select({
+      partId: parts.id,
+      sku: parts.sku,
+      part: parts.name,
+      unit: parts.unit,
+      store: stores.name,
+      issued: sql<string>`SUM(${stockDocumentLines.quantity})`,
+    })
+    .from(stockDocumentLines)
+    .innerJoin(
+      stockDocuments,
+      eq(stockDocumentLines.documentId, stockDocuments.id),
+    )
+    .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
+    .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
+    .where(
+      and(
+        eq(stockDocuments.type, "BUS_ISSUE"),
+        eq(stockDocuments.status, "POSTED"),
+        scopedStoreCondition(stockDocuments.storeId, ids),
+        filters?.start
+          ? sql`${stockDocuments.businessDate} >= ${filters.start}`
+          : undefined,
+        filters?.end
+          ? sql`${stockDocuments.businessDate} <= ${filters.end}`
+          : undefined,
+        filters?.storeId
+          ? eq(stockDocuments.storeId, filters.storeId)
+          : undefined,
+      ),
+    )
+    .groupBy(parts.id, parts.sku, parts.name, parts.unit, stores.name)
+    .orderBy(desc(sql`SUM(${stockDocumentLines.quantity})`))
+    .limit(REPORT_LIMIT + 1);
+  return {
+    rows: rows.slice(0, REPORT_LIMIT),
+    truncated: rows.length > REPORT_LIMIT,
+  };
+}
+
+export async function getDailyIssues(actor: Actor, date: string) {
+  const ids = await getAuthorizedStoreIds(actor);
+  return db
+    .select({
+      id: stockDocuments.id,
+      number: stockDocuments.documentNumber,
+      store: stores.name,
+      fleetNumber: buses.fleetNumber,
+      sku: parts.sku,
+      part: parts.name,
+      quantity: stockDocumentLines.quantity,
+    })
+    .from(stockDocumentLines)
+    .innerJoin(
+      stockDocuments,
+      eq(stockDocumentLines.documentId, stockDocuments.id),
+    )
+    .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
+    .leftJoin(buses, eq(stockDocuments.busId, buses.id))
+    .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
+    .where(
+      and(
+        eq(stockDocuments.type, "BUS_ISSUE"),
+        eq(stockDocuments.status, "POSTED"),
+        eq(stockDocuments.businessDate, date),
+        scopedStoreCondition(stockDocuments.storeId, ids),
+      ),
+    )
+    .orderBy(asc(stores.name), asc(parts.sku));
+}
+
+export async function getUnusualIssues(actor: Actor) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const since = new Date();
+  since.setDate(since.getDate() - UNUSUAL_ISSUE_WINDOW_DAYS);
+  const sinceDate = since.toISOString().slice(0, 10);
+
+  return db
+    .select({
+      partId: parts.id,
+      sku: parts.sku,
+      part: parts.name,
+      busId: buses.id,
+      fleetNumber: buses.fleetNumber,
+      issueCount: sql<number>`count(${stockDocuments.id})::int`,
+    })
+    .from(stockDocuments)
+    .innerJoin(
+      stockDocumentLines,
+      eq(stockDocumentLines.documentId, stockDocuments.id),
+    )
+    .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
+    .innerJoin(buses, eq(stockDocuments.busId, buses.id))
+    .where(
+      and(
+        eq(stockDocuments.type, "BUS_ISSUE"),
+        inArray(stockDocuments.status, ["POSTED", "PENDING_APPROVAL"]),
+        sql`${stockDocuments.businessDate} >= ${sinceDate}`,
+        scopedStoreCondition(stockDocuments.storeId, ids),
+      ),
+    )
+    .groupBy(parts.id, parts.sku, parts.name, buses.id, buses.fleetNumber)
+    .having(sql`count(${stockDocuments.id}) >= ${UNUSUAL_ISSUE_THRESHOLD}`)
+    .orderBy(desc(sql`count(${stockDocuments.id})`));
+}
+
+export async function getRepetitiveIssueCounts(actor: Actor) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const since = new Date();
+  since.setDate(since.getDate() - UNUSUAL_ISSUE_WINDOW_DAYS);
+  const sinceDate = since.toISOString().slice(0, 10);
+
+  return db
+    .select({
+      partId: stockDocumentLines.partId,
+      busId: stockDocuments.busId,
+      issueCount: sql<number>`count(${stockDocuments.id})::int`,
+    })
+    .from(stockDocuments)
+    .innerJoin(
+      stockDocumentLines,
+      eq(stockDocumentLines.documentId, stockDocuments.id),
+    )
+    .where(
+      and(
+        eq(stockDocuments.type, "BUS_ISSUE"),
+        inArray(stockDocuments.status, ["POSTED", "PENDING_APPROVAL"]),
+        sql`${stockDocuments.businessDate} >= ${sinceDate}`,
+        scopedStoreCondition(stockDocuments.storeId, ids),
+      ),
+    )
+    .groupBy(stockDocumentLines.partId, stockDocuments.busId);
+}
+
+export async function getTransfers(
+  actor: Actor,
+  filters?: { start?: string; end?: string },
+) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const destStores = alias(stores, "dest_stores");
+  const rows = await db
+    .select({
+      id: stockDocuments.id,
+      number: stockDocuments.documentNumber,
+      type: stockDocuments.type,
+      status: stockDocuments.status,
+      date: stockDocuments.businessDate,
+      source: stores.name,
+      destination: destStores.name,
+      linkedDocumentId: stockDocuments.linkedDocumentId,
+      sku: parts.sku,
+      part: parts.name,
+      quantity: stockDocumentLines.quantity,
+    })
+    .from(stockDocuments)
+    .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
+    .leftJoin(destStores, eq(stockDocuments.destinationStoreId, destStores.id))
+    .innerJoin(
+      stockDocumentLines,
+      eq(stockDocumentLines.documentId, stockDocuments.id),
+    )
+    .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
+    .where(
+      and(
+        inArray(stockDocuments.type, ["TRANSFER_OUT", "TRANSFER_IN"]),
+        eq(stockDocuments.status, "POSTED"),
+        ids === null
+          ? undefined
+          : ids.length === 0
+            ? sql`false`
+            : or(
+                inArray(stockDocuments.storeId, ids),
+                inArray(stockDocuments.destinationStoreId, ids),
+              ),
+        filters?.start
+          ? sql`${stockDocuments.businessDate} >= ${filters.start}`
+          : undefined,
+        filters?.end
+          ? sql`${stockDocuments.businessDate} <= ${filters.end}`
+          : undefined,
+      ),
+    )
+    .orderBy(desc(stockDocuments.businessDate), desc(stockDocuments.postedAt))
+    .limit(REPORT_LIMIT + 1);
+  return {
+    rows: rows.slice(0, REPORT_LIMIT),
+    truncated: rows.length > REPORT_LIMIT,
+  };
+}
+
+export async function getInTransitTransfers(actor: Actor) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const destStores = alias(stores, "dest_stores");
+  const outgoing = await db
+    .select({
+      id: stockDocuments.id,
+      number: stockDocuments.documentNumber,
+      date: stockDocuments.businessDate,
+      sourceId: stockDocuments.storeId,
+      source: stores.name,
+      sourceCode: stores.code,
+      destinationId: stockDocuments.destinationStoreId,
+      destination: destStores.name,
+      destinationCode: destStores.code,
+    })
+    .from(stockDocuments)
+    .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
+    .leftJoin(destStores, eq(stockDocuments.destinationStoreId, destStores.id))
+    .where(
+      and(
+        eq(stockDocuments.type, "TRANSFER_OUT"),
+        eq(stockDocuments.status, "POSTED"),
+        sql`NOT EXISTS (
+          SELECT 1 FROM stock_documents incoming
+          WHERE incoming.linked_document_id = ${stockDocuments.id}
+        )`,
+        ids === null
+          ? undefined
+          : ids.length === 0
+            ? sql`false`
+            : or(
+                inArray(stockDocuments.storeId, ids),
+                inArray(stockDocuments.destinationStoreId, ids),
+              ),
+      ),
+    )
+    .orderBy(desc(stockDocuments.postedAt));
+
+  const serials =
+    outgoing.length === 0
+      ? []
+      : await db
+          .select({
+            documentId: tyreEvents.stockDocumentId,
+            serialNumber: tyres.serialNumber,
+            sku: parts.sku,
+          })
+          .from(tyreEvents)
+          .innerJoin(tyres, eq(tyreEvents.tyreId, tyres.id))
+          .innerJoin(parts, eq(tyres.partId, parts.id))
+          .where(
+            and(
+              eq(tyreEvents.type, "TRANSFER_OUT"),
+              inArray(
+                tyreEvents.stockDocumentId,
+                outgoing.map((row) => row.id),
+              ),
+            ),
+          );
+
+  const serialsByDoc = new Map<string, typeof serials>();
+  for (const serial of serials) {
+    if (!serial.documentId) continue;
+    const list = serialsByDoc.get(serial.documentId) ?? [];
+    list.push(serial);
+    serialsByDoc.set(serial.documentId, list);
+  }
+
+  return outgoing.map((row) => ({
+    ...row,
+    serials: serialsByDoc.get(row.id) ?? [],
+    canReceive:
+      ids === null ||
+      (row.destinationId != null && ids.includes(row.destinationId)),
+  }));
 }

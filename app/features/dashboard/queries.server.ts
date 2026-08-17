@@ -80,6 +80,7 @@ export async function getDashboard(actor: Actor) {
       and(
         lt(stockMovements.quantityDelta, "0"),
         eq(stockDocuments.type, "BUS_ISSUE"),
+        eq(stockDocuments.status, "POSTED"),
         movementScope,
       ),
     )

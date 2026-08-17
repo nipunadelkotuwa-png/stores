@@ -45,6 +45,19 @@ export const postStockSchema = z.object({
     z.string().uuid().optional(),
   ),
   supplierId: z.string().uuid().optional(),
+  destinationStoreId: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z.string().uuid().optional(),
+  ),
+  linkedDocumentId: z.preprocess(
+    (value) => (value === "" || value === undefined ? undefined : value),
+    z.string().uuid().optional(),
+  ),
+  tyreIds: z.preprocess((value) => {
+    if (value === undefined || value === "") return undefined;
+    if (Array.isArray(value)) return value;
+    return [value];
+  }, z.array(z.string().uuid()).optional()),
   /** ADJUSTMENT only: increase (default) or decrease on-hand. */
   direction: z.enum(["increase", "decrease"]).optional(),
   reason: z.string().max(500).optional(),
