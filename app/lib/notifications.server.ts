@@ -14,6 +14,7 @@ import {
   scopedStoreCondition,
   type Actor,
 } from "~/lib/auth/authorization.server";
+import { lowStockCondition } from "~/features/inventory/low-stock";
 
 export type LowStockNotification = {
   storeId: string;
@@ -57,7 +58,7 @@ export async function checkLowStockAlerts(
         scopedStoreCondition(storePartSettings.storeId, ids),
         storeId ? eq(storePartSettings.storeId, storeId) : undefined,
         partId ? eq(storePartSettings.partId, partId) : undefined,
-        sql`COALESCE(${inventoryBalances.onHand}, 0) <= ${storePartSettings.reorderLevel}`,
+        lowStockCondition,
       ),
     );
 

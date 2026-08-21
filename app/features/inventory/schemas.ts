@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { MAX_STOCK_LINES } from "./form-lines";
+
 const quantitySchema = z
   .union([z.string(), z.number()])
   .transform((value, ctx) => {
@@ -63,5 +65,5 @@ export const postStockSchema = z.object({
   reason: z.string().max(500).optional(),
   notes: z.string().max(1000).optional(),
   idempotencyKey: z.string().min(16).max(100),
-  lines: z.array(stockLineSchema).min(1).max(100),
+  lines: z.array(stockLineSchema).min(1).max(MAX_STOCK_LINES),
 });

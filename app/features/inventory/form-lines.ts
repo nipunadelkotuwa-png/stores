@@ -1,6 +1,6 @@
 import { ZodError } from "zod";
 
-export const MAX_STOCK_LINES = 100;
+export const MAX_STOCK_LINES = 400;
 
 export const DUPLICATE_PART_MESSAGE =
   "Each part can only appear once. Increase the quantity on the existing line instead.";
@@ -76,6 +76,12 @@ export function loadStockLines(
   const lines = parseStockLinesFromForm(formData, costName);
   if (lines.length === 0) {
     return { ok: false, error: "Add at least one part with a quantity." };
+  }
+  if (lines.length > MAX_STOCK_LINES) {
+    return {
+      ok: false,
+      error: `A document can have at most ${MAX_STOCK_LINES} lines.`,
+    };
   }
 
   const seen = new Map<string, number>();

@@ -1,7 +1,9 @@
 import { asc, eq } from "drizzle-orm";
+import { useState } from "react";
 import { Form, useActionData, useNavigation } from "react-router";
 import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
+import { PartSelector } from "~/components/part-selector";
 import { db } from "~/db/client.server";
 import { parts, storePartSettings, stores } from "~/db/schema";
 import { requireAdmin } from "~/lib/auth/authorization.server";
@@ -82,6 +84,16 @@ export async function action({ request }: Route.ActionArgs) {
 export default function ReorderPage({ loaderData }: Route.ComponentProps) {
   const data = useActionData<typeof action>();
   const navigation = useNavigation();
+  const [searchQuery, setSearchQuery] = useState("");
+  const visibleSettings = loaderData.settings.filter((row) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      row.sku.toLowerCase().includes(q) ||
+      row.partName.toLowerCase().includes(q) ||
+      row.storeCode.toLowerCase().includes(q)
+    );
+  });
   return (
     <>
       <div className="page-heading">
@@ -99,7 +111,29 @@ export default function ReorderPage({ loaderData }: Route.ComponentProps) {
       ) : null}
       <div className="two-column">
         <section className="panel">
-          <h2>Configured levels</h2>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "0.75rem",
+              flexWrap: "wrap",
+              marginBottom: "1rem",
+            }}
+          >
+            <h2>Configured levels</h2>
+            <input
+              type="search"
+              placeholder="Search SKU, part, or store..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                padding: "0.5rem",
+                borderRadius: "4px",
+                border: "1px solid #ccc",
+              }}
+            />
+          </div>
           <div className="table-wrap">
             <table>
               <thead>
@@ -111,12 +145,16 @@ export default function ReorderPage({ loaderData }: Route.ComponentProps) {
                 </tr>
               </thead>
               <tbody>
-                {loaderData.settings.length === 0 ? (
+                {visibleSettings.length === 0 ? (
                   <tr>
-                    <td colSpan={4}>No reorder settings yet.</td>
+                    <td colSpan={4}>
+                      {loaderData.settings.length === 0
+                        ? "No reorder settings yet."
+                        : "No matching reorder settings."}
+                    </td>
                   </tr>
                 ) : (
-                  loaderData.settings.map((row) => (
+                  visibleSettings.map((row) => (
                     <tr key={`${row.storeId}-${row.partId}`}>
                       <td>
                         {row.storeCode} — {row.storeName}
@@ -151,14 +189,16 @@ export default function ReorderPage({ loaderData }: Route.ComponentProps) {
             </label>
             <label>
               Part
-              <select name="partId" required>
-                <option value="">Select part</option>
-                {loaderData.parts.map((part) => (
-                  <option key={part.id} value={part.id}>
-                    {part.sku} — {part.name}
-                  </option>
-                ))}
-              </select>
+              <PartSelector
+                name="partId"
+                required
+                parts={loaderData.parts.map((part) => ({
+                  id: part.id,
+                  sku: part.sku,
+                  name: part.name,
+                  barcode: part.barcode,
+                }))}
+              />
             </label>
             <label>
               Reorder level

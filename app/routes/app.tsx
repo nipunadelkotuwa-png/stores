@@ -1,9 +1,10 @@
-import { Form, NavLink, Outlet } from "react-router";
+import { Form, NavLink, Outlet, useLocation } from "react-router";
 
 import { NotificationBell } from "~/components/notification-bell";
 import { countPendingApprovals } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { getSessionRecord } from "~/lib/auth/session.server";
+import { readDashboardMode } from "~/lib/dashboard-mode.server";
 import type { Route } from "./+types/app";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -12,15 +13,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!record) throw new Response(null, { status: 401 });
   const pendingApprovals =
     user.role === "ADMIN" ? await countPendingApprovals(user) : 0;
+  const dashboardMode = await readDashboardMode(request, user.role);
   return {
     user: { displayName: user.displayName, role: user.role },
     csrf: record.session.csrfSecret,
     pendingApprovals,
+    dashboardMode,
   };
 }
 
 const operationsNav = [
   ["/", "Dashboard"],
+  ["/pos/issue", "Issue (POS)"],
   ["/balances", "Balances"],
   ["/scan", "Scan Barcode"],
   ["/stock-in/new", "Stock in"],
@@ -60,6 +64,9 @@ const reportsNavigation = [
 ] as const;
 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
+  const location = useLocation();
+  const nextMode = loaderData.dashboardMode === "pos" ? "classic" : "pos";
+
   return (
     <div className="app-frame">
       <aside className="sidebar">
@@ -203,7 +210,35 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
             <p className="eyebrow">Fleet spare-parts control</p>
             <span className="muted">Secure · Audited · Location-aware</span>
           </div>
-          <NotificationBell csrf={loaderData.csrf} />
+          <div className="topbar-actions">
+            <Form
+              method="post"
+              action="/dashboard-mode"
+              className="dashboard-mode-toggle"
+            >
+              <input type="hidden" name="csrf" value={loaderData.csrf} />
+              <input type="hidden" name="mode" value={nextMode} />
+              <input
+                type="hidden"
+                name="redirectTo"
+                value={`${location.pathname}${location.search}`}
+              />
+              <button
+                type="submit"
+                className="button button-secondary"
+                title={
+                  loaderData.dashboardMode === "pos"
+                    ? "Switch to classic analytics dashboard"
+                    : "Switch to POS operations hub"
+                }
+              >
+                {loaderData.dashboardMode === "pos"
+                  ? "Classic view"
+                  : "POS view"}
+              </button>
+            </Form>
+            <NotificationBell csrf={loaderData.csrf} />
+          </div>
         </header>
         <main className="content">
           <Outlet />

@@ -4,6 +4,7 @@ import {
   DUPLICATE_PART_MESSAGE,
   formatZodLineError,
   loadStockLines,
+  MAX_STOCK_LINES,
   parseStockLinesFromForm,
 } from "../../app/features/inventory/form-lines";
 
@@ -121,6 +122,19 @@ describe("loadStockLines", () => {
       ok: false,
       error: DUPLICATE_PART_MESSAGE,
       lineErrors: { 1: DUPLICATE_PART_MESSAGE },
+    });
+  });
+
+  it("rejects more than MAX_STOCK_LINES rows", () => {
+    const form = new FormData();
+    for (let index = 0; index < MAX_STOCK_LINES + 1; index += 1) {
+      const n = String(index).padStart(12, "0");
+      form.append("partId", `11111111-1111-4111-8111-${n.slice(-12)}`);
+      form.append("quantity", "1");
+    }
+    expect(loadStockLines(form)).toEqual({
+      ok: false,
+      error: `A document can have at most ${MAX_STOCK_LINES} lines.`,
     });
   });
 });

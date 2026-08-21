@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, lt, lte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, lt, sql } from "drizzle-orm";
 import { db } from "~/db/client.server";
 import {
   buses,
@@ -14,6 +14,7 @@ import {
   scopedStoreCondition,
   type Actor,
 } from "~/lib/auth/authorization.server";
+import { lowStockCondition } from "~/features/inventory/low-stock";
 
 export async function getDashboard(actor: Actor) {
   const storeIds = await getAuthorizedStoreIds(actor);
@@ -58,10 +59,7 @@ export async function getDashboard(actor: Actor) {
     .where(
       and(
         scopedStoreCondition(storePartSettings.storeId, storeIds),
-        lte(
-          sql`COALESCE(${inventoryBalances.onHand}, 0)`,
-          storePartSettings.reorderLevel,
-        ),
+        lowStockCondition,
       ),
     )
     .orderBy(asc(stores.name), asc(parts.sku));

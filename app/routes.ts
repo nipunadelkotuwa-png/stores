@@ -13,6 +13,8 @@ export default [
   route("health/ready", "routes/health.ready.ts"),
   layout("routes/app.tsx", [
     index("routes/app.dashboard.tsx"),
+    route("dashboard-mode", "routes/app.dashboard-mode.ts"),
+    route("pos/issue", "routes/app.pos.issue.tsx"),
     route("balances", "routes/app.balances.tsx"),
     route("stock-in/new", "routes/app.stock-in.new.tsx"),
     route("issues/new", "routes/app.issues.new.tsx"),

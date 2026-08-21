@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 
 import { hashPassword } from "../../app/lib/auth/password.server";
+import { skhPartsSchema } from "./sk-h-schema";
 
 if (process.env.NODE_ENV === "production")
   throw new Error("Development seed cannot run in production");
@@ -65,8 +66,13 @@ try {
       ('BRAKE', 'Brakes'),
       ('ELECTRICAL', 'Electrical'),
       ('TYRE', 'Tyres'),
-      ('OIL', 'Oil')
-    ON CONFLICT (code) DO NOTHING
+      ('OIL', 'Oil'),
+      ('FILTER', 'Filters'),
+      ('AC', 'Air conditioning'),
+      ('BODY', 'Body'),
+      ('SUSPENSION', 'Suspension'),
+      ('TRANSMISSION', 'Transmission')
+    ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
   `);
   await client.query(`
     INSERT INTO suppliers (code, name, phone, address)
@@ -227,6 +233,59 @@ try {
     );
   }
 
+  const skhParts = skhPartsSchema.parse(
+    JSON.parse(await readFile(path.join(seedDir, "sk-h-parts.json"), "utf8")),
+  );
+
+  await client.query(
+    `
+    INSERT INTO parts (
+      sku, name, unit, brand, description, compatible_models, category_id
+    )
+    SELECT
+      v.sku, v.name, v.unit, v.brand, v.description, v.compatible_models, c.id
+    FROM jsonb_to_recordset($1::jsonb) AS v(
+      sku text, name text, unit text, brand text, category text,
+      description text, compatible_models text
+    )
+    JOIN part_categories c ON c.code = v.category
+    ON CONFLICT (sku) DO UPDATE SET
+      name = EXCLUDED.name,
+      unit = EXCLUDED.unit,
+      brand = EXCLUDED.brand,
+      description = EXCLUDED.description,
+      compatible_models = EXCLUDED.compatible_models,
+      category_id = EXCLUDED.category_id,
+      active = true
+  `,
+    [
+      JSON.stringify(
+        skhParts.map((item) => ({
+          sku: item.sku,
+          name: item.name,
+          unit: item.unit,
+          brand: item.brand,
+          category: item.category,
+          description: item.description,
+          compatible_models: item.compatibleModels,
+        })),
+      ),
+    ],
+  );
+  const skhInserted = await client.query<{ n: string }>(
+    `SELECT count(*)::int AS n FROM parts WHERE sku LIKE 'SKH-%'`,
+  );
+  if (Number(skhInserted.rows[0]?.n) !== skhParts.length) {
+    throw new Error(
+      `SK-H seed expected ${skhParts.length} parts, found ${skhInserted.rows[0]?.n}`,
+    );
+  }
+  await client.query(`
+    DELETE FROM part_categories c
+    WHERE c.code = 'SK-H'
+      AND NOT EXISTS (SELECT 1 FROM parts p WHERE p.category_id = c.id)
+  `);
+
   await client.query(`
     INSERT INTO store_part_settings (store_id, part_id, reorder_level, bin_location)
     SELECT s.id, p.id, levels.reorder_level::numeric(14,3), levels.bin_location
@@ -259,11 +318,140 @@ try {
       active = true
   `);
 
+  await client.query(
+    `
+    INSERT INTO store_part_settings (store_id, part_id, reorder_level, bin_location)
+    SELECT s.id, p.id, '0'::numeric(14,3), 'SK-H'
+    FROM jsonb_to_recordset($1::jsonb) AS v(sku text)
+    JOIN stores s ON s.code = 'CMB'
+    JOIN parts p ON p.sku = v.sku
+    ON CONFLICT (store_id, part_id) DO UPDATE SET
+      reorder_level = EXCLUDED.reorder_level,
+      bin_location = EXCLUDED.bin_location,
+      active = true
+  `,
+    [JSON.stringify(skhParts.map((item) => ({ sku: item.sku })))],
+  );
+
   const demoSql = await readFile(path.join(seedDir, "mock-demo.sql"), "utf8");
   await client.query(demoSql);
 
+  const existingSkhReceipt = await client.query(
+    `
+    SELECT 1 FROM stock_documents
+    WHERE idempotency_key = 'seed:sin-cmb-sk-h-opening'
+  `,
+  );
+  if ((existingSkhReceipt.rowCount ?? 0) === 0) {
+    const doc = await client.query<{
+      id: string;
+      store_id: string;
+      occurred_at: Date;
+    }>(
+      `
+      INSERT INTO stock_documents (
+        document_number, type, status, store_id, supplier_id, business_date,
+        notes, idempotency_key, created_by, posted_by, posted_at, occurred_at
+      )
+      SELECT
+        'SIN-CMB-2026-800010', 'STOCK_RECEIPT', 'POSTED', s.id, sup.id,
+        '2026-08-18', 'Opening stock — China SK-H catalogue (Colombo)',
+        'seed:sin-cmb-sk-h-opening', u.id, u.id,
+        '2026-08-18 09:00+05:30', '2026-08-18 09:00+05:30'
+      FROM stores s
+      JOIN users u ON u.email = 'admin@dsgunasekara.local'
+      JOIN suppliers sup ON sup.code = 'LOCAL-001'
+      WHERE s.code = 'CMB'
+      RETURNING id, store_id, occurred_at
+    `,
+    );
+    const receipt = doc.rows[0];
+    if (!receipt) throw new Error("Failed to create SK-H opening receipt");
+
+    const stockLines = skhParts
+      .filter((item) => item.onHand > 0)
+      .map((item, index) => ({
+        line_number: index + 1,
+        sku: item.sku,
+        qty: item.onHand,
+      }));
+
+    const insertedLines = await client.query(
+      `
+      INSERT INTO stock_document_lines (
+        document_id, line_number, part_id, quantity, unit_cost,
+        sku_snapshot, name_snapshot, unit_snapshot
+      )
+      SELECT $1, v.line_number, p.id, v.qty::numeric(14,3), NULL, p.sku, p.name, p.unit
+      FROM jsonb_to_recordset($2::jsonb) AS v(
+        line_number integer, sku text, qty numeric
+      )
+      JOIN parts p ON p.sku = v.sku
+      RETURNING id
+    `,
+      [receipt.id, JSON.stringify(stockLines)],
+    );
+    if (insertedLines.rowCount !== stockLines.length) {
+      throw new Error("SK-H opening receipt is missing one or more parts");
+    }
+
+    await client.query(
+      `
+      INSERT INTO stock_movements (
+        document_id, document_line_id, store_id, part_id,
+        quantity_delta, balance_after, occurred_at
+      )
+      SELECT
+        l.document_id, l.id, $2, l.part_id, l.quantity,
+        COALESCE(b.on_hand, 0) + l.quantity, $3
+      FROM stock_document_lines l
+      LEFT JOIN inventory_balances b
+        ON b.store_id = $2 AND b.part_id = l.part_id
+      WHERE l.document_id = $1
+    `,
+      [receipt.id, receipt.store_id, receipt.occurred_at],
+    );
+
+    await client.query(
+      `
+      INSERT INTO inventory_balances (store_id, part_id, on_hand, updated_at)
+      SELECT store_id, part_id, balance_after, now()
+      FROM stock_movements
+      WHERE document_id = $1
+      ON CONFLICT (store_id, part_id) DO UPDATE SET
+        on_hand = EXCLUDED.on_hand,
+        updated_at = now()
+    `,
+      [receipt.id],
+    );
+  }
+
+  await client.query(
+    `
+    INSERT INTO audit_events (
+      actor_id, event_type, entity_type, entity_id, store_id, metadata
+    )
+    SELECT
+      u.id, 'INVENTORY_POSTED', 'stock_document', d.id::text, d.store_id,
+      jsonb_build_object('documentNumber', d.document_number, 'type', d.type)
+    FROM stock_documents d
+    JOIN users u ON u.email = 'admin@dsgunasekara.local'
+    WHERE d.idempotency_key = 'seed:sin-cmb-sk-h-opening'
+      AND NOT EXISTS (
+        SELECT 1 FROM audit_events a
+        WHERE a.entity_type = 'stock_document'
+          AND a.entity_id = d.id::text
+          AND a.event_type = 'INVENTORY_POSTED'
+      )
+  `,
+  );
+
   await client.query("COMMIT");
+  const skhStockLines = skhParts.filter((item) => item.onHand > 0).length;
   console.log("Development data seeded.");
+  console.log(
+    `SK-H: ${skhParts.length} parts, ${skhStockLines} CMB opening-stock lines.`,
+  );
   console.log(
     `New accounts use password: ${password} (existing admin passwords are left unchanged).`,
   );

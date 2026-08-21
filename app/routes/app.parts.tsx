@@ -76,6 +76,7 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const [scannedBarcode, setScannedBarcode] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
 
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>;
@@ -134,21 +135,42 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              gap: "0.75rem",
+              flexWrap: "wrap",
               marginBottom: "1rem",
             }}
           >
             <h2>Part catalogue</h2>
-            <input
-              type="search"
-              placeholder="Search parts, SKU, or barcode..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                padding: "0.5rem",
-                borderRadius: "4px",
-                border: "1px solid #ccc",
-              }}
-            />
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                aria-label="Filter by category"
+                style={{
+                  padding: "0.5rem",
+                  borderRadius: "4px",
+                  border: "1px solid #ccc",
+                }}
+              >
+                <option value="">All categories</option>
+                {loaderData.categories.map((category) => (
+                  <option key={category.id} value={category.name}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="search"
+                placeholder="Search name, SKU, or barcode..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  padding: "0.5rem",
+                  borderRadius: "4px",
+                  border: "1px solid #ccc",
+                }}
+              />
+            </div>
           </div>
           <div className="table-wrap">
             <table>
@@ -166,12 +188,20 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
               <tbody>
                 {loaderData.parts
                   .filter((part) => {
+                    if (
+                      categoryFilter &&
+                      (part.category ?? "Uncategorized") !== categoryFilter
+                    ) {
+                      return false;
+                    }
                     if (!searchQuery) return true;
                     const q = searchQuery.toLowerCase();
                     return (
                       part.sku.toLowerCase().includes(q) ||
                       part.name.toLowerCase().includes(q) ||
-                      (part.barcode && part.barcode.toLowerCase().includes(q))
+                      (part.barcode &&
+                        part.barcode.toLowerCase().includes(q)) ||
+                      (part.brand && part.brand.toLowerCase().includes(q))
                     );
                   })
                   .map((part) => (

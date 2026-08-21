@@ -1,4 +1,14 @@
-import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "~/db/client.server";
 import {
@@ -23,6 +33,7 @@ import {
   scopedStoreCondition,
   type Actor,
 } from "~/lib/auth/authorization.server";
+import { lowStockCondition } from "~/features/inventory/low-stock";
 import {
   UNUSUAL_ISSUE_THRESHOLD,
   UNUSUAL_ISSUE_WINDOW_DAYS,
@@ -99,20 +110,37 @@ export async function getBalances(actor: Actor) {
       barcode: parts.barcode,
       part: parts.name,
       unit: parts.unit,
-      onHand: inventoryBalances.onHand,
+      onHand: sql<string>`COALESCE(${inventoryBalances.onHand}, 0)`,
       reorderLevel: storePartSettings.reorderLevel,
     })
-    .from(inventoryBalances)
-    .innerJoin(stores, eq(inventoryBalances.storeId, stores.id))
-    .innerJoin(parts, eq(inventoryBalances.partId, parts.id))
+    .from(parts)
+    .innerJoin(
+      stores,
+      and(eq(stores.active, true), scopedStoreCondition(stores.id, ids)),
+    )
+    .leftJoin(
+      inventoryBalances,
+      and(
+        eq(inventoryBalances.storeId, stores.id),
+        eq(inventoryBalances.partId, parts.id),
+      ),
+    )
     .leftJoin(
       storePartSettings,
       and(
-        eq(inventoryBalances.storeId, storePartSettings.storeId),
-        eq(inventoryBalances.partId, storePartSettings.partId),
+        eq(storePartSettings.storeId, stores.id),
+        eq(storePartSettings.partId, parts.id),
       ),
     )
-    .where(scopedStoreCondition(inventoryBalances.storeId, ids))
+    .where(
+      and(
+        eq(parts.active, true),
+        or(
+          isNotNull(inventoryBalances.onHand),
+          isNotNull(storePartSettings.partId),
+        ),
+      ),
+    )
     .orderBy(asc(stores.code), asc(parts.sku));
 }
 
@@ -142,7 +170,7 @@ export async function getLowStock(actor: Actor) {
     .where(
       and(
         scopedStoreCondition(storePartSettings.storeId, ids),
-        sql`COALESCE(${inventoryBalances.onHand}, 0) <= ${storePartSettings.reorderLevel}`,
+        lowStockCondition,
       ),
     )
     .orderBy(asc(stores.code), asc(parts.sku));

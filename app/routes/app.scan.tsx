@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router";
 import { CameraBarcodeScan } from "~/components/camera-barcode-scan";
 import { matchesScan } from "~/features/inventory/scan";
+import { isBelowReorder } from "~/features/inventory/low-stock";
 import { getScanCatalog } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.scan";
@@ -71,7 +72,7 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
 
   const storeQuery = selectedBalance ? `&store=${selectedBalance.storeId}` : "";
   const issueUrl = scannedPart
-    ? `/issues/new?part=${scannedPart.id}${storeQuery}`
+    ? `/pos/issue?part=${scannedPart.id}${storeQuery}`
     : "";
   const stockInUrl = scannedPart
     ? `/stock-in/new?part=${scannedPart.id}${storeQuery}`
@@ -201,7 +202,7 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
                     Current Balance ({selectedBalance.store})
                   </p>
                   <p
-                    className={`quantity ${Number(selectedBalance.onHand) <= Number(selectedBalance.reorderLevel ?? 0) ? "danger" : "positive"}`}
+                    className={`quantity ${isBelowReorder(Number(selectedBalance.onHand), Number(selectedBalance.reorderLevel ?? 0)) ? "danger" : "positive"}`}
                     style={{ fontSize: "1.5rem" }}
                   >
                     {selectedBalance.onHand} {selectedBalance.unit}

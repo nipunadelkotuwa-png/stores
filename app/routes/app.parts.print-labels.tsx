@@ -29,7 +29,7 @@ export default function PrintLabelsPage({ loaderData }: Route.ComponentProps) {
     () => loaderData.parts.map((part) => part.id),
     [loaderData.parts],
   );
-  const [selected, setSelected] = useState<string[]>(allIds);
+  const [selected, setSelected] = useState<string[]>([]);
   const selectedSet = new Set(selected);
   const selectedParts = loaderData.parts.filter((part) =>
     selectedSet.has(part.id),
@@ -50,8 +50,8 @@ export default function PrintLabelsPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Inventory</p>
           <h1>Print Part Labels</h1>
           <p className="muted">
-            QR code labels for inventory bins and parts. Uncheck parts you do
-            not want to print.
+            QR code labels for inventory bins and parts. Select the parts you
+            want to print.
           </p>
         </div>
         <div className="heading-actions">

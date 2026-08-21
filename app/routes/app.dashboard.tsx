@@ -8,13 +8,46 @@ import {
   YAxis,
 } from "recharts";
 
+import { PosHub } from "~/components/pos-hub";
 import { getDashboard } from "~/features/dashboard/queries.server";
+import {
+  countPendingApprovals,
+  getLowStock,
+} from "~/features/inventory/queries.server";
+import { listOpenJobCards } from "~/features/workshop/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
+import { readDashboardMode } from "~/lib/dashboard-mode.server";
 import type { Route } from "./+types/app.dashboard";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const actor = await requireUser(request);
-  return { ...(await getDashboard(actor)), canManage: actor.role === "ADMIN" };
+  const mode = await readDashboardMode(request, actor.role);
+  const canManage = actor.role === "ADMIN";
+
+  if (mode === "pos") {
+    const [lowStock, openJobCards, pendingApprovals] = await Promise.all([
+      getLowStock(actor),
+      listOpenJobCards(actor),
+      canManage ? countPendingApprovals(actor) : Promise.resolve(0),
+    ]);
+    return {
+      mode,
+      canManage,
+      lowStockCount: lowStock.length,
+      openJobCardCount: openJobCards.length,
+      pendingApprovals,
+      classic: null,
+    };
+  }
+
+  return {
+    mode,
+    canManage,
+    lowStockCount: 0,
+    openJobCardCount: 0,
+    pendingApprovals: 0,
+    classic: await getDashboard(actor),
+  };
 }
 
 function processTrendData(
@@ -65,7 +98,13 @@ function CustomTooltip({
   return null;
 }
 
-export default function Dashboard({ loaderData }: Route.ComponentProps) {
+function ClassicDashboard({
+  loaderData,
+}: {
+  loaderData: NonNullable<Route.ComponentProps["loaderData"]["classic"]> & {
+    canManage: boolean;
+  };
+}) {
   const cards = [
     ["Stores", loaderData.storeCount],
     ["Active parts", loaderData.partCount],
@@ -91,6 +130,9 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
               Add new item
             </Link>
           ) : null}
+          <Link className="button button-secondary" to="/pos/issue">
+            Issue (POS)
+          </Link>
           <Link className="button button-secondary" to="/issues/new">
             Issue to bus
           </Link>
@@ -284,7 +326,7 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
                       </td>
                       <td className="quantity">{row.quantity}</td>
                       <td>
-                        <Link to={`/issues/new?part=${row.partId}`}>Issue</Link>
+                        <Link to={`/pos/issue?part=${row.partId}`}>Issue</Link>
                       </td>
                     </tr>
                   ))}
@@ -300,5 +342,28 @@ export default function Dashboard({ loaderData }: Route.ComponentProps) {
         </section>
       </div>
     </>
+  );
+}
+
+export default function Dashboard({ loaderData }: Route.ComponentProps) {
+  if (loaderData.mode === "pos") {
+    return (
+      <PosHub
+        lowStockCount={loaderData.lowStockCount}
+        openJobCardCount={loaderData.openJobCardCount}
+        pendingApprovals={loaderData.pendingApprovals}
+        canManage={loaderData.canManage}
+      />
+    );
+  }
+
+  if (!loaderData.classic) {
+    return null;
+  }
+
+  return (
+    <ClassicDashboard
+      loaderData={{ ...loaderData.classic, canManage: loaderData.canManage }}
+    />
   );
 }

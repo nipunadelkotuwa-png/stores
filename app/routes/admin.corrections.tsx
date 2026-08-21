@@ -6,6 +6,7 @@ import { StockLineItems } from "~/components/stock-line-items";
 import {
   formatZodLineError,
   loadStockLines,
+  MAX_STOCK_LINES,
   stockLinesActionError,
 } from "~/features/inventory/form-lines";
 import {
@@ -38,7 +39,7 @@ const adjustmentSchema = z.object({
       }),
     )
     .min(1)
-    .max(100),
+    .max(MAX_STOCK_LINES),
 });
 
 const reversalSchema = z.object({

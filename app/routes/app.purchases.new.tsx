@@ -15,6 +15,7 @@ import {
 import {
   formatZodLineError,
   loadStockLines,
+  MAX_STOCK_LINES,
   stockLinesActionError,
 } from "~/features/inventory/form-lines";
 import {
@@ -47,7 +48,7 @@ const schema = z.object({
   businessDate: z.string().date(),
   invoiceReference: z.string().optional(),
   idempotencyKey: z.string().min(16),
-  lines: z.array(purchaseLineSchema).min(1).max(100),
+  lines: z.array(purchaseLineSchema).min(1).max(MAX_STOCK_LINES),
 });
 
 export async function loader({ request }: Route.LoaderArgs) {

@@ -21,6 +21,7 @@ export const listParts = () =>
       brand: parts.brand,
       active: parts.active,
       category: partCategories.name,
+      categoryCode: partCategories.code,
     })
     .from(parts)
     .leftJoin(partCategories, eq(parts.categoryId, partCategories.id))
