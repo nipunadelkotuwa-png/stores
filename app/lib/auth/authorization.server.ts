@@ -11,6 +11,11 @@ export type Actor = NonNullable<
 >["user"];
 
 export async function requireUser(request: Request) {
+  const { user } = await requireUserWithSession(request);
+  return user;
+}
+
+export async function requireUserWithSession(request: Request) {
   const record = await getSessionRecord(request);
   if (!record)
     throw redirect(
@@ -22,7 +27,7 @@ export async function requireUser(request: Request) {
   ) {
     throw redirect("/change-password");
   }
-  return record.user;
+  return { user: record.user, csrf: record.session.csrfSecret };
 }
 
 export async function requireAdmin(request: Request) {

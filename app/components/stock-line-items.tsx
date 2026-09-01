@@ -1,6 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { MAX_STOCK_LINES } from "~/features/inventory/form-lines";
-import { PartSelector, type PartOption } from "./part-selector";
+import type { PartOption } from "./part-selector";
+
+const PartSelector = lazy(() =>
+  import("./part-selector").then((module) => ({
+    default: module.PartSelector,
+  })),
+);
+
+export type { PartOption };
 
 export type StockLineDraft = {
   partId: string;
@@ -13,6 +21,10 @@ type LineRow = {
   quantity: string;
   cost: string;
 };
+
+function PartSelectorFallback() {
+  return <input disabled placeholder="Loading parts…" />;
+}
 
 export function StockLineItems({
   parts,
@@ -76,23 +88,25 @@ export function StockLineItems({
           >
             <label>
               Part
-              <PartSelector
-                name="partId"
-                parts={parts}
-                defaultValue={line.partId || undefined}
-                required={rowRequired}
-                menuZIndex={20 + (lines.length - index)}
-                disabledPartIds={takenIds}
-                onChange={(partId) =>
-                  notify(
-                    lines.map((row) =>
-                      row.key === line.key
-                        ? { ...row, partId: partId ?? "" }
-                        : row,
-                    ),
-                  )
-                }
-              />
+              <Suspense fallback={<PartSelectorFallback />}>
+                <PartSelector
+                  name="partId"
+                  parts={parts}
+                  defaultValue={line.partId || undefined}
+                  required={rowRequired}
+                  menuZIndex={20 + (lines.length - index)}
+                  disabledPartIds={takenIds}
+                  onChange={(partId) =>
+                    notify(
+                      lines.map((row) =>
+                        row.key === line.key
+                          ? { ...row, partId: partId ?? "" }
+                          : row,
+                      ),
+                    )
+                  }
+                />
+              </Suspense>
             </label>
             <label>
               Quantity

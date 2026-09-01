@@ -20,6 +20,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
   const [params] = useSearchParams();
+  const query = params.get("q")?.trim().toLowerCase() ?? "";
+  const cards = query
+    ? loaderData.filter((card) =>
+        [card.jobNumber, card.fleetNumber, card.registrationNumber, card.complaint]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query)),
+      )
+    : loaderData;
+
   return (
     <>
       <div className="page-heading">
@@ -99,7 +108,7 @@ export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
               </tr>
             </thead>
             <tbody>
-              {loaderData.length === 0 ? (
+              {cards.length === 0 ? (
                 <tr>
                   <td colSpan={6}>
                     <div className="empty-state">
@@ -109,7 +118,7 @@ export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
                   </td>
                 </tr>
               ) : (
-                loaderData.map((card) => (
+                cards.map((card) => (
                   <tr key={card.id}>
                     <td className="mono">
                       <Link to={`/job-cards/${card.id}`}>{card.jobNumber}</Link>

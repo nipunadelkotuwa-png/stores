@@ -18,7 +18,11 @@ import {
 } from "~/db/schema";
 import type { Actor } from "~/lib/auth/authorization.server";
 import { requireStoreAccess } from "~/lib/auth/authorization.server";
-import { InsufficientStockError, inventoryActionError } from "./errors";
+import { invalidatePendingApprovalCountCache } from "./approval-count-cache.server";
+import {
+  InsufficientStockError,
+  inventoryActionError,
+} from "./errors";
 import {
   isStockDecrease,
   prepareStockCommand,
@@ -720,6 +724,7 @@ export async function submitIssueForApproval(actor: Actor, input: unknown) {
       body: `${result.number} needs approval.`,
       href: `/receipts/${result.id}`,
     }).catch(() => undefined);
+    invalidatePendingApprovalCountCache();
   }
 
   return { id: result.id, number: result.number };
@@ -841,6 +846,7 @@ export async function approvePendingIssue(actor: Actor, documentId: string) {
       href: `/receipts/${result.id}`,
     }).catch(() => undefined);
 
+    invalidatePendingApprovalCountCache();
     return { id: result.id, number: result.number };
   } catch (error) {
     await persistApprovalError(documentId, error);
@@ -905,5 +911,6 @@ export async function rejectPendingIssue(
     href: `/receipts/${document.id}`,
   }).catch(() => undefined);
 
+  invalidatePendingApprovalCountCache();
   return document;
 }

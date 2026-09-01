@@ -1,214 +1,100 @@
-import { Form, NavLink, Outlet, useLocation } from "react-router";
+import { Form, Outlet, useLocation, useNavigation } from "react-router";
+import { useEffect, useState } from "react";
 
+import { AppFooter } from "~/components/app-footer";
+import { AppSidebar, SidebarMenuButton } from "~/components/app-sidebar";
 import { NotificationBell } from "~/components/notification-bell";
+import { TopbarSearch } from "~/components/topbar-search";
 import { countPendingApprovals } from "~/features/inventory/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
-import { getSessionRecord } from "~/lib/auth/session.server";
+import { requireUserWithSession } from "~/lib/auth/authorization.server";
+import { appLayoutShouldRevalidate } from "~/lib/app-layout-revalidation";
 import { readDashboardMode } from "~/lib/dashboard-mode.server";
 import type { Route } from "./+types/app";
 
+export type AppOutletContext = {
+  pendingApprovals: number;
+};
+
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
-  const record = await getSessionRecord(request);
-  if (!record) throw new Response(null, { status: 401 });
+  const { user, csrf } = await requireUserWithSession(request);
   const pendingApprovals =
     user.role === "ADMIN" ? await countPendingApprovals(user) : 0;
   const dashboardMode = await readDashboardMode(request, user.role);
   return {
     user: { displayName: user.displayName, role: user.role },
-    csrf: record.session.csrfSecret,
+    csrf,
     pendingApprovals,
     dashboardMode,
   };
 }
 
-const operationsNav = [
-  ["/", "Dashboard"],
-  ["/pos/issue", "Issue (POS)"],
-  ["/balances", "Balances"],
-  ["/scan", "Scan Barcode"],
-  ["/stock-in/new", "Stock in"],
-  ["/issues/new", "Bus issue"],
-  ["/returns/bus", "Bus Return"],
-  ["/returns", "Returns & Reversals"],
-  ["/transfers", "Transfers"],
-  ["/tires/conversion", "Tire Conversion"],
-  ["/purchases", "Purchases"],
-  ["/alerts/low-stock", "Low stock"],
-] as const;
-
-const workshopNav = [
-  ["/job-cards", "Job cards"],
-  ["/tyres", "Tyres"],
-  ["/tyres/dag", "DAG"],
-] as const;
-
-const masterDataNav = [
-  ["/parts", "Parts"],
-  ["/categories", "Categories"],
-  ["/buses", "Buses"],
-  ["/suppliers", "Suppliers"],
-] as const;
-
-const reportsNavigation = [
-  ["/reports/movements", "Movements"],
-  ["/reports/daily-movement", "Daily Movement"],
-  ["/reports/daily-issues", "Daily Issues"],
-  ["/reports/item-usage", "Item usage"],
-  ["/reports/unusual-issues", "Unusual issues"],
-  ["/reports/fast-moving", "Fast Moving Items"],
-  ["/reports/bus-usage", "Bus usage"],
-  ["/reports/dag-out", "DAG out"],
-  ["/reports/transfers", "Transfers"],
-  ["/reports/purchases", "Purchases"],
-] as const;
+export function shouldRevalidate({
+  formAction,
+  defaultShouldRevalidate,
+  currentUrl,
+  nextUrl,
+}: {
+  formAction?: string;
+  defaultShouldRevalidate: boolean;
+  currentUrl: URL;
+  nextUrl: URL;
+}) {
+  return appLayoutShouldRevalidate({
+    formAction,
+    defaultShouldRevalidate,
+    currentUrl,
+    nextUrl,
+  });
+}
 
 export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const location = useLocation();
+  const navigation = useNavigation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState(
+    loaderData.pendingApprovals,
+  );
+  const isSwitchingView =
+    navigation.state !== "idle" &&
+    navigation.formAction?.includes("/dashboard-mode");
   const nextMode = loaderData.dashboardMode === "pos" ? "classic" : "pos";
+  const initials = loaderData.user.displayName
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  const roleLabel =
+    loaderData.user.role === "ADMIN" ? "Admin" : "Operator";
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    setPendingApprovals(loaderData.pendingApprovals);
+  }, [loaderData.pendingApprovals]);
 
   return (
     <div className="app-frame">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <div className="brand-mark small">DG</div>
-          <div>
-            <strong>StoreOps</strong>
-            <span>DS Gunasekara Group</span>
-          </div>
-        </div>
-        <nav>
-          <p className="nav-section">Operations</p>
-          {operationsNav.map(([to, label]) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/" || to === "/purchases"}
-              className={({ isActive }) =>
-                isActive ? "nav-link active" : "nav-link"
-              }
-            >
-              {label}
-            </NavLink>
-          ))}
-
-          {loaderData.user.role === "ADMIN" ? (
-            <NavLink
-              to="/approvals"
-              className={({ isActive }) =>
-                isActive ? "nav-link active" : "nav-link"
-              }
-            >
-              Approvals
-              {loaderData.pendingApprovals > 0 ? (
-                <span className="badge danger" style={{ marginLeft: "0.4rem" }}>
-                  {loaderData.pendingApprovals}
-                </span>
-              ) : null}
-            </NavLink>
-          ) : null}
-
-          <p className="nav-section">Workshop</p>
-          {workshopNav.map(([to, label]) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                isActive ? "nav-link active" : "nav-link"
-              }
-            >
-              {label}
-            </NavLink>
-          ))}
-
-          <p className="nav-section">Master Data</p>
-          {masterDataNav.map(([to, label]) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                isActive ? "nav-link active" : "nav-link"
-              }
-            >
-              {label}
-            </NavLink>
-          ))}
-
-          <p className="nav-section">Reports</p>
-          {reportsNavigation.map(([to, label]) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                isActive ? "nav-link active" : "nav-link"
-              }
-            >
-              {label}
-            </NavLink>
-          ))}
-
-          {loaderData.user.role === "ADMIN" ? (
-            <>
-              <p className="nav-section">Administration</p>
-              <NavLink
-                to="/admin/users"
-                className={({ isActive }) =>
-                  isActive ? "nav-link active" : "nav-link"
-                }
-              >
-                Users
-              </NavLink>
-              <NavLink
-                to="/admin/stores"
-                className={({ isActive }) =>
-                  isActive ? "nav-link active" : "nav-link"
-                }
-              >
-                Stores
-              </NavLink>
-              <NavLink
-                to="/admin/reorder"
-                className={({ isActive }) =>
-                  isActive ? "nav-link active" : "nav-link"
-                }
-              >
-                Reorder levels
-              </NavLink>
-              <NavLink
-                to="/admin/corrections"
-                className={({ isActive }) =>
-                  isActive ? "nav-link active" : "nav-link"
-                }
-              >
-                Corrections
-              </NavLink>
-              <NavLink
-                to="/admin/audit"
-                className={({ isActive }) =>
-                  isActive ? "nav-link active" : "nav-link"
-                }
-              >
-                Audit log
-              </NavLink>
-            </>
-          ) : null}
-        </nav>
-        <div className="sidebar-user">
-          <div>
-            <strong>{loaderData.user.displayName}</strong>
-            <span>{loaderData.user.role}</span>
-          </div>
-          <Form method="post" action="/logout">
-            <input type="hidden" name="csrf" value={loaderData.csrf} />
-            <button className="text-button">Sign out</button>
-          </Form>
-        </div>
-      </aside>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+      <AppSidebar
+        displayName={loaderData.user.displayName}
+        role={loaderData.user.role}
+        csrf={loaderData.csrf}
+        pendingApprovals={pendingApprovals}
+        mobileOpen={sidebarOpen}
+        onMobileClose={() => setSidebarOpen(false)}
+      />
       <div className="page-shell">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">Fleet spare-parts control</p>
-            <span className="muted">Secure · Audited · Location-aware</span>
+          <div className="topbar-leading">
+            <SidebarMenuButton
+              onClick={() => setSidebarOpen((open) => !open)}
+              expanded={sidebarOpen}
+            />
+            <TopbarSearch mode={loaderData.dashboardMode} />
           </div>
           <div className="topbar-actions">
             <Form
@@ -225,23 +111,37 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
               />
               <button
                 type="submit"
-                className="button button-secondary"
+                className="button button-secondary topbar-mode-btn"
+                disabled={isSwitchingView}
                 title={
                   loaderData.dashboardMode === "pos"
                     ? "Switch to classic analytics dashboard"
                     : "Switch to POS operations hub"
                 }
               >
-                {loaderData.dashboardMode === "pos"
-                  ? "Classic view"
-                  : "POS view"}
+                {isSwitchingView
+                  ? "Switching…"
+                  : loaderData.dashboardMode === "pos"
+                    ? "Classic view"
+                    : "POS view"}
               </button>
             </Form>
-            <NotificationBell csrf={loaderData.csrf} />
+            <NotificationBell
+              csrf={loaderData.csrf}
+              onPendingApprovalsChange={setPendingApprovals}
+            />
+            <div className="topbar-user">
+              <span className="topbar-avatar">{initials || "U"}</span>
+              <div className="topbar-user-copy">
+                <strong>{loaderData.user.displayName}</strong>
+                <span>{roleLabel}</span>
+              </div>
+            </div>
           </div>
         </header>
-        <main className="content">
-          <Outlet />
+        <main className="content" id="main-content">
+          <Outlet context={{ pendingApprovals } satisfies AppOutletContext} />
+          <AppFooter />
         </main>
       </div>
     </div>

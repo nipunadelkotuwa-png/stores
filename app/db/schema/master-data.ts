@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -39,6 +39,9 @@ export const parts = pgTable(
   (table) => [
     uniqueIndex("parts_sku_unique").on(table.sku),
     uniqueIndex("parts_barcode_unique").on(table.barcode),
+    index("parts_active_idx")
+      .on(table.active)
+      .where(sql`${table.active} = true`),
   ],
 );
 

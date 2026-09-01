@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useFetcher, useRevalidator } from "react-router";
+import { Link, useFetcher } from "react-router";
 
 type InboxItem = {
   id: string;
@@ -16,12 +16,16 @@ type InboxPayload = {
   pendingApprovals?: number;
 };
 
-export function NotificationBell({ csrf }: { csrf: string }) {
+export function NotificationBell({
+  csrf,
+  onPendingApprovalsChange,
+}: {
+  csrf: string;
+  onPendingApprovalsChange?: (count: number) => void;
+}) {
   const fetcher = useFetcher<InboxPayload>();
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
-  const revalidator = useRevalidator();
-  const pendingRef = useRef<number | undefined>(undefined);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -33,15 +37,10 @@ export function NotificationBell({ csrf }: { csrf: string }) {
 
   useEffect(() => {
     const count = fetcher.data?.pendingApprovals;
-    if (
-      typeof count === "number" &&
-      pendingRef.current !== undefined &&
-      pendingRef.current !== count
-    ) {
-      revalidator.revalidate();
+    if (typeof count === "number") {
+      onPendingApprovalsChange?.(count);
     }
-    if (typeof count === "number") pendingRef.current = count;
-  }, [fetcher.data?.pendingApprovals, revalidator]);
+  }, [fetcher.data?.pendingApprovals, onPendingApprovalsChange]);
 
   const unread = fetcher.data?.unreadCount ?? 0;
   const items = fetcher.data?.items ?? [];
@@ -50,12 +49,27 @@ export function NotificationBell({ csrf }: { csrf: string }) {
     <div className="notification-bell">
       <button
         type="button"
-        className="text-button"
+        className="notification-bell-btn"
         onClick={() => setOpen((value) => !value)}
         aria-label="Notifications"
       >
-        Notifications
-        {unread > 0 ? <span className="badge danger">{unread}</span> : null}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M15 17H9l-1 2h8l-1-2Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 7h18s-3 0-3-7Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+        </svg>
+        {unread > 0 ? (
+          <span className="notification-badge">{unread}</span>
+        ) : null}
       </button>
       {open ? (
         <div className="notification-panel">

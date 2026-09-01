@@ -107,6 +107,19 @@ export const stockDocuments = pgTable(
     uniqueIndex("stock_documents_linked_unique").on(table.linkedDocumentId),
     index("stock_documents_job_card_idx").on(table.jobCardId),
     index("stock_documents_status_idx").on(table.status, table.type),
+    index("stock_documents_store_type_date_idx").on(
+      table.storeId,
+      table.type,
+      table.businessDate,
+    ),
+    index("stock_documents_store_status_posted_idx").on(
+      table.storeId,
+      table.status,
+      table.postedAt,
+    ),
+    index("stock_documents_bus_idx")
+      .on(table.busId)
+      .where(sql`${table.busId} IS NOT NULL`),
     check(
       "bus_issue_requires_bus",
       sql`${table.type} <> 'BUS_ISSUE' OR ${table.busId} IS NOT NULL`,
@@ -157,6 +170,7 @@ export const stockDocumentLines = pgTable(
       table.documentId,
       table.lineNumber,
     ),
+    index("stock_document_lines_part_idx").on(table.partId),
     check("stock_document_lines_quantity_positive", sql`${table.quantity} > 0`),
   ],
 );

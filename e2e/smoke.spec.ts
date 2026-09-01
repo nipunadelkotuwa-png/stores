@@ -31,9 +31,23 @@ test("Admin can sign in and view the inventory dashboard", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/$/);
   await expect(
-    page.getByRole("heading", { name: "Inventory dashboard" }),
+    page.getByRole("heading", { name: "Inventory Dashboard" }),
   ).toBeVisible();
-  await expect(page.getByText("Active parts")).toBeVisible();
+  await expect(page.getByText("Active Parts")).toBeVisible();
+
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: "Scan barcode" })
+    .click();
+  await expect(page).toHaveURL(/\/scan$/);
+  await expect(page.getByRole("heading", { name: "Scan Barcode" })).toBeVisible();
+
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: /StoreOps/i })
+    .click();
+  await expect(page).toHaveURL(/\/$/);
+
   await page.screenshot({
     path: "test-results/dashboard-page.png",
     fullPage: true,

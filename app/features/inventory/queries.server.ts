@@ -4,7 +4,6 @@ import {
   desc,
   eq,
   inArray,
-  isNotNull,
   lt,
   or,
   sql,
@@ -30,6 +29,7 @@ import {
 } from "~/db/schema";
 import {
   getAuthorizedStoreIds,
+  requireStoreAccess,
   scopedStoreCondition,
   type Actor,
 } from "~/lib/auth/authorization.server";
@@ -40,6 +40,11 @@ import {
 } from "~/features/workshop/constants";
 
 const REPORT_LIMIT = 250;
+import {
+  invalidatePendingApprovalCountCache,
+  readCachedApprovalCount,
+  writeCachedApprovalCount,
+} from "./approval-count-cache.server";
 
 export async function getTransactionOptions(actor: Actor) {
   const ids = await getAuthorizedStoreIds(actor);
@@ -98,50 +103,77 @@ export async function getScanCatalog(actor: Actor) {
   return { catalog, balances };
 }
 
-export async function getBalances(actor: Actor) {
+export async function getBalances(
+  actor: Actor,
+  options?: { storeId?: string },
+) {
   const ids = await getAuthorizedStoreIds(actor);
-  return db
-    .select({
-      storeId: stores.id,
-      store: stores.name,
-      storeCode: stores.code,
-      partId: parts.id,
-      sku: parts.sku,
-      barcode: parts.barcode,
-      part: parts.name,
-      unit: parts.unit,
-      onHand: sql<string>`COALESCE(${inventoryBalances.onHand}, 0)`,
-      reorderLevel: storePartSettings.reorderLevel,
-    })
-    .from(parts)
-    .innerJoin(
-      stores,
-      and(eq(stores.active, true), scopedStoreCondition(stores.id, ids)),
-    )
-    .leftJoin(
-      inventoryBalances,
-      and(
-        eq(inventoryBalances.storeId, stores.id),
-        eq(inventoryBalances.partId, parts.id),
-      ),
-    )
-    .leftJoin(
-      storePartSettings,
-      and(
-        eq(storePartSettings.storeId, stores.id),
-        eq(storePartSettings.partId, parts.id),
-      ),
-    )
-    .where(
-      and(
-        eq(parts.active, true),
-        or(
-          isNotNull(inventoryBalances.onHand),
-          isNotNull(storePartSettings.partId),
-        ),
-      ),
-    )
-    .orderBy(asc(stores.code), asc(parts.sku));
+
+  if (options?.storeId) {
+    await requireStoreAccess(actor, options.storeId);
+  }
+
+  let storeFilter = sql`true`;
+  if (options?.storeId) {
+    storeFilter = sql`s.id = ${options.storeId}`;
+  } else if (ids !== null) {
+    if (ids.length === 0) return [];
+    storeFilter = sql`s.id IN (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})`;
+  }
+
+  const result = await db.execute<{
+    store_id: string;
+    store: string;
+    store_code: string;
+    part_id: string;
+    sku: string;
+    barcode: string | null;
+    part: string;
+    unit: string;
+    on_hand: string;
+    reorder_level: string | null;
+  }>(sql`
+    SELECT
+      s.id AS store_id,
+      s.name AS store,
+      s.code AS store_code,
+      p.id AS part_id,
+      p.sku,
+      p.barcode,
+      p.name AS part,
+      p.unit,
+      COALESCE(b.on_hand, 0)::text AS on_hand,
+      sps.reorder_level::text AS reorder_level
+    FROM (
+      SELECT store_id, part_id FROM inventory_balances
+      UNION
+      SELECT store_id, part_id FROM store_part_settings
+    ) sp
+    INNER JOIN parts p ON p.id = sp.part_id AND p.active = true
+    INNER JOIN stores s ON s.id = sp.store_id AND s.active = true
+    LEFT JOIN inventory_balances b
+      ON b.store_id = sp.store_id AND b.part_id = sp.part_id
+    LEFT JOIN store_part_settings sps
+      ON sps.store_id = sp.store_id AND sps.part_id = sp.part_id
+    WHERE ${storeFilter}
+    ORDER BY s.code, p.sku
+  `);
+
+  return result.rows.map((row) => ({
+    storeId: row.store_id,
+    store: row.store,
+    storeCode: row.store_code,
+    partId: row.part_id,
+    sku: row.sku,
+    barcode: row.barcode,
+    part: row.part,
+    unit: row.unit,
+    onHand: row.on_hand,
+    reorderLevel: row.reorder_level,
+  }));
 }
 
 export async function getLowStock(actor: Actor) {
@@ -509,6 +541,12 @@ export async function getPendingIssues(actor: Actor) {
 
 export async function countPendingApprovals(actor: Actor) {
   const ids = await getAuthorizedStoreIds(actor);
+  const cacheKey = `${actor.id}:${ids?.join(",") ?? "all"}`;
+  const cached = readCachedApprovalCount(cacheKey);
+  if (cached !== null) {
+    return cached;
+  }
+
   const [row] = await db
     .select({
       count: sql<number>`count(distinct ${stockDocuments.id})::int`,
@@ -521,7 +559,9 @@ export async function countPendingApprovals(actor: Actor) {
         scopedStoreCondition(stockDocuments.storeId, ids),
       ),
     );
-  return Number(row?.count ?? 0);
+  const value = Number(row?.count ?? 0);
+  writeCachedApprovalCount(cacheKey, value);
+  return value;
 }
 
 export async function getItemUsage(

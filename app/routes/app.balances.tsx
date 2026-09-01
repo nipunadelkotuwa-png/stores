@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router";
 import { getBalances } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.balances";
@@ -7,7 +7,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { balances: await getBalances(await requireUser(request)) };
 }
 export default function BalancesPage({ loaderData }: Route.ComponentProps) {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(
+    () => searchParams.get("q")?.trim() ?? "",
+  );
+
+  useEffect(() => {
+    setSearchQuery(searchParams.get("q")?.trim() ?? "");
+  }, [searchParams]);
   return (
     <>
       <div className="page-heading">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Form, Link, useActionData, useNavigation } from "react-router";
+import { Form, Link, useActionData, useNavigation, useSearchParams } from "react-router";
 import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
 import { db } from "~/db/client.server";
@@ -74,9 +74,17 @@ export async function action({ request }: Route.ActionArgs) {
 export default function PartsPage({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const [searchParams] = useSearchParams();
   const [scannedBarcode, setScannedBarcode] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(
+    () => searchParams.get("q")?.trim() ?? "",
+  );
   const [categoryFilter, setCategoryFilter] = useState("");
+
+  useEffect(() => {
+    const query = searchParams.get("q")?.trim() ?? "";
+    setSearchQuery(query);
+  }, [searchParams]);
 
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>;

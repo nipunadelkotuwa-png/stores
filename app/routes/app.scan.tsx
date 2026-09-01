@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { CameraBarcodeScan } from "~/components/camera-barcode-scan";
 import { matchesScan } from "~/features/inventory/scan";
 import { isBelowReorder } from "~/features/inventory/low-stock";
@@ -13,11 +13,32 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function ScanPage({ loaderData }: Route.ComponentProps) {
-  const [scannedBarcode, setScannedBarcode] = useState("");
+  const [searchParams] = useSearchParams();
+  const [scannedBarcode, setScannedBarcode] = useState(
+    () => searchParams.get("q")?.trim() ?? "",
+  );
   const [scannedPartId, setScannedPartId] = useState<string | null>(null);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  const applyBarcode = useCallback(
+    (barcode: string) => {
+      const trimmed = barcode.trim();
+      if (!trimmed) return;
+      setScannedBarcode(trimmed);
+      const found = loaderData.catalog.find((part) =>
+        matchesScan(part, trimmed),
+      );
+      setScannedPartId(found?.id ?? null);
+    },
+    [loaderData.catalog],
+  );
+
+  useEffect(() => {
+    const query = searchParams.get("q")?.trim();
+    if (query) applyBarcode(query);
+  }, [searchParams, applyBarcode]);
 
   const scannedPart = scannedPartId
     ? loaderData.catalog.find((part) => part.id === scannedPartId)
@@ -49,19 +70,6 @@ export default function ScanPage({ loaderData }: Route.ComponentProps) {
     }, 1000);
     return () => clearInterval(focusInterval);
   }, [scannedPart]);
-
-  const applyBarcode = useCallback(
-    (barcode: string) => {
-      const trimmed = barcode.trim();
-      if (!trimmed) return;
-      setScannedBarcode(trimmed);
-      const found = loaderData.catalog.find((part) =>
-        matchesScan(part, trimmed),
-      );
-      setScannedPartId(found?.id ?? null);
-    },
-    [loaderData.catalog],
-  );
 
   const handleScan = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

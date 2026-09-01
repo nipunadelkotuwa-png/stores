@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Form, Link, useNavigation } from "react-router";
+import { Form, Link, useFetcher, useNavigation } from "react-router";
 
 import { CameraBarcodeScan } from "~/components/camera-barcode-scan";
 import { CsrfField } from "~/components/csrf-field";
@@ -22,18 +22,20 @@ type CartLine = {
   quantity: number;
 };
 
+type UnusualCount = {
+  partId: string;
+  busId: string | null;
+  issueCount: number;
+};
+
 type PosIssueCartProps = {
   options: Options;
   openJobCards: OpenJobCards;
   balances: Balances;
-  unusualCounts: {
-    partId: string;
-    busId: string | null;
-    issueCount: number;
-  }[];
   unusualThreshold: number;
   initialPartId?: string;
   initialStoreId?: string;
+  initialSearchQuery?: string;
   actionData?: { error?: string; lineErrors?: Record<number, string> };
 };
 
@@ -45,18 +47,22 @@ export function PosIssueCart({
   options,
   openJobCards,
   balances,
-  unusualCounts,
   unusualThreshold,
   initialPartId,
   initialStoreId,
+  initialSearchQuery,
   actionData,
 }: PosIssueCartProps) {
   const navigation = useNavigation();
+  const unusualFetcher = useFetcher<{
+    jobCardId: string;
+    counts: UnusualCount[];
+  }>();
   const searchRef = useRef<HTMLInputElement>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(() =>
     crypto.randomUUID(),
   );
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialSearchQuery ?? "");
   const [storeFilterId, setStoreFilterId] = useState(initialStoreId ?? "");
   const [jobCardId, setJobCardId] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -81,6 +87,22 @@ export function PosIssueCart({
     if (jobCardId) return;
     if (visibleCards.length === 1) setJobCardId(visibleCards[0].id);
   }, [visibleCards, jobCardId]);
+
+  useEffect(() => {
+    if (!initialSearchQuery) return;
+    setQuery(initialSearchQuery);
+    searchRef.current?.focus();
+  }, [initialSearchQuery]);
+
+  useEffect(() => {
+    if (!jobCardId) return;
+    unusualFetcher.load(`/unusual-issues?jobCard=${encodeURIComponent(jobCardId)}`);
+  }, [jobCardId]);
+
+  const unusualCounts =
+    unusualFetcher.data?.jobCardId === jobCardId
+      ? unusualFetcher.data.counts
+      : [];
 
   const unitFor = useCallback(
     (partId: string) => {

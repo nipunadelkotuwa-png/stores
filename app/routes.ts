@@ -20,6 +20,7 @@ export default [
     route("issues/new", "routes/app.issues.new.tsx"),
     route("approvals", "routes/app.approvals.tsx"),
     route("notifications", "routes/app.notifications.ts"),
+    route("unusual-issues", "routes/app.unusual-issues.ts"),
     route("returns", "routes/app.returns.tsx"),
     route("returns/bus", "routes/app.returns.bus.tsx"),
     route("receipts/:id", "routes/app.receipts.$id.tsx"),

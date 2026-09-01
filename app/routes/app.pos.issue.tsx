@@ -11,7 +11,6 @@ import {
 } from "~/features/inventory/posting.server";
 import {
   getBalances,
-  getRepetitiveIssueCounts,
   getTransactionOptions,
 } from "~/features/inventory/queries.server";
 import { UNUSUAL_ISSUE_THRESHOLD } from "~/features/workshop/constants";
@@ -24,16 +23,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   const actor = await requireUser(request);
   const url = new URL(request.url);
   const storeId = url.searchParams.get("store") || undefined;
-  const [options, openJobCards, unusualCounts, balances] = await Promise.all([
+  const [options, openJobCards, balances] = await Promise.all([
     getTransactionOptions(actor),
     listOpenJobCards(actor, { storeId }),
-    getRepetitiveIssueCounts(actor),
     getBalances(actor),
   ]);
   return {
     options,
     openJobCards,
-    unusualCounts,
     balances,
     unusualThreshold: UNUSUAL_ISSUE_THRESHOLD,
   };
@@ -71,16 +68,17 @@ export default function PosIssuePage({ loaderData }: Route.ComponentProps) {
   const [params] = useSearchParams();
   const part = params.get("part") || undefined;
   const store = params.get("store") || undefined;
+  const searchQuery = params.get("q") || undefined;
 
   return (
     <PosIssueCart
       options={loaderData.options}
       openJobCards={loaderData.openJobCards}
       balances={loaderData.balances}
-      unusualCounts={loaderData.unusualCounts}
       unusualThreshold={loaderData.unusualThreshold}
       initialPartId={part}
       initialStoreId={store}
+      initialSearchQuery={searchQuery}
       actionData={actionData}
     />
   );
