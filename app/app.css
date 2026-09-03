@@ -1157,6 +1157,9 @@ td a {
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 1rem;
 }
+.labels-print-only {
+  display: none;
+}
 .label-card {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1166,6 +1169,37 @@ td a {
 }
 .label-card-hidden {
   display: none;
+}
+.label-body {
+  display: grid;
+  gap: 0.5rem;
+}
+.label-mode-both {
+  grid-template-columns: 1fr auto;
+  align-items: end;
+}
+.label-mode-both .label-info:first-child,
+.label-mode-both .label-barcode {
+  grid-column: 1 / -1;
+}
+.label-barcode svg {
+  max-width: 100%;
+  height: auto;
+}
+.labels-size-50x25 .label-card {
+  width: 50mm;
+  min-height: 25mm;
+}
+.labels-size-50x30 .label-card {
+  width: 50mm;
+  min-height: 30mm;
+}
+.labels-size-70x40 .label-card {
+  width: 70mm;
+  min-height: 40mm;
+}
+.labels-size-a4 {
+  grid-template-columns: repeat(3, 1fr);
 }
 .form-stack {
   display: grid;
@@ -1803,6 +1837,9 @@ td a {
 @media print {
   .label-card-hidden {
     display: none !important;
+  }
+  .labels-print-only {
+    display: grid !important;
   }
   .notification-bell {
     display: none !important;

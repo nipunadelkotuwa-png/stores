@@ -17,7 +17,9 @@ import { idColumn, timestamps } from "./common";
 import { buses, parts } from "./master-data";
 
 export const jobCardStatus = pgEnum("job_card_status", [
+  "PENDING_APPROVAL",
   "OPEN",
+  "REJECTED",
   "CLOSED",
   "CANCELLED",
 ]);
@@ -57,6 +59,7 @@ export const tyreEventType = pgEnum("tyre_event_type", [
   "REPLACE",
   "SEND_DAG",
   "RECEIVE_DAG",
+  "DAG_REJECTED",
   "SCRAP",
   "DISPOSE",
   "TRANSFER_OUT",
@@ -91,7 +94,7 @@ export const jobCards = pgTable(
     busId: uuid("bus_id")
       .references(() => buses.id)
       .notNull(),
-    status: jobCardStatus("status").default("OPEN").notNull(),
+    status: jobCardStatus("status").default("PENDING_APPROVAL").notNull(),
     businessDate: text("business_date").notNull(),
     odometerKm: numeric("odometer_km", { precision: 14, scale: 1 }),
     complaint: text("complaint").notNull(),
@@ -104,6 +107,11 @@ export const jobCards = pgTable(
     openedAt: timestamp("opened_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    approvedBy: uuid("approved_by").references(() => users.id),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    rejectedBy: uuid("rejected_by").references(() => users.id),
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    rejectionReason: text("rejection_reason"),
     closedBy: uuid("closed_by").references(() => users.id),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     ...timestamps,
@@ -112,7 +120,7 @@ export const jobCards = pgTable(
     uniqueIndex("job_cards_number_unique").on(table.jobNumber),
     uniqueIndex("job_cards_one_open_per_bus")
       .on(table.busId)
-      .where(sql`${table.status} = 'OPEN'`),
+      .where(sql`${table.status} IN ('PENDING_APPROVAL', 'OPEN')`),
     index("job_cards_store_date_idx").on(table.storeId, table.businessDate),
     index("job_cards_bus_idx").on(table.busId),
   ],

@@ -1,4 +1,5 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { data } from "react-router";
 
 import { db } from "~/db/client.server";
 import {
@@ -14,8 +15,13 @@ import {
 import type { Actor } from "~/lib/auth/authorization.server";
 import { requireStoreAccess } from "~/lib/auth/authorization.server";
 import type { Transaction } from "~/features/inventory/posting.server";
+import { invalidatePendingApprovalCountCache } from "~/features/inventory/approval-count-cache.server";
 import { WorkshopError } from "./errors";
-import { closeJobCardSchema, openJobCardSchema } from "./schemas";
+import {
+  closeJobCardSchema,
+  openJobCardSchema,
+  rejectJobCardSchema,
+} from "./schemas";
 
 async function nextJobNumber(
   tx: Transaction,
@@ -79,6 +85,19 @@ export async function loadOpenJobCard(tx: Transaction, jobCardId: string) {
   return card;
 }
 
+async function loadActiveJobCard(tx: Transaction, jobCardId: string) {
+  const [card] = await tx
+    .select()
+    .from(jobCards)
+    .where(eq(jobCards.id, jobCardId))
+    .limit(1);
+  if (!card) throw new WorkshopError("Job card not found");
+  if (card.status !== "OPEN" && card.status !== "PENDING_APPROVAL") {
+    throw new WorkshopError("Job card is not active");
+  }
+  return card;
+}
+
 export async function openJobCard(actor: Actor, input: unknown) {
   const command = openJobCardSchema.parse(input);
   await requireStoreAccess(actor, command.storeId);
@@ -96,12 +115,15 @@ export async function openJobCard(actor: Actor, input: unknown) {
       .select({ id: jobCards.id, jobNumber: jobCards.jobNumber })
       .from(jobCards)
       .where(
-        and(eq(jobCards.busId, command.busId), eq(jobCards.status, "OPEN")),
+        and(
+          eq(jobCards.busId, command.busId),
+          inArray(jobCards.status, ["PENDING_APPROVAL", "OPEN"]),
+        ),
       )
       .limit(1);
     if (openExisting) {
       throw new WorkshopError(
-        `Bus already has an open job card (${openExisting.jobNumber})`,
+        `Bus already has an active job card (${openExisting.jobNumber})`,
       );
     }
 
@@ -116,7 +138,7 @@ export async function openJobCard(actor: Actor, input: unknown) {
         jobNumber,
         storeId: command.storeId,
         busId: command.busId,
-        status: "OPEN",
+        status: "PENDING_APPROVAL",
         businessDate: command.businessDate,
         odometerKm: command.odometerKm,
         complaint: command.complaint,
@@ -132,13 +154,125 @@ export async function openJobCard(actor: Actor, input: unknown) {
 
     await tx.insert(auditEvents).values({
       actorId: actor.id,
-      eventType: "JOB_CARD_OPENED",
+      eventType: "JOB_CARD_SUBMITTED",
       entityType: "job_card",
       entityId: card.id,
       storeId: command.storeId,
       metadata: { jobNumber: card.jobNumber },
     });
+    invalidatePendingApprovalCountCache();
     return card;
+  });
+}
+
+export async function approveJobCard(actor: Actor, jobCardId: string) {
+  if (actor.role !== "ADMIN") {
+    throw data(
+      { message: "Only administrators can approve job cards." },
+      { status: 403 },
+    );
+  }
+
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+    const [card] = await tx
+      .select()
+      .from(jobCards)
+      .where(eq(jobCards.id, jobCardId))
+      .limit(1);
+    if (!card) throw new WorkshopError("Job card not found");
+    if (card.status !== "PENDING_APPROVAL") {
+      throw new WorkshopError("Job card is not awaiting approval");
+    }
+
+    const [updated] = await tx
+      .update(jobCards)
+      .set({
+        status: "OPEN",
+        approvedBy: actor.id,
+        approvedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(jobCards.id, card.id),
+          eq(jobCards.status, "PENDING_APPROVAL"),
+        ),
+      )
+      .returning({
+        id: jobCards.id,
+        jobNumber: jobCards.jobNumber,
+        storeId: jobCards.storeId,
+      });
+    if (!updated) throw new WorkshopError("Job card could not be approved");
+
+    await tx.insert(auditEvents).values({
+      actorId: actor.id,
+      eventType: "JOB_CARD_APPROVED",
+      entityType: "job_card",
+      entityId: updated.id,
+      storeId: updated.storeId,
+      metadata: { jobNumber: updated.jobNumber },
+    });
+    invalidatePendingApprovalCountCache();
+    return updated;
+  });
+}
+
+export async function rejectJobCard(actor: Actor, input: unknown) {
+  if (actor.role !== "ADMIN") {
+    throw data(
+      { message: "Only administrators can reject job cards." },
+      { status: 403 },
+    );
+  }
+  const command = rejectJobCardSchema.parse(input);
+
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+    const [card] = await tx
+      .select()
+      .from(jobCards)
+      .where(eq(jobCards.id, command.jobCardId))
+      .limit(1);
+    if (!card) throw new WorkshopError("Job card not found");
+    if (card.status !== "PENDING_APPROVAL") {
+      throw new WorkshopError("Job card is not awaiting approval");
+    }
+
+    const [updated] = await tx
+      .update(jobCards)
+      .set({
+        status: "REJECTED",
+        rejectedBy: actor.id,
+        rejectedAt: new Date(),
+        rejectionReason: command.reason,
+      })
+      .where(
+        and(
+          eq(jobCards.id, card.id),
+          eq(jobCards.status, "PENDING_APPROVAL"),
+        ),
+      )
+      .returning({
+        id: jobCards.id,
+        jobNumber: jobCards.jobNumber,
+        storeId: jobCards.storeId,
+      });
+    if (!updated) throw new WorkshopError("Job card could not be rejected");
+
+    await tx.insert(auditEvents).values({
+      actorId: actor.id,
+      eventType: "JOB_CARD_REJECTED",
+      entityType: "job_card",
+      entityId: updated.id,
+      storeId: updated.storeId,
+      metadata: {
+        jobNumber: updated.jobNumber,
+        reason: command.reason,
+      },
+    });
+    invalidatePendingApprovalCountCache();
+    return updated;
   });
 }
 
@@ -161,7 +295,7 @@ export async function closeJobCard(actor: Actor, input: unknown) {
       .limit(1);
     if (pending) {
       throw new WorkshopError(
-        "Cannot close while a bus issue is awaiting approval",
+        "Cannot close while a bus issue is awaiting verification",
       );
     }
 
@@ -192,14 +326,19 @@ export async function closeJobCard(actor: Actor, input: unknown) {
 export async function cancelJobCard(actor: Actor, jobCardId: string) {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
-    const card = await loadOpenJobCard(tx, jobCardId);
+    const card = await loadActiveJobCard(tx, jobCardId);
     await requireStoreAccess(actor, card.storeId);
 
     const [[stock], [tyre], [oil]] = await Promise.all([
       tx
         .select({ id: stockDocuments.id })
         .from(stockDocuments)
-        .where(eq(stockDocuments.jobCardId, card.id))
+        .where(
+          and(
+            eq(stockDocuments.jobCardId, card.id),
+            inArray(stockDocuments.status, ["POSTED", "PENDING_APPROVAL"]),
+          ),
+        )
         .limit(1),
       tx
         .select({ id: tyreEvents.id })
@@ -214,7 +353,9 @@ export async function cancelJobCard(actor: Actor, jobCardId: string) {
     ]);
     if (stock || tyre || oil) {
       throw new WorkshopError(
-        "Job card has posted work and cannot be cancelled. Close it instead.",
+        stock?.id && !tyre && !oil
+          ? "Job card has stock activity and cannot be cancelled. Reject or verify pending issues, or close the card."
+          : "Job card has posted work and cannot be cancelled. Close it instead.",
       );
     }
 
@@ -225,7 +366,12 @@ export async function cancelJobCard(actor: Actor, jobCardId: string) {
         closedBy: actor.id,
         closedAt: new Date(),
       })
-      .where(and(eq(jobCards.id, card.id), eq(jobCards.status, "OPEN")))
+      .where(
+        and(
+          eq(jobCards.id, card.id),
+          inArray(jobCards.status, ["PENDING_APPROVAL", "OPEN"]),
+        ),
+      )
       .returning({ id: jobCards.id, jobNumber: jobCards.jobNumber });
     if (!updated) throw new WorkshopError("Job card could not be cancelled");
 
@@ -237,6 +383,7 @@ export async function cancelJobCard(actor: Actor, jobCardId: string) {
       storeId: card.storeId,
       metadata: { jobNumber: updated.jobNumber },
     });
+    invalidatePendingApprovalCountCache();
     return updated;
   });
 }

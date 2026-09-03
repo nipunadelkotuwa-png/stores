@@ -21,18 +21,19 @@ import {
 } from "../../app/features/workshop/tyre-lifecycle";
 
 describe("nextDagStage", () => {
-  it("advances ORG through DAG and rebuild then scrap", () => {
+  it("advances ORG through DAG1–DAG3 only", () => {
     expect(nextDagStage("ORG")).toBe("DAG1");
     expect(nextDagStage("DAG1")).toBe("DAG2");
     expect(nextDagStage("DAG2")).toBe("DAG3");
-    expect(nextDagStage("DAG3")).toBe("REBUILD");
-    expect(nextDagStage("REBUILD")).toBe("SCRAP");
-    expect(nextDagStage("SCRAP")).toBe("SCRAP");
+    expect(() => nextDagStage("DAG3")).toThrow(/DAG3/);
   });
 
-  it("allows sending rebuild casings but not scrap", () => {
+  it("allows sending ORG/DAG1/DAG2 but not DAG3 or rebuild", () => {
     expect(canSendToDag("ORG")).toBe(true);
-    expect(canSendToDag("REBUILD")).toBe(true);
+    expect(canSendToDag("DAG1")).toBe(true);
+    expect(canSendToDag("DAG2")).toBe(true);
+    expect(canSendToDag("DAG3")).toBe(false);
+    expect(canSendToDag("REBUILD")).toBe(false);
     expect(canSendToDag("SCRAP")).toBe(false);
   });
 
@@ -132,7 +133,7 @@ describe("workshop schemas", () => {
     ).toBe(false);
   });
 
-  it("requires supplier and chosen return stage for DAG", () => {
+  it("requires supplier for DAG send and receive SKU without manual stage", () => {
     expect(
       sendTyreToDagSchema.safeParse({
         tyreId: "55555555-5555-4555-8555-555555555555",
@@ -151,7 +152,6 @@ describe("workshop schemas", () => {
     expect(
       receiveTyreFromDagSchema.safeParse({
         tyreId: "55555555-5555-4555-8555-555555555555",
-        toStage: "REBUILD",
         targetPartId: "22222222-2222-4222-8222-222222222222",
         businessDate: "2026-08-17",
         idempotencyKey: "0123456789abcdef",

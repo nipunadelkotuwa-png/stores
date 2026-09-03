@@ -41,6 +41,22 @@ export const USABLE_TYRE_STAGES = [
 
 export type UsableTyreStage = (typeof USABLE_TYRE_STAGES)[number];
 
+/** Stages shown in normal business UI (hide REBUILD). */
+export const BUSINESS_DAG_STAGES = ["ORG", "DAG1", "DAG2", "DAG3"] as const;
+
+export type BusinessDagStage = (typeof BUSINESS_DAG_STAGES)[number];
+
+/** Stages that may be sent to DAG (max three successful cycles). */
+export const DAG_ELIGIBLE_STAGES = ["ORG", "DAG1", "DAG2"] as const;
+
+export const DAG_STAGE_PROGRESSION: Partial<
+  Record<TyreLifecycleStage, TyreLifecycleStage>
+> = {
+  ORG: "DAG1",
+  DAG1: "DAG2",
+  DAG2: "DAG3",
+};
+
 export const DAG_STAGE_ORDER: TyreLifecycleStage[] = [
   "ORG",
   "DAG1",

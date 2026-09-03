@@ -29,6 +29,7 @@ export default [
     route("job-cards/:id", "routes/app.job-cards.$id.tsx"),
     route("tyres", "routes/app.tyres.tsx"),
     route("tyres/dag", "routes/app.tyres.dag.tsx"),
+    route("tyres/:id", "routes/app.tyres.$id.tsx"),
     route("transfers", "routes/app.transfers._index.tsx"),
     route("transfers/new", "routes/app.transfers.new.tsx"),
     route("purchases", "routes/app.purchases._index.tsx"),
@@ -50,6 +51,7 @@ export default [
     route("reports/unusual-issues", "routes/app.reports.unusual-issues.tsx"),
     route("reports/daily-issues", "routes/app.reports.daily-issues.tsx"),
     route("reports/dag-out", "routes/app.reports.dag-out.tsx"),
+    route("reports/tyre-stock", "routes/app.reports.tyre-stock.tsx"),
     route("reports/transfers", "routes/app.reports.transfers.tsx"),
     route("reports/purchases", "routes/app.reports.purchases.tsx"),
     layout("routes/admin.tsx", [

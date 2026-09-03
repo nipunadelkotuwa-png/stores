@@ -1,14 +1,21 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPeriodFilter } from "~/components/report-period-filter";
+import { getEnv } from "~/config/env.server";
 import { getTransfers } from "~/features/inventory/queries.server";
+import { resolveReportPeriod } from "~/features/reports/period";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.transfers";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  return getTransfers(await requireUser(request), {
-    start: url.searchParams.get("start") || undefined,
-    end: url.searchParams.get("end") || undefined,
-  });
+  const range = resolveReportPeriod(url.searchParams, getEnv().APP_TIME_ZONE);
+  return {
+    ...(await getTransfers(await requireUser(request), {
+      start: range.start,
+      end: range.end,
+    })),
+    range,
+  };
 }
 
 export default function TransferReportPage({
@@ -37,28 +44,11 @@ export default function TransferReportPage({
         className="form-panel panel no-print"
         style={{ marginBottom: "1.5rem" }}
       >
-        <div
-          className="form-grid"
-          style={{ gridTemplateColumns: "1fr 1fr auto", alignItems: "end" }}
-        >
-          <label>
-            Start
-            <input
-              type="date"
-              name="start"
-              defaultValue={params.get("start") || ""}
-            />
-          </label>
-          <label>
-            End
-            <input
-              type="date"
-              name="end"
-              defaultValue={params.get("end") || ""}
-            />
-          </label>
-          <button className="button button-secondary">Filter</button>
-        </div>
+        <ReportPeriodFilter
+          period={loaderData.range.period}
+          start={params.get("start") || loaderData.range.start}
+          end={params.get("end") || loaderData.range.end}
+        />
       </Form>
       <section className="panel">
         <div className="table-wrap">

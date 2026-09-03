@@ -16,7 +16,7 @@ import {
 } from "~/features/inventory/form-lines";
 import {
   inventoryActionError,
-  postStock,
+  submitIssueForApproval,
 } from "~/features/inventory/posting.server";
 import {
   getRepetitiveIssueCounts,
@@ -79,7 +79,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         return { error: loaded.error, lineErrors: loaded.lineErrors };
       }
       try {
-        const result = await postStock(actor, "BUS_ISSUE", {
+        const result = await submitIssueForApproval(actor, {
           storeId: card.storeId,
           busId: card.busId,
           jobCardId: card.id,
@@ -154,6 +154,7 @@ export default function JobCardDetailPage({
     loaderData.initialPartId ? [loaderData.initialPartId] : [],
   );
   const open = card.status === "OPEN";
+  const pending = card.status === "PENDING_APPROVAL";
   const busy = navigation.state !== "idle";
   const unusualParts = issuePartIds.flatMap((partId) => {
     if (!partId) return [];
@@ -186,9 +187,17 @@ export default function JobCardDetailPage({
         </div>
         <div className="heading-actions">
           <span
-            className={`badge ${card.status === "OPEN" ? "warning" : card.status === "CLOSED" ? "success" : ""}`}
+            className={`badge ${
+              open || pending
+                ? "warning"
+                : card.status === "CLOSED"
+                  ? "success"
+                  : card.status === "REJECTED"
+                    ? "danger"
+                    : ""
+            }`}
           >
-            {card.status}
+            {pending ? "Pending approval" : card.status}
           </span>
           <button
             type="button"
@@ -233,9 +242,11 @@ export default function JobCardDetailPage({
         ) : null}
         <p className="muted">
           Opened by {card.openedBy}
-          {card.closedAt
-            ? ` · Closed ${new Date(card.closedAt).toLocaleString()}`
-            : ""}
+          {card.status === "REJECTED"
+            ? " · Rejected"
+            : card.closedAt
+              ? ` · Closed ${new Date(card.closedAt).toLocaleString()}`
+              : ""}
         </p>
       </section>
 
@@ -243,6 +254,25 @@ export default function JobCardDetailPage({
         <h2>Tyres on this bus</h2>
         <TyreMap slots={card.fitted} />
       </section>
+
+      {pending ? (
+        <section className="panel no-print" style={{ marginBottom: "1.5rem" }}>
+          <p>
+            This job card is awaiting operator approval. Parts, tyres, and oil
+            can be posted after it is approved.
+          </p>
+          <p className="muted">
+            <Link to="/approvals?tab=job-cards">Open Approvals Center</Link>
+          </p>
+          <Form method="post" style={{ marginTop: "1rem" }}>
+            <CsrfField />
+            <input type="hidden" name="intent" value="cancel" />
+            <button className="text-button" disabled={busy}>
+              Cancel unused card
+            </button>
+          </Form>
+        </section>
+      ) : null}
 
       {open ? (
         <>
@@ -280,7 +310,7 @@ export default function JobCardDetailPage({
                 </p>
               ) : null}
               <button className="button button-primary" disabled={busy}>
-                Post issue
+                Submit for verification
               </button>
             </Form>
           </section>

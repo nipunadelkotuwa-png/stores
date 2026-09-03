@@ -1,18 +1,31 @@
-import { Link } from "react-router";
+import { Form, Link, useSearchParams } from "react-router";
+import { ReportPeriodFilter } from "~/components/report-period-filter";
+import { getEnv } from "~/config/env.server";
 import { movementFiltersFromSearch } from "~/features/inventory/movement-filters";
 import { getMovements } from "~/features/inventory/queries.server";
+import { resolveReportPeriod } from "~/features/reports/period";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.movements";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  return getMovements(
-    await requireUser(request),
-    movementFiltersFromSearch(url.searchParams),
+  const range = resolveReportPeriod(url.searchParams, getEnv().APP_TIME_ZONE);
+  const focusFilters = movementFiltersFromSearch(url.searchParams);
+  const focused = Boolean(
+    focusFilters.documentNumber || focusFilters.purchaseNumber,
   );
+  return {
+    ...(await getMovements(await requireUser(request), {
+      ...focusFilters,
+      start: focused ? undefined : range.start,
+      end: focused ? undefined : range.end,
+    })),
+    range,
+  };
 }
 
 export default function MovementsPage({ loaderData }: Route.ComponentProps) {
+  const [params] = useSearchParams();
   return (
     <>
       <div className="page-heading no-print">
@@ -32,6 +45,18 @@ export default function MovementsPage({ loaderData }: Route.ComponentProps) {
           </button>
         </div>
       </div>
+      {!loaderData.focus ? (
+        <Form
+          className="form-panel panel no-print"
+          style={{ marginBottom: "1.5rem" }}
+        >
+          <ReportPeriodFilter
+            period={loaderData.range.period}
+            start={params.get("start") || loaderData.range.start}
+            end={params.get("end") || loaderData.range.end}
+          />
+        </Form>
+      ) : null}
       {loaderData.focus ? (
         <p className="muted no-print">
           Showing movements for <span className="mono">{loaderData.focus}</span>

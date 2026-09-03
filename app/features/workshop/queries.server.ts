@@ -55,10 +55,58 @@ export async function listOpenJobCards(
     .orderBy(desc(jobCards.openedAt));
 }
 
+export async function getPendingJobCards(actor: Actor) {
+  const ids = await getAuthorizedStoreIds(actor);
+  return db
+    .select({
+      id: jobCards.id,
+      jobNumber: jobCards.jobNumber,
+      storeId: jobCards.storeId,
+      store: stores.name,
+      storeCode: stores.code,
+      busId: jobCards.busId,
+      fleetNumber: buses.fleetNumber,
+      registrationNumber: buses.registrationNumber,
+      businessDate: jobCards.businessDate,
+      odometerKm: jobCards.odometerKm,
+      complaint: jobCards.complaint,
+      mechanicName: jobCards.mechanicName,
+      createdBy: users.displayName,
+      openedAt: jobCards.openedAt,
+    })
+    .from(jobCards)
+    .innerJoin(stores, eq(jobCards.storeId, stores.id))
+    .innerJoin(buses, eq(jobCards.busId, buses.id))
+    .innerJoin(users, eq(jobCards.openedBy, users.id))
+    .where(
+      and(
+        eq(jobCards.status, "PENDING_APPROVAL"),
+        scopedStoreCondition(jobCards.storeId, ids),
+      ),
+    )
+    .orderBy(desc(jobCards.openedAt));
+}
+
+export async function countPendingJobCards(actor: Actor) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const [row] = await db
+    .select({
+      count: sql<number>`count(*)::int`,
+    })
+    .from(jobCards)
+    .where(
+      and(
+        eq(jobCards.status, "PENDING_APPROVAL"),
+        scopedStoreCondition(jobCards.storeId, ids),
+      ),
+    );
+  return Number(row?.count ?? 0);
+}
+
 export async function listJobCards(
   actor: Actor,
   filters?: {
-    status?: "OPEN" | "CLOSED" | "CANCELLED";
+    status?: "PENDING_APPROVAL" | "OPEN" | "REJECTED" | "CLOSED" | "CANCELLED";
     bus?: string;
     start?: string;
     end?: string;
@@ -222,7 +270,14 @@ export async function listCategoryParts(code: "TYRE" | "OIL") {
 
 export async function listTyres(
   actor: Actor,
-  filters?: { status?: string; serial?: string },
+  filters?: {
+    status?: string;
+    serial?: string;
+    stage?: string;
+    storeId?: string;
+    busId?: string;
+    sku?: string;
+  },
 ) {
   const ids = await getAuthorizedStoreIds(actor);
   return db
@@ -236,6 +291,7 @@ export async function listTyres(
       store: stores.code,
       storeId: tyres.storeId,
       fleetNumber: buses.fleetNumber,
+      busId: tyres.currentBusId,
       position: tyres.currentPosition,
     })
     .from(tyres)
@@ -256,8 +312,25 @@ export async function listTyres(
                 | "SCRAPPED",
             )
           : undefined,
+        filters?.stage
+          ? eq(
+              tyres.lifecycleStage,
+              filters.stage as
+                | "ORG"
+                | "DAG1"
+                | "DAG2"
+                | "DAG3"
+                | "REBUILD"
+                | "SCRAP",
+            )
+          : undefined,
         filters?.serial
           ? sql`${tyres.serialNumber} ilike ${`%${filters.serial}%`}`
+          : undefined,
+        filters?.storeId ? eq(tyres.storeId, filters.storeId) : undefined,
+        filters?.busId ? eq(tyres.currentBusId, filters.busId) : undefined,
+        filters?.sku
+          ? sql`${parts.sku} ilike ${`%${filters.sku}%`}`
           : undefined,
         ids === null
           ? undefined
@@ -270,9 +343,122 @@ export async function listTyres(
     .limit(LIST_LIMIT);
 }
 
+export async function getTyreRegisterCounts(actor: Actor) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const rows = await db
+    .select({
+      stage: tyres.lifecycleStage,
+      status: tyres.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(tyres)
+    .where(
+      ids === null
+        ? undefined
+        : ids.length === 0
+          ? sql`false`
+          : or(inArray(tyres.storeId, ids), eq(tyres.status, "FITTED")),
+    )
+    .groupBy(tyres.lifecycleStage, tyres.status);
+
+  const counts = {
+    totalActive: 0,
+    ORG: 0,
+    DAG1: 0,
+    DAG2: 0,
+    DAG3: 0,
+    atDag: 0,
+    disposed: 0,
+  };
+  for (const row of rows) {
+    const n = Number(row.count);
+    if (row.status === "DISPOSED" || row.status === "SCRAPPED") {
+      counts.disposed += n;
+      continue;
+    }
+    counts.totalActive += n;
+    if (row.status === "AT_DAG") {
+      counts.atDag += n;
+      continue;
+    }
+    if (row.stage === "ORG") counts.ORG += n;
+    if (row.stage === "DAG1") counts.DAG1 += n;
+    if (row.stage === "DAG2") counts.DAG2 += n;
+    if (row.stage === "DAG3") counts.DAG3 += n;
+  }
+  return counts;
+}
+
+export async function getTyreDetail(actor: Actor, tyreId: string) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const [tyre] = await db
+    .select({
+      id: tyres.id,
+      serialNumber: tyres.serialNumber,
+      sku: parts.sku,
+      part: parts.name,
+      stage: tyres.lifecycleStage,
+      status: tyres.status,
+      store: stores.name,
+      storeCode: stores.code,
+      storeId: tyres.storeId,
+      fleetNumber: buses.fleetNumber,
+      registrationNumber: buses.registrationNumber,
+      busId: tyres.currentBusId,
+      position: tyres.currentPosition,
+      notes: tyres.notes,
+      createdAt: tyres.createdAt,
+    })
+    .from(tyres)
+    .innerJoin(parts, eq(tyres.partId, parts.id))
+    .leftJoin(stores, eq(tyres.storeId, stores.id))
+    .leftJoin(buses, eq(tyres.currentBusId, buses.id))
+    .where(
+      and(
+        eq(tyres.id, tyreId),
+        ids === null
+          ? undefined
+          : ids.length === 0
+            ? sql`false`
+            : or(inArray(tyres.storeId, ids), eq(tyres.status, "FITTED")),
+      ),
+    )
+    .limit(1);
+  if (!tyre) return null;
+
+  const events = await db
+    .select({
+      id: tyreEvents.id,
+      type: tyreEvents.type,
+      occurredAt: tyreEvents.occurredAt,
+      fromStage: tyreEvents.fromStage,
+      toStage: tyreEvents.toStage,
+      fromPosition: tyreEvents.fromPosition,
+      toPosition: tyreEvents.toPosition,
+      odometerKm: tyreEvents.odometerKm,
+      notes: tyreEvents.notes,
+      store: stores.code,
+      fleetNumber: buses.fleetNumber,
+      documentNumber: stockDocuments.documentNumber,
+      actor: users.displayName,
+    })
+    .from(tyreEvents)
+    .leftJoin(stores, eq(tyreEvents.storeId, stores.id))
+    .leftJoin(buses, eq(tyreEvents.busId, buses.id))
+    .leftJoin(
+      stockDocuments,
+      eq(tyreEvents.stockDocumentId, stockDocuments.id),
+    )
+    .innerJoin(users, eq(tyreEvents.createdBy, users.id))
+    .where(eq(tyreEvents.tyreId, tyreId))
+    .orderBy(asc(tyreEvents.occurredAt));
+
+  return { ...tyre, events };
+}
+
 export async function listTyresAtDag(actor: Actor) {
   const ids = await getAuthorizedStoreIds(actor);
-  return db
+  const rows = await db
     .select({
       id: tyres.id,
       serialNumber: tyres.serialNumber,
@@ -289,6 +475,39 @@ export async function listTyresAtDag(actor: Actor) {
       and(eq(tyres.status, "AT_DAG"), scopedStoreCondition(tyres.storeId, ids)),
     )
     .orderBy(asc(tyres.serialNumber));
+
+  const enriched = await Promise.all(
+    rows.map(async (tyre) => {
+      const [send] = await db
+        .select({
+          documentId: stockDocuments.id,
+          documentNumber: stockDocuments.documentNumber,
+          supplier: suppliers.name,
+          businessDate: stockDocuments.businessDate,
+          fromStage: tyreEvents.fromStage,
+        })
+        .from(tyreEvents)
+        .innerJoin(
+          stockDocuments,
+          eq(tyreEvents.stockDocumentId, stockDocuments.id),
+        )
+        .leftJoin(suppliers, eq(stockDocuments.supplierId, suppliers.id))
+        .where(
+          and(eq(tyreEvents.tyreId, tyre.id), eq(tyreEvents.type, "SEND_DAG")),
+        )
+        .orderBy(desc(tyreEvents.occurredAt))
+        .limit(1);
+      return {
+        ...tyre,
+        sendDocumentNumber: send?.documentNumber ?? null,
+        sendDocumentId: send?.documentId ?? null,
+        supplier: send?.supplier ?? null,
+        sentDate: send?.businessDate ?? null,
+        sentStage: send?.fromStage ?? tyre.stage,
+      };
+    }),
+  );
+  return enriched;
 }
 
 export async function listInStoreTyres(actor: Actor) {
@@ -442,4 +661,174 @@ export async function getDagOutSummary(
     bySupplier.set(key, current);
   }
   return { groups: [...bySupplier.values()], total: rows.length };
+}
+
+export async function getTyreStockReport(
+  actor: Actor,
+  filters?: {
+    storeId?: string;
+    stage?: string;
+    status?: string;
+    sku?: string;
+    supplierId?: string;
+  },
+) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const rows = await db
+    .select({
+      id: tyres.id,
+      serialNumber: tyres.serialNumber,
+      sku: parts.sku,
+      part: parts.name,
+      stage: tyres.lifecycleStage,
+      status: tyres.status,
+      store: stores.code,
+      storeId: tyres.storeId,
+      fleetNumber: buses.fleetNumber,
+      busId: tyres.currentBusId,
+      position: tyres.currentPosition,
+    })
+    .from(tyres)
+    .innerJoin(parts, eq(tyres.partId, parts.id))
+    .leftJoin(stores, eq(tyres.storeId, stores.id))
+    .leftJoin(buses, eq(tyres.currentBusId, buses.id))
+    .where(
+      and(
+        filters?.status
+          ? eq(
+              tyres.status,
+              filters.status as
+                | "IN_STORE"
+                | "FITTED"
+                | "AT_DAG"
+                | "IN_TRANSIT"
+                | "DISPOSED"
+                | "SCRAPPED",
+            )
+          : undefined,
+        filters?.stage
+          ? eq(
+              tyres.lifecycleStage,
+              filters.stage as
+                | "ORG"
+                | "DAG1"
+                | "DAG2"
+                | "DAG3"
+                | "REBUILD"
+                | "SCRAP",
+            )
+          : undefined,
+        filters?.storeId ? eq(tyres.storeId, filters.storeId) : undefined,
+        filters?.sku
+          ? sql`${parts.sku} ilike ${`%${filters.sku}%`}`
+          : undefined,
+        ids === null
+          ? undefined
+          : ids.length === 0
+            ? sql`false`
+            : or(inArray(tyres.storeId, ids), eq(tyres.status, "FITTED")),
+      ),
+    )
+    .orderBy(asc(tyres.serialNumber));
+
+  let filtered = rows;
+
+  if (filters?.supplierId) {
+    const latestSend = db
+      .selectDistinctOn([tyreEvents.tyreId], {
+        tyreId: tyreEvents.tyreId,
+        supplierId: stockDocuments.supplierId,
+      })
+      .from(tyreEvents)
+      .innerJoin(
+        stockDocuments,
+        eq(tyreEvents.stockDocumentId, stockDocuments.id),
+      )
+      .where(eq(tyreEvents.type, "SEND_DAG"))
+      .orderBy(tyreEvents.tyreId, desc(tyreEvents.occurredAt))
+      .as("latest_send");
+
+    const matches = await db
+      .select({ tyreId: latestSend.tyreId })
+      .from(latestSend)
+      .where(eq(latestSend.supplierId, filters.supplierId));
+    const supplierTyreIds = new Set(matches.map((row) => row.tyreId));
+    filtered = filtered.filter((row) => supplierTyreIds.has(row.id));
+  }
+
+  const kpis = {
+    active: 0,
+    warehouse: 0,
+    onBuses: 0,
+    atDag: 0,
+    disposed: 0,
+  };
+  const stageTotals: Record<string, number> = {
+    ORG: 0,
+    DAG1: 0,
+    DAG2: 0,
+    DAG3: 0,
+  };
+  const matrix: Record<
+    string,
+    { warehouse: number; onBus: number; atDag: number; total: number }
+  > = {};
+  for (const stage of ["ORG", "DAG1", "DAG2", "DAG3"]) {
+    matrix[stage] = { warehouse: 0, onBus: 0, atDag: 0, total: 0 };
+  }
+
+  for (const row of filtered) {
+    if (row.status === "DISPOSED" || row.status === "SCRAPPED") {
+      kpis.disposed += 1;
+      continue;
+    }
+    kpis.active += 1;
+    if (row.status === "IN_STORE") kpis.warehouse += 1;
+    if (row.status === "FITTED") kpis.onBuses += 1;
+    if (row.status === "AT_DAG") kpis.atDag += 1;
+    if (row.stage in stageTotals) {
+      stageTotals[row.stage] += 1;
+    }
+    if (matrix[row.stage]) {
+      if (row.status === "IN_STORE") matrix[row.stage].warehouse += 1;
+      if (row.status === "FITTED") matrix[row.stage].onBus += 1;
+      if (row.status === "AT_DAG") matrix[row.stage].atDag += 1;
+      if (
+        row.status === "IN_STORE" ||
+        row.status === "FITTED" ||
+        row.status === "AT_DAG"
+      ) {
+        matrix[row.stage].total += 1;
+      }
+    }
+  }
+
+  const tyreIds = filtered.map((row) => row.id);
+  const lastByTyre = new Map<string, { type: string; occurredAt: Date }>();
+  if (tyreIds.length > 0) {
+    const lastEvents = await db
+      .selectDistinctOn([tyreEvents.tyreId], {
+        tyreId: tyreEvents.tyreId,
+        type: tyreEvents.type,
+        occurredAt: tyreEvents.occurredAt,
+      })
+      .from(tyreEvents)
+      .where(inArray(tyreEvents.tyreId, tyreIds))
+      .orderBy(tyreEvents.tyreId, desc(tyreEvents.occurredAt));
+    for (const event of lastEvents) {
+      lastByTyre.set(event.tyreId, event);
+    }
+  }
+
+  const detail = filtered.map((row) => {
+    const last = lastByTyre.get(row.id);
+    return {
+      ...row,
+      lastMovement: last
+        ? `${last.type} · ${new Date(last.occurredAt).toLocaleDateString()}`
+        : "—",
+    };
+  });
+
+  return { kpis, stageTotals, matrix, detail };
 }

@@ -46,6 +46,11 @@ export const closeJobCardSchema = z.object({
   workDone: z.string().trim().min(3).max(2000),
 });
 
+export const rejectJobCardSchema = z.object({
+  jobCardId: z.string().uuid(),
+  reason: z.string().trim().min(3).max(1000),
+});
+
 export const registerTyreSchema = z.object({
   storeId: z.string().uuid(),
   partId: z.string().uuid(),
@@ -71,11 +76,16 @@ export const sendTyreToDagSchema = z.object({
 
 export const receiveTyreFromDagSchema = z.object({
   tyreId: z.string().uuid(),
-  toStage: z.enum(USABLE_TYRE_STAGES),
   targetPartId: z.string().uuid(),
   businessDate: z.string().date(),
   notes: z.string().trim().max(1000).optional(),
   idempotencyKey: z.string().min(16).max(100),
+});
+
+export const rejectTyreAtDagSchema = z.object({
+  tyreId: z.string().uuid(),
+  reason: z.string().trim().min(3).max(1000),
+  notes: z.string().trim().max(1000).optional(),
 });
 
 export const disposeTyreSchema = z.object({

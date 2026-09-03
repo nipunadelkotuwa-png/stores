@@ -2,11 +2,15 @@ import { useState } from "react";
 import { Form, Link, useNavigation } from "react-router";
 import { CsrfField } from "~/components/csrf-field";
 import { StockLineItems } from "~/components/stock-line-items";
-import type { getTransactionOptions } from "~/features/inventory/queries.server";
+import type {
+  getReturnableJobCardItems,
+  getTransactionOptions,
+} from "~/features/inventory/queries.server";
 import type { listOpenJobCards } from "~/features/workshop/queries.server";
 
 type Options = Awaited<ReturnType<typeof getTransactionOptions>>;
 type OpenJobCards = Awaited<ReturnType<typeof listOpenJobCards>>;
+type ReturnableItems = Awaited<ReturnType<typeof getReturnableJobCardItems>>;
 
 export function StockForm({
   options,
@@ -15,6 +19,7 @@ export function StockForm({
   initialPartId,
   initialStoreId,
   openJobCards = [],
+  returnableByJobCard = {},
   unusualCounts = [],
   unusualThreshold = 3,
 }: {
@@ -24,6 +29,7 @@ export function StockForm({
   initialPartId?: string;
   initialStoreId?: string;
   openJobCards?: OpenJobCards;
+  returnableByJobCard?: Record<string, ReturnableItems>;
   unusualCounts?: {
     partId: string;
     busId: string | null;
@@ -47,6 +53,27 @@ export function StockForm({
     initialPartId ? [initialPartId] : [],
   );
   const selectedCard = visibleCards.find((card) => card.id === jobCardId);
+  const returnableItems =
+    kind === "bus_return" && jobCardId
+      ? (returnableByJobCard[jobCardId] ?? [])
+      : [];
+  const returnableParts = returnableItems.map((item) => ({
+    id: item.partId,
+    sku: item.sku,
+    name: `${item.name} (avail ${item.available})`,
+    barcode: null as string | null,
+    categoryId: null as string | null,
+    categoryName: null as string | null,
+    categoryCode: null as string | null,
+    unit: item.unit,
+  }));
+  const maxQuantityByPartId =
+    kind === "bus_return"
+      ? Object.fromEntries(
+          returnableItems.map((item) => [item.partId, Number(item.available)]),
+        )
+      : undefined;
+  const lineParts = kind === "bus_return" ? returnableParts : options.parts;
   const unusualParts =
     kind === "issue" && selectedCard
       ? partIds.flatMap((partId) => {
@@ -167,17 +194,60 @@ export function StockForm({
           </p>
         ) : null}
       </div>
-      <StockLineItems
-        parts={options.parts}
-        initialPartId={initialPartId}
-        onLinesChange={(rows) => setPartIds(rows.map((row) => row.partId))}
-        lineErrors={actionData?.lineErrors}
-        cost={
-          kind === "receipt"
-            ? { name: "unitCost", label: "Unit cost (LKR)" }
-            : undefined
-        }
-      />
+      {kind === "bus_return" && jobCardId && returnableItems.length === 0 ? (
+        <p className="muted">
+          No returnable parts on this job card. Only posted issued quantities
+          that have not yet been returned can be selected.
+        </p>
+      ) : (
+        <StockLineItems
+          key={kind === "bus_return" ? jobCardId : "default"}
+          parts={lineParts}
+          initialPartId={
+            kind === "bus_return" &&
+            initialPartId &&
+            returnableItems.some((item) => item.partId === initialPartId)
+              ? initialPartId
+              : kind === "bus_return"
+                ? undefined
+                : initialPartId
+          }
+          onLinesChange={(rows) => setPartIds(rows.map((row) => row.partId))}
+          lineErrors={actionData?.lineErrors}
+          maxQuantityByPartId={maxQuantityByPartId}
+          cost={
+            kind === "receipt"
+              ? { name: "unitCost", label: "Unit cost (LKR)" }
+              : undefined
+          }
+        />
+      )}
+      {kind === "bus_return" && returnableItems.length > 0 ? (
+        <div className="table-wrap" style={{ marginBottom: "1rem" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Item</th>
+                <th>Issued</th>
+                <th>Returned</th>
+                <th>Available</th>
+              </tr>
+            </thead>
+            <tbody>
+              {returnableItems.map((item) => (
+                <tr key={item.partId}>
+                  <td className="mono">{item.sku}</td>
+                  <td>{item.name}</td>
+                  <td className="quantity">{item.issued}</td>
+                  <td className="quantity">{item.returned}</td>
+                  <td className="quantity">{item.available}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
       <label>
         Notes
         <textarea
@@ -207,7 +277,9 @@ export function StockForm({
           disabled={
             navigation.state !== "idle" ||
             (fleetKinds
-              ? visibleCards.length === 0 || !jobCardId
+              ? visibleCards.length === 0 ||
+                !jobCardId ||
+                (kind === "bus_return" && returnableItems.length === 0)
               : options.stores.length === 0)
           }
         >
@@ -216,7 +288,7 @@ export function StockForm({
               ? "Submitting…"
               : "Posting…"
             : kind === "issue"
-              ? "Submit for approval"
+              ? "Submit for verification"
               : kind === "bus_return"
                 ? "Post bus return"
                 : "Post stock receipt"}

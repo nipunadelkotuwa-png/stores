@@ -23,6 +23,7 @@ import {
   InsufficientStockError,
   inventoryActionError,
 } from "./errors";
+import { validateReturnableQuantities } from "./returnable";
 import {
   isStockDecrease,
   prepareStockCommand,
@@ -30,6 +31,7 @@ import {
 } from "./command";
 
 export { InsufficientStockError, inventoryActionError } from "./errors";
+export { validateReturnableQuantities } from "./returnable";
 export { prepareStockCommand } from "./command";
 export type { StockType } from "./command";
 
@@ -76,6 +78,52 @@ async function assertJobCardForIssue(
   if (card.busId !== command.busId) {
     throw new Error("Job card bus does not match the stock document");
   }
+}
+
+export async function getReturnableQuantitiesByPart(
+  tx: Transaction,
+  jobCardId: string,
+) {
+  const rows = await tx
+    .select({
+      partId: stockDocumentLines.partId,
+      issued: sql<string>`coalesce(sum(case when ${stockDocuments.type} = 'BUS_ISSUE' then ${stockDocumentLines.quantity}::numeric else 0 end), 0)`,
+      returned: sql<string>`coalesce(sum(case when ${stockDocuments.type} = 'BUS_RETURN' then ${stockDocumentLines.quantity}::numeric else 0 end), 0)`,
+    })
+    .from(stockDocumentLines)
+    .innerJoin(
+      stockDocuments,
+      eq(stockDocumentLines.documentId, stockDocuments.id),
+    )
+    .where(
+      and(
+        eq(stockDocuments.jobCardId, jobCardId),
+        eq(stockDocuments.status, "POSTED"),
+        inArray(stockDocuments.type, ["BUS_ISSUE", "BUS_RETURN"]),
+      ),
+    )
+    .groupBy(stockDocumentLines.partId);
+
+  const map = new Map<string, { issued: Decimal; returned: Decimal; available: Decimal }>();
+  for (const row of rows) {
+    const issued = new Decimal(row.issued);
+    const returned = new Decimal(row.returned);
+    const available = issued.minus(returned);
+    if (available.greaterThan(0)) {
+      map.set(row.partId, { issued, returned, available });
+    }
+  }
+  return map;
+}
+
+async function assertBusReturnWithinIssuedQuantity(
+  tx: Transaction,
+  jobCardId: string,
+  lines: PreparedCommand["lines"],
+) {
+  const returnable = await getReturnableQuantitiesByPart(tx, jobCardId);
+  const error = validateReturnableQuantities(returnable, lines);
+  if (error) throw new Error(error);
 }
 
 function documentNumberPrefix(
@@ -268,6 +316,13 @@ export async function postStockInTransaction(
     throw new Error("One or more parts are invalid");
   }
   await assertJobCardForIssue(tx, type, command);
+  if (type === "BUS_RETURN" && command.jobCardId) {
+    await assertBusReturnWithinIssuedQuantity(
+      tx,
+      command.jobCardId,
+      command.lines,
+    );
+  }
   const partById = new Map(partRows.map((part) => [part.id, part]));
   const number = await nextDocumentNumber(
     tx,
@@ -345,6 +400,11 @@ export async function postStockInTransaction(
 }
 
 export async function postStock(actor: Actor, type: StockType, input: unknown) {
+  if (type === "BUS_ISSUE") {
+    throw new Error(
+      "Bus issues must be submitted for verification. Use submitIssueForApproval.",
+    );
+  }
   const command = prepareStockCommand(type, input);
   await requireStoreAccess(actor, command.storeId);
   if (type === "ADJUSTMENT" && actor.role !== "ADMIN") {
@@ -720,8 +780,8 @@ export async function submitIssueForApproval(actor: Actor, input: unknown) {
     const { notifyAdmins } = await import("~/lib/notifications.server");
     void notifyAdmins({
       type: "ISSUE_PENDING",
-      title: "Bus issue awaiting approval",
-      body: `${result.number} needs approval.`,
+      title: "Item issue awaiting verification",
+      body: `${result.number} needs verification.`,
       href: `/receipts/${result.id}`,
     }).catch(() => undefined);
     invalidatePendingApprovalCountCache();
@@ -819,7 +879,7 @@ export async function approvePendingIssue(actor: Actor, documentId: string) {
       }
       await tx.insert(auditEvents).values({
         actorId: actor.id,
-        eventType: "ISSUE_APPROVED",
+        eventType: "ISSUE_VERIFIED",
         entityType: "stock_document",
         entityId: document.id,
         storeId: document.storeId,
@@ -840,8 +900,8 @@ export async function approvePendingIssue(actor: Actor, documentId: string) {
       () => undefined,
     );
     void notifyUser(result.createdBy, {
-      type: "ISSUE_APPROVED",
-      title: "Bus issue approved",
+      type: "ISSUE_VERIFIED",
+      title: "Item issue verified",
       body: `${result.number} has been posted.`,
       href: `/receipts/${result.id}`,
     }).catch(() => undefined);

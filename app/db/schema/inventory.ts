@@ -144,6 +144,10 @@ export const stockDocuments = pgTable(
       "dag_send_requires_supplier",
       sql`${table.type} <> 'TYRE_DAG_SEND' OR ${table.supplierId} IS NOT NULL`,
     ),
+    check(
+      "dag_receive_requires_link",
+      sql`${table.type} <> 'TYRE_DAG_RECEIVE' OR ${table.linkedDocumentId} IS NOT NULL`,
+    ),
   ],
 );
 

@@ -32,6 +32,7 @@ export function StockLineItems({
   cost,
   lineErrors,
   onLinesChange,
+  maxQuantityByPartId,
 }: {
   parts: PartOption[];
   initialPartId?: string;
@@ -42,6 +43,7 @@ export function StockLineItems({
   };
   lineErrors?: Record<number, string>;
   onLinesChange?: (lines: StockLineDraft[]) => void;
+  maxQuantityByPartId?: Record<string, number>;
 }) {
   const [lines, setLines] = useState<LineRow[]>(() => [
     {
@@ -115,6 +117,11 @@ export function StockLineItems({
                 name="quantity"
                 min="0.001"
                 step="0.001"
+                max={
+                  line.partId && maxQuantityByPartId?.[line.partId] != null
+                    ? maxQuantityByPartId[line.partId]
+                    : undefined
+                }
                 required={rowRequired}
                 value={line.quantity}
                 onChange={(event) =>

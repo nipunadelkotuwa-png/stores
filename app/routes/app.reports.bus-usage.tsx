@@ -1,14 +1,23 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPeriodFilter } from "~/components/report-period-filter";
+import { getEnv } from "~/config/env.server";
 import { getBusUsage } from "~/features/inventory/queries.server";
+import { resolveReportPeriod } from "~/features/reports/period";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.bus-usage";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  const start = url.searchParams.get("start") || undefined;
-  const end = url.searchParams.get("end") || undefined;
+  const range = resolveReportPeriod(url.searchParams, getEnv().APP_TIME_ZONE);
   const bus = url.searchParams.get("bus") || undefined;
-  return getBusUsage(await requireUser(request), { start, end, bus });
+  return {
+    ...(await getBusUsage(await requireUser(request), {
+      start: range.start,
+      end: range.end,
+      bus,
+    })),
+    range,
+  };
 }
 
 export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
@@ -39,41 +48,21 @@ export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
         className="form-panel panel no-print"
         style={{ marginBottom: "1.5rem" }}
       >
-        <div
-          className="form-grid"
-          style={{ gridTemplateColumns: "1fr 1fr 1fr auto", alignItems: "end" }}
+        <ReportPeriodFilter
+          period={loaderData.range.period}
+          start={params.get("start") || loaderData.range.start}
+          end={params.get("end") || loaderData.range.end}
         >
-          <div>
-            <label>Start Date</label>
-            <input
-              type="date"
-              name="start"
-              defaultValue={params.get("start") || ""}
-            />
-          </div>
-          <div>
-            <label>End Date</label>
-            <input
-              type="date"
-              name="end"
-              defaultValue={params.get("end") || ""}
-            />
-          </div>
-          <div>
-            <label>Bus Number</label>
+          <label>
+            Bus Number
             <input
               type="text"
               name="bus"
               placeholder="e.g. B-001"
               defaultValue={params.get("bus") || ""}
             />
-          </div>
-          <div>
-            <button type="submit" className="button button-primary">
-              Filter
-            </button>
-          </div>
-        </div>
+          </label>
+        </ReportPeriodFilter>
       </Form>
 
       {loaderData.truncated ? (

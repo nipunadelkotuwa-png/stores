@@ -9,7 +9,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const status = url.searchParams.get("status");
   return listJobCards(actor, {
     status:
-      status === "OPEN" || status === "CLOSED" || status === "CANCELLED"
+      status === "PENDING_APPROVAL" ||
+      status === "OPEN" ||
+      status === "REJECTED" ||
+      status === "CLOSED" ||
+      status === "CANCELLED"
         ? status
         : undefined,
     bus: url.searchParams.get("bus") || undefined,
@@ -59,7 +63,9 @@ export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
             Status
             <select name="status" defaultValue={params.get("status") || ""}>
               <option value="">All</option>
+              <option value="PENDING_APPROVAL">Pending approval</option>
               <option value="OPEN">Open</option>
+              <option value="REJECTED">Rejected</option>
               <option value="CLOSED">Closed</option>
               <option value="CANCELLED">Cancelled</option>
             </select>
@@ -136,9 +142,20 @@ export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
                     <td>{card.complaint}</td>
                     <td>
                       <span
-                        className={`badge ${card.status === "OPEN" ? "warning" : card.status === "CLOSED" ? "success" : ""}`}
+                        className={`badge ${
+                          card.status === "OPEN" ||
+                          card.status === "PENDING_APPROVAL"
+                            ? "warning"
+                            : card.status === "CLOSED"
+                              ? "success"
+                              : card.status === "REJECTED"
+                                ? "danger"
+                                : ""
+                        }`}
                       >
-                        {card.status}
+                        {card.status === "PENDING_APPROVAL"
+                          ? "Pending approval"
+                          : card.status}
                       </span>
                     </td>
                   </tr>

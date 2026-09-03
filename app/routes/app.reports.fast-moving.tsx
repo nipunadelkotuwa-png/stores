@@ -1,30 +1,27 @@
-import { Form, Link, useSubmit } from "react-router";
+import { Form, Link, useSearchParams } from "react-router";
+import { ReportPeriodFilter } from "~/components/report-period-filter";
+import { getEnv } from "~/config/env.server";
 import { getFastMovingParts } from "~/features/inventory/queries.server";
+import { resolveReportPeriod } from "~/features/reports/period";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.fast-moving";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-
-  // Default to last 30 days
-  const defaultEnd = new Date();
-  const defaultStart = new Date();
-  defaultStart.setDate(defaultEnd.getDate() - 30);
-
-  const startDate =
-    url.searchParams.get("startDate") ||
-    defaultStart.toISOString().slice(0, 10);
-  const endDate =
-    url.searchParams.get("endDate") || defaultEnd.toISOString().slice(0, 10);
-
+  const range = resolveReportPeriod(url.searchParams, getEnv().APP_TIME_ZONE, {
+    period: "last_30_days",
+  });
   const actor = await requireUser(request);
-  const rows = await getFastMovingParts(actor, startDate, endDate);
-
-  return { startDate, endDate, rows };
+  const rows = await getFastMovingParts(
+    actor,
+    range.start ?? "",
+    range.end ?? "",
+  );
+  return { range, rows };
 }
 
 export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
-  const submit = useSubmit();
+  const [params] = useSearchParams();
   return (
     <>
       <div className="page-heading no-print">
@@ -44,36 +41,19 @@ export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
       </div>
 
       <section className="panel no-print" style={{ marginBottom: "2rem" }}>
-        <Form method="get" onChange={(e) => submit(e.currentTarget)}>
-          <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-            <label
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-            >
-              <strong>Start Date:</strong>
-              <input
-                type="date"
-                name="startDate"
-                defaultValue={loaderData.startDate}
-              />
-            </label>
-            <label
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-            >
-              <strong>End Date:</strong>
-              <input
-                type="date"
-                name="endDate"
-                defaultValue={loaderData.endDate}
-              />
-            </label>
-          </div>
+        <Form method="get">
+          <ReportPeriodFilter
+            period={loaderData.range.period}
+            start={params.get("start") || loaderData.range.start}
+            end={params.get("end") || loaderData.range.end}
+          />
         </Form>
       </section>
 
       <section className="panel print-panel">
         <h2 className="only-print">
-          Fast Moving Items Report ({loaderData.startDate} to{" "}
-          {loaderData.endDate})
+          Fast Moving Items Report ({loaderData.range.start} to{" "}
+          {loaderData.range.end})
         </h2>
         <div className="table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>

@@ -232,6 +232,7 @@ const NAV_ICONS: Record<string, ReactNode> = {
   "/reports/fast-moving": <TrendIcon />,
   "/reports/bus-usage": <BusIcon />,
   "/reports/dag-out": <TransferIcon />,
+  "/reports/tyre-stock": <WrenchIcon />,
   "/reports/transfers": <TransferIcon />,
   "/reports/purchases": <StockIcon />,
   "/admin/users": <SettingsIcon />,

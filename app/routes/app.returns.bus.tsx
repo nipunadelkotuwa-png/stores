@@ -8,7 +8,10 @@ import {
   inventoryActionError,
   postStock,
 } from "~/features/inventory/posting.server";
-import { getTransactionOptions } from "~/features/inventory/queries.server";
+import {
+  getReturnableItemsByJobCard,
+  getTransactionOptions,
+} from "~/features/inventory/queries.server";
 import { listOpenJobCards } from "~/features/workshop/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
@@ -20,7 +23,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     getTransactionOptions(actor),
     listOpenJobCards(actor),
   ]);
-  return { options, openJobCards };
+  const returnableByJobCard = await getReturnableItemsByJobCard(
+    actor,
+    openJobCards.map((card) => card.id),
+  );
+  return { options, openJobCards, returnableByJobCard };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -59,8 +66,7 @@ export default function BusReturnPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Fleet usage</p>
           <h1>Bus Return</h1>
           <p className="muted">
-            Return unused parts or worn items from a bus against the open job
-            card.
+            Return only parts that were issued on the selected open job card.
           </p>
         </div>
       </div>
@@ -69,6 +75,7 @@ export default function BusReturnPage({ loaderData }: Route.ComponentProps) {
         kind="bus_return"
         actionData={actionData}
         openJobCards={loaderData.openJobCards}
+        returnableByJobCard={loaderData.returnableByJobCard}
       />
     </>
   );

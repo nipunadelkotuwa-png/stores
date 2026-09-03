@@ -41,9 +41,10 @@ export default function NewJobCardPage({ loaderData }: Route.ComponentProps) {
       <div className="page-heading">
         <div>
           <p className="eyebrow">Workshop</p>
-          <h1>Open job card</h1>
+          <h1>Create job card</h1>
           <p className="muted">
-            One open card per bus. Stock issues and returns must use this card.
+            Submit for operator approval. One active card per bus. Parts can be
+            issued only after approval.
           </p>
         </div>
       </div>
@@ -122,7 +123,9 @@ export default function NewJobCardPage({ loaderData }: Route.ComponentProps) {
               navigation.state !== "idle" || loaderData.stores.length === 0
             }
           >
-            {navigation.state === "submitting" ? "Opening…" : "Open job card"}
+            {navigation.state === "submitting"
+              ? "Submitting…"
+              : "Submit for approval"}
           </button>
         </div>
       </Form>

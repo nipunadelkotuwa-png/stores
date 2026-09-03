@@ -14,6 +14,7 @@ import {
   auditEvents,
   buses,
   inventoryBalances,
+  jobCards,
   localPurchases,
   partCategories,
   parts,
@@ -41,7 +42,6 @@ import {
 
 const REPORT_LIMIT = 250;
 import {
-  invalidatePendingApprovalCountCache,
   readCachedApprovalCount,
   writeCachedApprovalCount,
 } from "./approval-count-cache.server";
@@ -210,7 +210,12 @@ export async function getLowStock(actor: Actor) {
 
 export async function getMovements(
   actor: Actor,
-  filters?: { documentNumber?: string; purchaseNumber?: string },
+  filters?: {
+    documentNumber?: string;
+    purchaseNumber?: string;
+    start?: string;
+    end?: string;
+  },
 ) {
   const ids = await getAuthorizedStoreIds(actor);
   let documentNumber = filters?.documentNumber?.trim() || undefined;
@@ -248,6 +253,12 @@ export async function getMovements(
         scopedStoreCondition(stockMovements.storeId, ids),
         documentNumber
           ? eq(stockDocuments.documentNumber, documentNumber)
+          : undefined,
+        filters?.start
+          ? sql`${stockDocuments.businessDate} >= ${filters.start}`
+          : undefined,
+        filters?.end
+          ? sql`${stockDocuments.businessDate} <= ${filters.end}`
           : undefined,
       ),
     )
@@ -512,23 +523,36 @@ export async function getPendingIssues(actor: Actor) {
       date: stockDocuments.businessDate,
       store: stores.name,
       storeCode: stores.code,
+      storeId: stockDocuments.storeId,
       fleetNumber: buses.fleetNumber,
+      jobCardId: stockDocuments.jobCardId,
+      jobNumber: jobCards.jobNumber,
       createdBy: users.displayName,
       lastApprovalError: stockDocuments.lastApprovalError,
       lastApprovalAttemptedAt: stockDocuments.lastApprovalAttemptedAt,
+      partId: parts.id,
       sku: parts.sku,
       part: parts.name,
       quantity: stockDocumentLines.quantity,
+      onHand: sql<string>`coalesce(${inventoryBalances.onHand}, 0)`,
     })
     .from(stockDocuments)
     .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
     .innerJoin(users, eq(stockDocuments.createdBy, users.id))
     .leftJoin(buses, eq(stockDocuments.busId, buses.id))
+    .leftJoin(jobCards, eq(stockDocuments.jobCardId, jobCards.id))
     .innerJoin(
       stockDocumentLines,
       eq(stockDocumentLines.documentId, stockDocuments.id),
     )
     .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
+    .leftJoin(
+      inventoryBalances,
+      and(
+        eq(inventoryBalances.storeId, stockDocuments.storeId),
+        eq(inventoryBalances.partId, stockDocumentLines.partId),
+      ),
+    )
     .where(
       and(
         eq(stockDocuments.type, "BUS_ISSUE"),
@@ -547,7 +571,7 @@ export async function countPendingApprovals(actor: Actor) {
     return cached;
   }
 
-  const [row] = await db
+  const [issueRow] = await db
     .select({
       count: sql<number>`count(distinct ${stockDocuments.id})::int`,
     })
@@ -559,14 +583,96 @@ export async function countPendingApprovals(actor: Actor) {
         scopedStoreCondition(stockDocuments.storeId, ids),
       ),
     );
-  const value = Number(row?.count ?? 0);
+
+  const { countPendingJobCards } =
+    await import("~/features/workshop/queries.server");
+  const jobCardCount = await countPendingJobCards(actor);
+  const value = Number(issueRow?.count ?? 0) + jobCardCount;
   writeCachedApprovalCount(cacheKey, value);
   return value;
 }
 
+export async function getReturnableJobCardItems(
+  actor: Actor,
+  jobCardId: string,
+) {
+  const ids = await getAuthorizedStoreIds(actor);
+  const [card] = await db
+    .select({ id: jobCards.id, storeId: jobCards.storeId })
+    .from(jobCards)
+    .where(
+      and(eq(jobCards.id, jobCardId), scopedStoreCondition(jobCards.storeId, ids)),
+    )
+    .limit(1);
+  if (!card) return [];
+
+  const rows = await db
+    .select({
+      partId: stockDocumentLines.partId,
+      sku: parts.sku,
+      name: parts.name,
+      unit: parts.unit,
+      issued: sql<string>`coalesce(sum(case when ${stockDocuments.type} = 'BUS_ISSUE' then ${stockDocumentLines.quantity}::numeric else 0 end), 0)`,
+      returned: sql<string>`coalesce(sum(case when ${stockDocuments.type} = 'BUS_RETURN' then ${stockDocumentLines.quantity}::numeric else 0 end), 0)`,
+    })
+    .from(stockDocumentLines)
+    .innerJoin(
+      stockDocuments,
+      eq(stockDocumentLines.documentId, stockDocuments.id),
+    )
+    .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
+    .where(
+      and(
+        eq(stockDocuments.jobCardId, jobCardId),
+        eq(stockDocuments.status, "POSTED"),
+        inArray(stockDocuments.type, ["BUS_ISSUE", "BUS_RETURN"]),
+      ),
+    )
+    .groupBy(stockDocumentLines.partId, parts.sku, parts.name, parts.unit);
+
+  return rows
+    .map((row) => {
+      const issued = Number(row.issued);
+      const returned = Number(row.returned);
+      const available = issued - returned;
+      return {
+        partId: row.partId,
+        sku: row.sku,
+        name: row.name,
+        unit: row.unit,
+        issued: issued.toFixed(3),
+        returned: returned.toFixed(3),
+        available: available.toFixed(3),
+      };
+    })
+    .filter((row) => Number(row.available) > 0)
+    .sort((a, b) => a.sku.localeCompare(b.sku));
+}
+
+export async function getReturnableItemsByJobCard(
+  actor: Actor,
+  jobCardIds: string[],
+) {
+  const result: Record<
+    string,
+    Awaited<ReturnType<typeof getReturnableJobCardItems>>
+  > = {};
+  await Promise.all(
+    jobCardIds.map(async (id) => {
+      result[id] = await getReturnableJobCardItems(actor, id);
+    }),
+  );
+  return result;
+}
+
 export async function getItemUsage(
   actor: Actor,
-  filters?: { start?: string; end?: string; storeId?: string },
+  filters?: {
+    start?: string;
+    end?: string;
+    storeId?: string;
+    partId?: string;
+  },
 ) {
   const ids = await getAuthorizedStoreIds(actor);
   const rows = await db
@@ -599,6 +705,7 @@ export async function getItemUsage(
         filters?.storeId
           ? eq(stockDocuments.storeId, filters.storeId)
           : undefined,
+        filters?.partId ? eq(parts.id, filters.partId) : undefined,
       ),
     )
     .groupBy(parts.id, parts.sku, parts.name, parts.unit, stores.name)

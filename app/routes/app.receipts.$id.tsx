@@ -132,7 +132,7 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
 
         {doc.status === "PENDING_APPROVAL" ? (
           <p className="badge warning">
-            Awaiting approval — stock not deducted yet
+            Awaiting verification — stock not deducted yet
           </p>
         ) : null}
         {doc.status === "REJECTED" ? (
@@ -140,7 +140,7 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
         ) : null}
         {doc.lastApprovalAttemptedAt ? (
           <p className="muted">
-            Last approval attempt:{" "}
+            Last verification attempt:{" "}
             {new Date(doc.lastApprovalAttemptedAt).toLocaleString()}
           </p>
         ) : null}
@@ -150,7 +150,7 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
         {isAdmin &&
         (doc.status === "PENDING_APPROVAL" || doc.status === "REJECTED") ? (
           <p className="no-print">
-            <Link to="/approvals">Open approvals</Link>
+            <Link to="/approvals?tab=issues">Open Approvals Center</Link>
           </p>
         ) : null}
 

@@ -591,7 +591,7 @@ export function PosIssueCart({
             >
               {navigation.state === "submitting"
                 ? "Submitting…"
-                : "Submit for approval"}
+                : "Submit for verification"}
             </button>
           </Form>
         </section>

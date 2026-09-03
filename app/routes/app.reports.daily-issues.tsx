@@ -1,17 +1,30 @@
-import { Form, Link, useSubmit } from "react-router";
+import { Form, Link, useSearchParams } from "react-router";
+import { ReportPeriodFilter } from "~/components/report-period-filter";
+import { getEnv } from "~/config/env.server";
 import { getDailyIssues } from "~/features/inventory/queries.server";
+import { resolveReportPeriod } from "~/features/reports/period";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.daily-issues";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
+  const range = resolveReportPeriod(url.searchParams, getEnv().APP_TIME_ZONE, {
+    period: "today",
+  });
   const date =
-    url.searchParams.get("date") || new Date().toISOString().slice(0, 10);
-  return { date, rows: await getDailyIssues(await requireUser(request), date) };
+    url.searchParams.get("date") ||
+    range.end ||
+    range.start ||
+    new Date().toISOString().slice(0, 10);
+  return {
+    date,
+    range,
+    rows: await getDailyIssues(await requireUser(request), date),
+  };
 }
 
 export default function DailyIssuesPage({ loaderData }: Route.ComponentProps) {
-  const submit = useSubmit();
+  const [params] = useSearchParams();
   return (
     <>
       <div className="page-heading no-print">
@@ -29,11 +42,15 @@ export default function DailyIssuesPage({ loaderData }: Route.ComponentProps) {
         </button>
       </div>
       <section className="panel no-print" style={{ marginBottom: "1.5rem" }}>
-        <Form method="get" onChange={(event) => submit(event.currentTarget)}>
-          <label>
-            Date
-            <input type="date" name="date" defaultValue={loaderData.date} />
-          </label>
+        <Form method="get">
+          <ReportPeriodFilter
+            period={loaderData.range.period}
+            start={params.get("start") || loaderData.range.start}
+            end={params.get("end") || loaderData.range.end}
+          />
+          <p className="muted" style={{ marginTop: "0.75rem" }}>
+            Uses period end date: {loaderData.date}
+          </p>
         </Form>
       </section>
       <section className="panel">

@@ -58,6 +58,7 @@ export const reportNavConfig: NavItemConfig[] = [
   { to: "/reports/fast-moving", label: "Fast moving" },
   { to: "/reports/bus-usage", label: "Bus usage" },
   { to: "/reports/dag-out", label: "DAG out" },
+  { to: "/reports/tyre-stock", label: "Tyre stock" },
   { to: "/reports/transfers", label: "Transfers" },
   { to: "/reports/purchases", label: "Purchases" },
 ];

@@ -63,7 +63,7 @@ describe.runIf(hasDb)("inventory posting integration", () => {
       approvePendingIssue,
       submitIssueForApproval,
     } = await import("../../app/features/inventory/posting.server");
-    const { openJobCard } =
+    const { openJobCard, approveJobCard } =
       await import("../../app/features/workshop/job-cards.server");
 
     const [admin] = await db
@@ -85,7 +85,7 @@ describe.runIf(hasDb)("inventory posting integration", () => {
       .from(jobCards)
       .where(and(eq(jobCards.busId, bus!.id), eq(jobCards.status, "OPEN")))
       .limit(1);
-    const card =
+    let card =
       existingOpen ??
       (await openJobCard(admin!, {
         storeId: store!.id,
@@ -93,6 +93,10 @@ describe.runIf(hasDb)("inventory posting integration", () => {
         businessDate: "2026-08-17",
         complaint: `Pending issue ${crypto.randomUUID().slice(0, 8)}`,
       }));
+    if (!existingOpen) {
+      const approved = await approveJobCard(admin!, card.id);
+      card = { ...card, ...approved, busId: bus!.id };
+    }
 
     const pending = await submitIssueForApproval(admin!, {
       storeId: card.storeId,

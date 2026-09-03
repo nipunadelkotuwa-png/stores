@@ -1,4 +1,7 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPeriodFilter } from "~/components/report-period-filter";
+import { getEnv } from "~/config/env.server";
+import { resolveReportPeriod } from "~/features/reports/period";
 import { getDagOutSummary } from "~/features/workshop/queries.server";
 import {
   listStores,
@@ -10,17 +13,18 @@ import type { Route } from "./+types/app.reports.dag-out";
 export async function loader({ request }: Route.LoaderArgs) {
   const actor = await requireUser(request);
   const url = new URL(request.url);
+  const range = resolveReportPeriod(url.searchParams, getEnv().APP_TIME_ZONE);
   const [summary, suppliers, stores] = await Promise.all([
     getDagOutSummary(actor, {
       supplierId: url.searchParams.get("supplier") || undefined,
       storeId: url.searchParams.get("store") || undefined,
-      sentFrom: url.searchParams.get("start") || undefined,
-      sentTo: url.searchParams.get("end") || undefined,
+      sentFrom: range.start,
+      sentTo: range.end,
     }),
     listSuppliers(),
     listStores(),
   ]);
-  return { summary, suppliers, stores };
+  return { summary, suppliers, stores, range };
 }
 
 export default function DagOutReport({ loaderData }: Route.ComponentProps) {
@@ -47,12 +51,10 @@ export default function DagOutReport({ loaderData }: Route.ComponentProps) {
         className="form-panel panel no-print"
         style={{ marginBottom: "1.5rem" }}
       >
-        <div
-          className="form-grid"
-          style={{
-            gridTemplateColumns: "1fr 1fr 1fr 1fr auto",
-            alignItems: "end",
-          }}
+        <ReportPeriodFilter
+          period={loaderData.range.period}
+          start={params.get("start") || loaderData.range.start}
+          end={params.get("end") || loaderData.range.end}
         >
           <label>
             Supplier
@@ -76,24 +78,7 @@ export default function DagOutReport({ loaderData }: Route.ComponentProps) {
               ))}
             </select>
           </label>
-          <label>
-            Sent from
-            <input
-              type="date"
-              name="start"
-              defaultValue={params.get("start") || ""}
-            />
-          </label>
-          <label>
-            Sent to
-            <input
-              type="date"
-              name="end"
-              defaultValue={params.get("end") || ""}
-            />
-          </label>
-          <button className="button button-secondary">Filter</button>
-        </div>
+        </ReportPeriodFilter>
       </Form>
       <p className="muted">Total at DAG: {loaderData.summary.total}</p>
       {loaderData.summary.groups.map((group) => (

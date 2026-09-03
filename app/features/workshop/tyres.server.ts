@@ -1,16 +1,19 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { data } from "react-router";
 
 import { db } from "~/db/client.server";
 import {
   auditEvents,
   inventoryBalances,
   parts,
+  stockDocuments,
   tyreEvents,
   tyres,
 } from "~/db/schema";
 import type { Actor } from "~/lib/auth/authorization.server";
 import { requireStoreAccess } from "~/lib/auth/authorization.server";
 import {
+  getReturnableQuantitiesByPart,
   postStockInTransaction,
   prepareStockCommand,
   type Transaction,
@@ -23,13 +26,16 @@ import {
   fitTyreSchema,
   receiveTyreFromDagSchema,
   registerTyreSchema,
+  rejectTyreAtDagSchema,
   sendTyreToDagSchema,
 } from "./schemas";
 import {
   canSendToDag,
   isOperableInStore,
+  nextDagStage,
   skuMatchesLifecycleStage,
 } from "./tyre-lifecycle";
+import type { TyreLifecycleStage } from "./constants";
 
 async function inStoreCount(tx: Transaction, storeId: string, partId: string) {
   const [row] = await tx
@@ -141,21 +147,29 @@ export async function fitOrReplaceTyre(actor: Actor, input: unknown) {
 
     let removedDocumentId: string | undefined;
     if (occupant) {
-      const returned = await postStockInTransaction(
-        tx,
-        actor,
-        "BUS_RETURN",
-        prepareStockCommand("BUS_RETURN", {
-          storeId: card.storeId,
-          busId: card.busId,
-          jobCardId: card.id,
-          businessDate: card.businessDate,
-          notes: `Tyre ${occupant.serialNumber} removed from ${command.position}`,
-          idempotencyKey: `${command.idempotencyKey}-remove`,
-          lines: [{ partId: occupant.partId, quantity: "1" }],
-        }),
-      );
-      removedDocumentId = returned.id;
+      const returnable = await getReturnableQuantitiesByPart(tx, card.id);
+      const available = returnable.get(occupant.partId)?.available;
+      const canReturnStock =
+        available != null && available.greaterThanOrEqualTo(1);
+
+      if (canReturnStock) {
+        const returned = await postStockInTransaction(
+          tx,
+          actor,
+          "BUS_RETURN",
+          prepareStockCommand("BUS_RETURN", {
+            storeId: card.storeId,
+            busId: card.busId,
+            jobCardId: card.id,
+            businessDate: card.businessDate,
+            notes: `Tyre ${occupant.serialNumber} removed from ${command.position}`,
+            idempotencyKey: `${command.idempotencyKey}-remove`,
+            lines: [{ partId: occupant.partId, quantity: "1" }],
+          }),
+        );
+        removedDocumentId = returned.id;
+      }
+
       await tx
         .update(tyres)
         .set({
@@ -169,12 +183,15 @@ export async function fitOrReplaceTyre(actor: Actor, input: unknown) {
         tyreId: occupant.id,
         type: "REMOVE",
         jobCardId: card.id,
-        stockDocumentId: returned.id,
+        stockDocumentId: removedDocumentId || null,
         storeId: card.storeId,
         busId: card.busId,
         fromPosition: command.position,
         fromStage: occupant.lifecycleStage,
         odometerKm: card.odometerKm,
+        notes: canReturnStock
+          ? null
+          : "Serial returned to warehouse; stock already returned on this job card",
         createdBy: actor.id,
       });
     }
@@ -251,7 +268,11 @@ export async function sendTyreToDag(actor: Actor, input: unknown) {
       throw new WorkshopError("Tyre must be in store stock to send to DAG");
     }
     if (!canSendToDag(tyre.lifecycleStage)) {
-      throw new WorkshopError("Scrapped tyres cannot be sent to DAG");
+      throw new WorkshopError(
+        tyre.lifecycleStage === "DAG3"
+          ? "DAG3 tyres cannot be sent for another DAG cycle"
+          : "This tyre stage cannot be sent to DAG",
+      );
     }
     await requireStoreAccess(actor, tyre.storeId);
 
@@ -312,6 +333,45 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
     }
     await requireStoreAccess(actor, tyre.storeId);
 
+    const toStage = nextDagStage(tyre.lifecycleStage as TyreLifecycleStage);
+
+    const [sendEvent] = await tx
+      .select({
+        stockDocumentId: tyreEvents.stockDocumentId,
+      })
+      .from(tyreEvents)
+      .where(
+        and(eq(tyreEvents.tyreId, tyre.id), eq(tyreEvents.type, "SEND_DAG")),
+      )
+      .orderBy(desc(tyreEvents.occurredAt))
+      .limit(1);
+    if (!sendEvent?.stockDocumentId) {
+      throw new WorkshopError("Original DAG send document not found");
+    }
+
+    const [sendDoc] = await tx
+      .select({
+        id: stockDocuments.id,
+        supplierId: stockDocuments.supplierId,
+        documentNumber: stockDocuments.documentNumber,
+        type: stockDocuments.type,
+      })
+      .from(stockDocuments)
+      .where(eq(stockDocuments.id, sendEvent.stockDocumentId))
+      .limit(1);
+    if (!sendDoc || sendDoc.type !== "TYRE_DAG_SEND") {
+      throw new WorkshopError("Original DAG send document is invalid");
+    }
+
+    const [existingReceive] = await tx
+      .select({ id: stockDocuments.id })
+      .from(stockDocuments)
+      .where(eq(stockDocuments.linkedDocumentId, sendDoc.id))
+      .limit(1);
+    if (existingReceive) {
+      throw new WorkshopError("This DAG send has already been received");
+    }
+
     await requirePartCategory(tx, command.targetPartId, "TYRE");
     const [targetPart] = await tx
       .select({ sku: parts.sku })
@@ -319,9 +379,9 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
       .where(eq(parts.id, command.targetPartId))
       .limit(1);
     if (!targetPart) throw new WorkshopError("Target tyre SKU not found");
-    if (!skuMatchesLifecycleStage(targetPart.sku, command.toStage)) {
+    if (!skuMatchesLifecycleStage(targetPart.sku, toStage)) {
       throw new WorkshopError(
-        `SKU ${targetPart.sku} does not match return stage ${command.toStage}`,
+        `SKU ${targetPart.sku} does not match return stage ${toStage}`,
       );
     }
 
@@ -331,8 +391,10 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
       "TYRE_DAG_RECEIVE",
       prepareStockCommand("TYRE_DAG_RECEIVE", {
         storeId: tyre.storeId,
+        supplierId: sendDoc.supplierId,
+        linkedDocumentId: sendDoc.id,
         businessDate: command.businessDate,
-        reason: `DAG return ${tyre.serialNumber} as ${command.toStage}`,
+        reason: `DAG return ${tyre.serialNumber} as ${toStage}`,
         notes: command.notes,
         idempotencyKey: command.idempotencyKey,
         lines: [{ partId: command.targetPartId, quantity: "1" }],
@@ -344,7 +406,7 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
       .set({
         status: "IN_STORE",
         partId: command.targetPartId,
-        lifecycleStage: command.toStage,
+        lifecycleStage: toStage,
       })
       .where(eq(tyres.id, tyre.id));
 
@@ -354,7 +416,7 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
       stockDocumentId: posted.id,
       storeId: tyre.storeId,
       fromStage: tyre.lifecycleStage,
-      toStage: command.toStage,
+      toStage,
       notes: command.notes || null,
       createdBy: actor.id,
     });
@@ -366,11 +428,82 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
       storeId: tyre.storeId,
       metadata: {
         serialNumber: tyre.serialNumber,
-        stage: command.toStage,
+        fromStage: tyre.lifecycleStage,
+        toStage,
         documentId: posted.id,
+        linkedDocumentId: sendDoc.id,
+        sendDocumentNumber: sendDoc.documentNumber,
       },
     });
-    return { id: tyre.id, documentId: posted.id, stage: command.toStage };
+    return { id: tyre.id, documentId: posted.id, stage: toStage };
+  });
+}
+
+export async function rejectTyreAtDag(actor: Actor, input: unknown) {
+  if (actor.role !== "ADMIN") {
+    throw data(
+      { message: "Only administrators can reject a tyre at DAG." },
+      { status: 403 },
+    );
+  }
+  const command = rejectTyreAtDagSchema.parse(input);
+
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+    const [tyre] = await tx
+      .select()
+      .from(tyres)
+      .where(eq(tyres.id, command.tyreId))
+      .limit(1);
+    if (!tyre) throw new WorkshopError("Tyre not found");
+    if (tyre.status !== "AT_DAG") {
+      throw new WorkshopError("Tyre must be at DAG to record a supplier reject");
+    }
+
+    const [sendEvent] = await tx
+      .select({
+        stockDocumentId: tyreEvents.stockDocumentId,
+      })
+      .from(tyreEvents)
+      .where(
+        and(eq(tyreEvents.tyreId, tyre.id), eq(tyreEvents.type, "SEND_DAG")),
+      )
+      .orderBy(desc(tyreEvents.occurredAt))
+      .limit(1);
+
+    await tx
+      .update(tyres)
+      .set({
+        status: "DISPOSED",
+        currentBusId: null,
+        currentPosition: null,
+      })
+      .where(eq(tyres.id, tyre.id));
+
+    await tx.insert(tyreEvents).values({
+      tyreId: tyre.id,
+      type: "DAG_REJECTED",
+      stockDocumentId: sendEvent?.stockDocumentId || null,
+      storeId: tyre.storeId,
+      fromStage: tyre.lifecycleStage,
+      toStage: tyre.lifecycleStage,
+      notes: [command.reason, command.notes].filter(Boolean).join(" — "),
+      createdBy: actor.id,
+    });
+    await tx.insert(auditEvents).values({
+      actorId: actor.id,
+      eventType: "TYRE_DAG_REJECTED",
+      entityType: "tyre",
+      entityId: tyre.id,
+      storeId: tyre.storeId,
+      metadata: {
+        serialNumber: tyre.serialNumber,
+        stage: tyre.lifecycleStage,
+        reason: command.reason,
+        sendDocumentId: sendEvent?.stockDocumentId,
+      },
+    });
+    return { id: tyre.id };
   });
 }
 

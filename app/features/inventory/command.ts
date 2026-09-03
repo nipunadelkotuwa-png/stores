@@ -45,6 +45,9 @@ export function prepareStockCommand(type: StockType, input: unknown) {
   if (type === "TYRE_DAG_SEND" && !command.supplierId) {
     throw new Error("A DAG supplier is required");
   }
+  if (type === "TYRE_DAG_RECEIVE" && !command.linkedDocumentId) {
+    throw new Error("DAG receive must link to the original DAG send document");
+  }
   if (type === "TRANSFER_OUT") {
     if (!command.destinationStoreId) {
       throw new Error("Destination store is required for a transfer");
