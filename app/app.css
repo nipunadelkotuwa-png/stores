@@ -279,6 +279,30 @@ textarea {
   transform: none;
   box-shadow: none;
 }
+.table-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 11rem;
+}
+.table-action-form {
+  display: grid;
+  gap: 0.3rem;
+}
+.table-action-form input:not([type="checkbox"]):not([type="hidden"]) {
+  width: 100%;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
 
 .skip-link {
   position: absolute;

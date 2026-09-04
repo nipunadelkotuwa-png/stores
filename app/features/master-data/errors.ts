@@ -1,5 +1,7 @@
 /** Shared helpers for master-data create/update actions. */
 
+import { BusLifecycleError } from "./bus-lifecycle";
+
 export function isUniqueViolation(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code =
@@ -19,6 +21,7 @@ export function masterDataActionError(
   duplicateMessage: string,
   fallback: string,
 ): string {
+  if (error instanceof BusLifecycleError) return error.message;
   if (isUniqueViolation(error)) return duplicateMessage;
   if (error instanceof Error && error.message.startsWith("Failed query:")) {
     return fallback;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BusLifecycleError } from "../../app/features/master-data/bus-lifecycle";
 import { masterDataActionError } from "../../app/features/master-data/errors";
 
 describe("masterDataActionError", () => {
@@ -20,5 +21,15 @@ describe("masterDataActionError", () => {
         "Unable to add part.",
       ),
     ).toBe("Unable to add part.");
+  });
+
+  it("surfaces bus lifecycle errors", () => {
+    expect(
+      masterDataActionError(
+        new BusLifecycleError("This bus has 1 unresolved job card."),
+        "Already exists.",
+        "Fallback",
+      ),
+    ).toBe("This bus has 1 unresolved job card.");
   });
 });

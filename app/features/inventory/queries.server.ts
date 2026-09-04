@@ -1,13 +1,4 @@
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  inArray,
-  lt,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "~/db/client.server";
 import {
@@ -71,7 +62,7 @@ export async function getTransactionOptions(actor: Actor) {
     db
       .select()
       .from(buses)
-      .where(eq(buses.active, true))
+      .where(and(eq(buses.active, true), eq(buses.status, "ACTIVE")))
       .orderBy(asc(buses.fleetNumber)),
     db
       .select()
@@ -601,7 +592,10 @@ export async function getReturnableJobCardItems(
     .select({ id: jobCards.id, storeId: jobCards.storeId })
     .from(jobCards)
     .where(
-      and(eq(jobCards.id, jobCardId), scopedStoreCondition(jobCards.storeId, ids)),
+      and(
+        eq(jobCards.id, jobCardId),
+        scopedStoreCondition(jobCards.storeId, ids),
+      ),
     )
     .limit(1);
   if (!card) return [];

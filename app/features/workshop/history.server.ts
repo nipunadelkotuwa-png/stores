@@ -30,6 +30,8 @@ export async function getBusHistory(actor: Actor, busId: string) {
       model: buses.model,
       status: buses.status,
       active: buses.active,
+      soldAt: buses.soldAt,
+      soldReason: buses.soldReason,
     })
     .from(buses)
     .where(eq(buses.id, busId))

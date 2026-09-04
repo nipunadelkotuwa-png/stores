@@ -3,15 +3,19 @@ import {
   boolean,
   index,
   numeric,
+  pgEnum,
   pgTable,
   primaryKey,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { stores } from "./auth";
+import { stores, users } from "./auth";
 import { idColumn, timestamps } from "./common";
+
+export const busStatus = pgEnum("bus_status", ["ACTIVE", "INACTIVE", "SOLD"]);
 
 export const partCategories = pgTable("part_categories", {
   id: idColumn(),
@@ -71,9 +75,12 @@ export const buses = pgTable(
     registrationNumber: text("registration_number"),
     make: text("make"),
     model: text("model"),
-    status: text("status").default("ACTIVE").notNull(),
+    status: busStatus("status").default("ACTIVE").notNull(),
     homeStoreId: uuid("home_store_id").references(() => stores.id),
     active: boolean("active").default(true).notNull(),
+    soldAt: timestamp("sold_at", { withTimezone: true }),
+    soldReason: text("sold_reason"),
+    soldByUserId: uuid("sold_by_user_id").references(() => users.id),
     ...timestamps,
   },
   (table) => [

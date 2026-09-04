@@ -316,12 +316,7 @@ export async function listTyres(
           ? eq(
               tyres.lifecycleStage,
               filters.stage as
-                | "ORG"
-                | "DAG1"
-                | "DAG2"
-                | "DAG3"
-                | "REBUILD"
-                | "SCRAP",
+                "ORG" | "DAG1" | "DAG2" | "DAG3" | "REBUILD" | "SCRAP",
             )
           : undefined,
         filters?.serial
@@ -445,10 +440,7 @@ export async function getTyreDetail(actor: Actor, tyreId: string) {
     .from(tyreEvents)
     .leftJoin(stores, eq(tyreEvents.storeId, stores.id))
     .leftJoin(buses, eq(tyreEvents.busId, buses.id))
-    .leftJoin(
-      stockDocuments,
-      eq(tyreEvents.stockDocumentId, stockDocuments.id),
-    )
+    .leftJoin(stockDocuments, eq(tyreEvents.stockDocumentId, stockDocuments.id))
     .innerJoin(users, eq(tyreEvents.createdBy, users.id))
     .where(eq(tyreEvents.tyreId, tyreId))
     .orderBy(asc(tyreEvents.occurredAt));
@@ -577,7 +569,7 @@ export async function getJobCardFormOptions(actor: Actor) {
         registrationNumber: buses.registrationNumber,
       })
       .from(buses)
-      .where(eq(buses.active, true))
+      .where(and(eq(buses.active, true), eq(buses.status, "ACTIVE")))
       .orderBy(asc(buses.fleetNumber)),
   ]);
   return { stores: storeRows, buses: busRows };
@@ -710,12 +702,7 @@ export async function getTyreStockReport(
           ? eq(
               tyres.lifecycleStage,
               filters.stage as
-                | "ORG"
-                | "DAG1"
-                | "DAG2"
-                | "DAG3"
-                | "REBUILD"
-                | "SCRAP",
+                "ORG" | "DAG1" | "DAG2" | "DAG3" | "REBUILD" | "SCRAP",
             )
           : undefined,
         filters?.storeId ? eq(tyres.storeId, filters.storeId) : undefined,

@@ -1,5 +1,6 @@
 import { data, Link } from "react-router";
 import { TyreMap } from "~/components/tyre-map";
+import { busStatusLabel } from "~/features/master-data/bus-lifecycle";
 import { getBusHistory } from "~/features/workshop/history.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.buses.$id";
@@ -26,19 +27,27 @@ export default function BusHistoryPage({ loaderData }: Route.ComponentProps) {
           </h1>
           <p className="muted">
             {[bus.make, bus.model].filter(Boolean).join(" ") || "Fleet bus"} ·{" "}
-            {bus.active ? "Active" : "Inactive"}
+            {busStatusLabel(bus.status)}
+            {bus.status === "SOLD" && bus.soldAt
+              ? ` · ${new Date(bus.soldAt).toLocaleDateString()}`
+              : ""}
+            {bus.status === "SOLD" && bus.soldReason
+              ? ` · ${bus.soldReason}`
+              : ""}
           </p>
         </div>
         <div className="heading-actions">
           <Link className="button button-secondary" to="/buses">
             All buses
           </Link>
-          <Link
-            className="button button-primary"
-            to={`/job-cards/new?bus=${bus.id}`}
-          >
-            Open job card
-          </Link>
+          {bus.status === "ACTIVE" ? (
+            <Link
+              className="button button-primary"
+              to={`/job-cards/new?bus=${bus.id}`}
+            >
+              Open job card
+            </Link>
+          ) : null}
         </div>
       </div>
 

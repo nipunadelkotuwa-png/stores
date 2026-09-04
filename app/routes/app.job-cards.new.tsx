@@ -10,10 +10,15 @@ import type { Route } from "./+types/app.job-cards.new";
 export async function loader({ request }: Route.LoaderArgs) {
   const actor = await requireUser(request);
   const url = new URL(request.url);
+  const options = await getJobCardFormOptions(actor);
+  const requestedBusId = url.searchParams.get("bus") || "";
+  const initialBusId = options.buses.some((bus) => bus.id === requestedBusId)
+    ? requestedBusId
+    : "";
   return {
-    ...(await getJobCardFormOptions(actor)),
+    ...options,
     initialStoreId: url.searchParams.get("store") || "",
-    initialBusId: url.searchParams.get("bus") || "",
+    initialBusId,
     partId: url.searchParams.get("part") || "",
   };
 }

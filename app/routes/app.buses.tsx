@@ -1,9 +1,18 @@
-import { eq } from "drizzle-orm";
 import { Form, Link, useActionData, useNavigation } from "react-router";
 import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
 import { db } from "~/db/client.server";
 import { buses } from "~/db/schema";
+import {
+  busStatusBadgeClass,
+  busStatusLabel,
+} from "~/features/master-data/bus-lifecycle";
+import {
+  activateBus,
+  deactivateBus,
+  markBusSold,
+  restoreSoldBus,
+} from "~/features/master-data/buses.server";
 import { masterDataActionError } from "~/features/master-data/errors";
 import { listBuses } from "~/features/master-data/queries.server";
 import { requireAdmin, requireUser } from "~/lib/auth/authorization.server";
@@ -16,25 +25,37 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireAdmin(request);
+  const actor = await requireAdmin(request);
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "create");
+  const id = String(formData.get("id") ?? "");
 
-  if (intent === "toggle") {
-    const id = String(formData.get("id") ?? "");
-    const active = formData.get("active") === "true";
-    if (!z.string().uuid().safeParse(id).success) {
-      return { error: "Invalid bus." };
+  try {
+    if (intent === "deactivate") {
+      await deactivateBus(actor, id);
+      return { ok: true };
     }
-    await db
-      .update(buses)
-      .set({
-        active: !active,
-        status: active ? "INACTIVE" : "ACTIVE",
-      })
-      .where(eq(buses.id, id));
-    return { ok: true };
+    if (intent === "activate") {
+      await activateBus(actor, id);
+      return { ok: true };
+    }
+    if (intent === "mark-sold") {
+      await markBusSold(actor, id, String(formData.get("soldReason") ?? ""));
+      return { ok: true };
+    }
+    if (intent === "restore") {
+      await restoreSoldBus(actor, id, formData.get("confirm") === "true");
+      return { ok: true };
+    }
+  } catch (error) {
+    return {
+      error: masterDataActionError(
+        error,
+        "Invalid bus.",
+        "Unable to update bus.",
+      ),
+    };
   }
 
   const parsed = z
@@ -73,8 +94,8 @@ export default function BusesPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Fleet</p>
           <h1>Buses</h1>
           <p className="muted">
-            Every stock issue is attributable to a fleet vehicle. Open a bus for
-            job cards, tyre map, oil, and history.
+            Deactivate a bus that is temporarily out of service. Mark as sold
+            when it leaves the fleet so it cannot be used on new job cards.
           </p>
         </div>
       </div>
@@ -105,25 +126,75 @@ export default function BusesPage({ loaderData }: Route.ComponentProps) {
                       {[bus.make, bus.model].filter(Boolean).join(" ") || "—"}
                     </td>
                     <td>
-                      <span className={`badge ${bus.active ? "success" : ""}`}>
-                        {bus.active ? "Active" : "Inactive"}
+                      <span className={busStatusBadgeClass(bus.status)}>
+                        {busStatusLabel(bus.status)}
                       </span>
                     </td>
                     {loaderData.canManage ? (
                       <td>
-                        <Form method="post">
-                          <CsrfField />
-                          <input type="hidden" name="intent" value="toggle" />
-                          <input type="hidden" name="id" value={bus.id} />
-                          <input
-                            type="hidden"
-                            name="active"
-                            value={String(bus.active)}
-                          />
-                          <button className="text-button" type="submit">
-                            {bus.active ? "Deactivate" : "Activate"}
-                          </button>
-                        </Form>
+                        <div className="table-actions">
+                          {bus.status === "SOLD" ? (
+                            <Form method="post" className="table-action-form">
+                              <CsrfField />
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="restore"
+                              />
+                              <input type="hidden" name="id" value={bus.id} />
+                              <label className="checkbox-label">
+                                <input
+                                  type="checkbox"
+                                  name="confirm"
+                                  value="true"
+                                  required
+                                />
+                                Confirm restore
+                              </label>
+                              <button className="text-button" type="submit">
+                                Restore to fleet
+                              </button>
+                            </Form>
+                          ) : (
+                            <>
+                              <Form method="post">
+                                <CsrfField />
+                                <input
+                                  type="hidden"
+                                  name="intent"
+                                  value={
+                                    bus.status === "ACTIVE"
+                                      ? "deactivate"
+                                      : "activate"
+                                  }
+                                />
+                                <input type="hidden" name="id" value={bus.id} />
+                                <button className="text-button" type="submit">
+                                  {bus.status === "ACTIVE"
+                                    ? "Deactivate"
+                                    : "Activate"}
+                                </button>
+                              </Form>
+                              <Form method="post" className="table-action-form">
+                                <CsrfField />
+                                <input
+                                  type="hidden"
+                                  name="intent"
+                                  value="mark-sold"
+                                />
+                                <input type="hidden" name="id" value={bus.id} />
+                                <input
+                                  name="soldReason"
+                                  placeholder="Sale reason (optional)"
+                                  aria-label={`Sale reason for ${bus.fleetNumber}`}
+                                />
+                                <button className="text-button" type="submit">
+                                  Mark as Sold
+                                </button>
+                              </Form>
+                            </>
+                          )}
+                        </div>
                       </td>
                     ) : null}
                   </tr>

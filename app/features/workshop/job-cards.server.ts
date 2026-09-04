@@ -16,6 +16,7 @@ import type { Actor } from "~/lib/auth/authorization.server";
 import { requireStoreAccess } from "~/lib/auth/authorization.server";
 import type { Transaction } from "~/features/inventory/posting.server";
 import { invalidatePendingApprovalCountCache } from "~/features/inventory/approval-count-cache.server";
+import { busUnavailableForJobCardMessage } from "~/features/master-data/bus-lifecycle";
 import { WorkshopError } from "./errors";
 import {
   closeJobCardSchema,
@@ -103,11 +104,17 @@ export async function openJobCard(actor: Actor, input: unknown) {
   await requireStoreAccess(actor, command.storeId);
 
   const [bus] = await db
-    .select({ id: buses.id, active: buses.active })
+    .select({ id: buses.id, active: buses.active, status: buses.status })
     .from(buses)
     .where(eq(buses.id, command.busId))
     .limit(1);
-  if (!bus || !bus.active) throw new WorkshopError("Bus is not available");
+  const unavailable = busUnavailableForJobCardMessage(
+    bus?.status,
+    bus?.active ?? false,
+  );
+  if (!bus || unavailable) {
+    throw new WorkshopError(unavailable ?? "Bus is not available");
+  }
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
@@ -193,10 +200,7 @@ export async function approveJobCard(actor: Actor, jobCardId: string) {
         approvedAt: new Date(),
       })
       .where(
-        and(
-          eq(jobCards.id, card.id),
-          eq(jobCards.status, "PENDING_APPROVAL"),
-        ),
+        and(eq(jobCards.id, card.id), eq(jobCards.status, "PENDING_APPROVAL")),
       )
       .returning({
         id: jobCards.id,
@@ -248,10 +252,7 @@ export async function rejectJobCard(actor: Actor, input: unknown) {
         rejectionReason: command.reason,
       })
       .where(
-        and(
-          eq(jobCards.id, card.id),
-          eq(jobCards.status, "PENDING_APPROVAL"),
-        ),
+        and(eq(jobCards.id, card.id), eq(jobCards.status, "PENDING_APPROVAL")),
       )
       .returning({
         id: jobCards.id,
