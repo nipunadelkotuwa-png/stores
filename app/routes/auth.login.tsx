@@ -75,12 +75,20 @@ export default function Login() {
   const location = useLocation();
   return (
     <main className="auth-page">
+      <aside className="auth-rail" aria-hidden="true">
+        <div>
+          <div className="auth-rail-mark">DG</div>
+          <h2>Store desk</h2>
+          <p>Issue, receive, and count spare parts for the stores you are assigned.</p>
+        </div>
+        <p className="auth-rail-meta">DS Gunasekara Group</p>
+      </aside>
       <section className="auth-card">
         <div className="brand-mark">DG</div>
         <p className="eyebrow">DS Gunasekara Group</p>
-        <h1>Store Management</h1>
+        <h1>Sign in</h1>
         <p className="muted">
-          Sign in to manage spare-parts inventory across your assigned stores.
+          Open the store desk for your assigned locations.
         </p>
         <Form method="post" className="stack-lg">
           <input

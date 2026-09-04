@@ -1,0 +1,32 @@
+{
+  "scannedAt": "2026-09-05",
+  "designMd": false,
+  "fontStack": {
+    "display": "Outfit",
+    "body": "Outfit",
+    "source": "app/root.tsx Google Fonts + app/app.css --font-sans"
+  },
+  "palette": {
+    "format": "hex custom properties",
+    "source": "app/app.css :root",
+    "tokens": [
+      "--ink",
+      "--muted",
+      "--line",
+      "--surface",
+      "--forest",
+      "--primary",
+      "--amber",
+      "--red"
+    ]
+  },
+  "motion": {
+    "stance": "motion-cut",
+    "libraries": [],
+    "notes": "CSS-only transitions and keyframes in app/app.css; bounce/overshoot easing via --ease-spring"
+  },
+  "spacing": {
+    "system": "ad-hoc rem values, no named 4pt scale"
+  },
+  "framework": "React Router 8 Framework Mode + Tailwind 4 + TypeScript"
+}

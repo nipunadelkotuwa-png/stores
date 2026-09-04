@@ -77,7 +77,7 @@ export default function ChangePassword({ loaderData }: Route.ComponentProps) {
             disabled={navigation.state !== "idle"}
           >
             {navigation.state === "submitting"
-              ? "Updating..."
+              ? "Updating…"
               : "Update password"}
           </button>
         </Form>

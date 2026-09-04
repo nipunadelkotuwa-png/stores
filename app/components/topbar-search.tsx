@@ -56,7 +56,7 @@ export function TopbarSearch({ mode }: { mode: DashboardMode }) {
           }}
         />
         <kbd className="topbar-search-hint" aria-hidden="true">
-          Ctrl K
+          ⌘K
         </kbd>
       </label>
       <button

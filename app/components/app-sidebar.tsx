@@ -501,7 +501,7 @@ export function AppSidebar({
             <div className="brand-mark small brand-mark-so">SO</div>
             <div className="sidebar-brand-copy">
               <strong>StoreOps</strong>
-              <span>Inventory control</span>
+              <span>Store desk</span>
             </div>
           </Link>
           <button
