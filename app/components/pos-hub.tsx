@@ -5,6 +5,7 @@ import {
   resetHiddenQuickActions,
   writeHiddenQuickActions,
 } from "~/lib/pos-hub-preferences";
+import { greetingName } from "~/lib/display-name";
 
 type LowStockRow = {
   storeId: string;
@@ -103,7 +104,9 @@ const quickActions = [
 
 function formatTime(iso: Date | null) {
   if (!iso) return "—";
-  return iso.toLocaleTimeString("en-US", {
+  return iso.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
     hour: "numeric",
     minute: "2-digit",
   });
@@ -271,7 +274,7 @@ function actionIcon(title: string) {
 
 export function PosHub({ userName, canManage, data }: PosHubProps) {
   const lowStockCount = data.lowStock.length;
-  const firstName = userName.split(/\s+/)[0] ?? userName;
+  const firstName = greetingName(userName);
   const [customizing, setCustomizing] = useState(false);
   const [hiddenActions, setHiddenActions] = useState<string[]>([]);
 

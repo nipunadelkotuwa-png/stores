@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "~/db/client.server";
 import {
   buses,
@@ -9,6 +9,11 @@ import {
   users,
   userStoreAssignments,
 } from "~/db/schema";
+import {
+  getAuthorizedStoreIds,
+  scopedStoreCondition,
+  type Actor,
+} from "~/lib/auth/authorization.server";
 
 export const listParts = () =>
   db
@@ -20,6 +25,7 @@ export const listParts = () =>
       unit: parts.unit,
       brand: parts.brand,
       active: parts.active,
+      categoryId: parts.categoryId,
       category: partCategories.name,
       categoryCode: partCategories.code,
     })
@@ -32,6 +38,15 @@ export const listSuppliers = () =>
   db.select().from(suppliers).orderBy(asc(suppliers.name));
 export const listStores = () =>
   db.select().from(stores).orderBy(asc(stores.code));
+
+export async function listAuthorizedStores(actor: Actor) {
+  const ids = await getAuthorizedStoreIds(actor);
+  return db
+    .select()
+    .from(stores)
+    .where(and(eq(stores.active, true), scopedStoreCondition(stores.id, ids)))
+    .orderBy(asc(stores.code));
+}
 export const listUsers = () =>
   db
     .select({

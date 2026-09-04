@@ -75,8 +75,9 @@ export default function IssuePage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Fleet usage</p>
           <h1>Issue parts to bus</h1>
           <p className="muted">
-            Issues must use an open (approved) job card. An operator must verify
-            the issue before stock is deducted.
+            Issues must use an open (approved) job card. An administrator must
+            verify the issue before stock is deducted. Use Issue (POS) for the
+            same flow with a faster cart.
           </p>
         </div>
       </div>

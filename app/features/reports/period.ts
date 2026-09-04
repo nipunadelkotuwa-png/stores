@@ -31,6 +31,56 @@ function zonedYmd(date: Date, timeZone: string) {
   }).format(date);
 }
 
+function getTimeZoneOffsetMs(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const asUtc = Date.UTC(
+    Number(map.year),
+    Number(map.month) - 1,
+    Number(map.day),
+    Number(map.hour),
+    Number(map.minute),
+    Number(map.second),
+  );
+  return asUtc - date.getTime();
+}
+
+/** Instant when `ymd` 00:00:00 begins in `timeZone`. */
+export function zonedYmdToUtc(ymd: string, timeZone: string) {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const utcGuess = Date.UTC(year, month - 1, day, 0, 0, 0);
+  const guess = new Date(utcGuess);
+  const offset = getTimeZoneOffsetMs(guess, timeZone);
+  const adjusted = new Date(utcGuess - offset);
+  const offset2 = getTimeZoneOffsetMs(adjusted, timeZone);
+  if (offset2 !== offset) {
+    return new Date(utcGuess - offset2);
+  }
+  return adjusted;
+}
+
+export function zonedDayBounds(
+  timeZone: string,
+  daysAgo = 0,
+): { start: Date; end: Date } {
+  const today = zonedYmd(new Date(), timeZone);
+  const startYmd = addDaysYmd(today, -daysAgo, timeZone);
+  const endYmd = addDaysYmd(startYmd, 1, timeZone);
+  return {
+    start: zonedYmdToUtc(startYmd, timeZone),
+    end: zonedYmdToUtc(endYmd, timeZone),
+  };
+}
+
 function addDaysYmd(ymd: string, days: number, timeZone: string) {
   const [year, month, day] = ymd.split("-").map(Number);
   const utc = new Date(Date.UTC(year, month - 1, day + days, 12));

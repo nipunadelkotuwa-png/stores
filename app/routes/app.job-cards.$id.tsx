@@ -58,6 +58,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     initialPartId: url.searchParams.get("part") || "",
     unusualCounts,
     unusualThreshold: UNUSUAL_ISSUE_THRESHOLD,
+    canManage: actor.role === "ADMIN",
   };
 }
 
@@ -101,23 +102,23 @@ export async function action({ request, params }: Route.ActionArgs) {
       }
     }
     if (intent === "fit-tyre") {
-      await fitOrReplaceTyre(actor, {
+      const result = await fitOrReplaceTyre(actor, {
         jobCardId,
         tyreId: formData.get("tyreId"),
         position: formData.get("position"),
         idempotencyKey: formData.get("idempotencyKey"),
       });
-      throw redirect(`/job-cards/${jobCardId}`);
+      throw redirect(`/receipts/${result.documentId}`);
     }
     if (intent === "oil") {
-      await recordOilChange(actor, {
+      const result = await recordOilChange(actor, {
         jobCardId,
         partId: formData.get("partId"),
         litres: formData.get("litres"),
         notes: formData.get("notes"),
         idempotencyKey: formData.get("idempotencyKey"),
       });
-      throw redirect(`/job-cards/${jobCardId}`);
+      throw redirect(`/receipts/${result.documentId}`);
     }
     if (intent === "close") {
       await closeJobCard(actor, {
@@ -258,12 +259,16 @@ export default function JobCardDetailPage({
       {pending ? (
         <section className="panel no-print" style={{ marginBottom: "1.5rem" }}>
           <p>
-            This job card is awaiting operator approval. Parts, tyres, and oil
-            can be posted after it is approved.
+            This job card is awaiting administrator approval. Parts, tyres, and
+            oil can be posted after it is approved.
           </p>
-          <p className="muted">
-            <Link to="/approvals?tab=job-cards">Open Approvals Center</Link>
-          </p>
+          {loaderData.canManage ? (
+            <p className="muted">
+              <Link to="/approvals?tab=job-cards">Open Approvals Center</Link>
+            </p>
+          ) : (
+            <p className="muted">Ask an administrator to approve this card.</p>
+          )}
           <Form method="post" style={{ marginTop: "1rem" }}>
             <CsrfField />
             <input type="hidden" name="intent" value="cancel" />
@@ -353,8 +358,11 @@ export default function JobCardDetailPage({
                       ))}
                     </select>
                   </label>
+                  <p className="muted">
+                    Stock deducts after an administrator verifies the issue.
+                  </p>
                   <button className="button button-primary" disabled={busy}>
-                    Fit tyre
+                    Submit tyre fit for verification
                   </button>
                 </Form>
               )}
@@ -396,8 +404,11 @@ export default function JobCardDetailPage({
                     Notes
                     <textarea name="notes" rows={2} />
                   </label>
+                  <p className="muted">
+                    Litres are reserved now and deducted after verification.
+                  </p>
                   <button className="button button-primary" disabled={busy}>
-                    Record oil change
+                    Submit oil change for verification
                   </button>
                 </Form>
               )}
@@ -450,7 +461,14 @@ export default function JobCardDetailPage({
                     <td className="mono">
                       <Link to={`/receipts/${row.id}`}>{row.number}</Link>
                     </td>
-                    <td>{row.type.replaceAll("_", " ")}</td>
+                    <td>
+                      {row.type.replaceAll("_", " ")}
+                      {row.status === "PENDING_APPROVAL"
+                        ? " · pending"
+                        : row.status === "REJECTED"
+                          ? " · rejected"
+                          : ""}
+                    </td>
                     <td className="mono">{row.sku}</td>
                     <td>{row.part}</td>
                     <td className="quantity">{row.quantity}</td>
@@ -470,6 +488,11 @@ export default function JobCardDetailPage({
               <li key={row.id}>
                 {row.part} ({row.sku}) — {row.litres} L
                 {row.odometerKm ? ` @ ${row.odometerKm} km` : ""}
+                {row.documentStatus === "PENDING_APPROVAL"
+                  ? " · awaiting verification"
+                  : row.documentStatus === "REJECTED"
+                    ? " · rejected"
+                    : ""}
               </li>
             ))}
           </ul>

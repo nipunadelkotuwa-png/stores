@@ -27,6 +27,9 @@ export function NotificationBell({
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const load = () => fetcherRef.current.load("/notifications");
@@ -42,16 +45,46 @@ export function NotificationBell({
     }
   }, [fetcher.data?.pendingApprovals, onPendingApprovalsChange]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (target && rootRef.current && !rootRef.current.contains(target)) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("mousedown", onPointerDown);
+    const focusable = panelRef.current?.querySelector<HTMLElement>(
+      "a, button, [tabindex]:not([tabindex='-1'])",
+    );
+    focusable?.focus();
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [open]);
+
   const unread = fetcher.data?.unreadCount ?? 0;
   const items = fetcher.data?.items ?? [];
 
   return (
-    <div className="notification-bell">
+    <div className="notification-bell" ref={rootRef}>
       <button
+        ref={buttonRef}
         type="button"
         className="notification-bell-btn"
         onClick={() => setOpen((value) => !value)}
         aria-label="Notifications"
+        aria-expanded={open}
+        aria-controls="notification-panel"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
           <path
@@ -72,7 +105,13 @@ export function NotificationBell({
         ) : null}
       </button>
       {open ? (
-        <div className="notification-panel">
+        <div
+          id="notification-panel"
+          className="notification-panel"
+          ref={panelRef}
+          role="dialog"
+          aria-label="Notifications"
+        >
           <div className="notification-panel-head">
             <strong>Inbox</strong>
             {unread > 0 ? (

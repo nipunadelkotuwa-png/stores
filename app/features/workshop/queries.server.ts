@@ -21,6 +21,7 @@ import {
   type Actor,
 } from "~/lib/auth/authorization.server";
 import { TYRE_POSITIONS, type TyrePosition } from "./constants";
+import { parseWorkshopNotes } from "./pending-notes";
 
 const LIST_LIMIT = 200;
 
@@ -189,6 +190,7 @@ export async function getJobCardDetail(actor: Actor, id: string) {
           id: stockDocuments.id,
           number: stockDocuments.documentNumber,
           type: stockDocuments.type,
+          status: stockDocuments.status,
           date: stockDocuments.businessDate,
           sku: parts.sku,
           part: parts.name,
@@ -222,9 +224,14 @@ export async function getJobCardDetail(actor: Actor, id: string) {
           sku: parts.sku,
           part: parts.name,
           odometerKm: oilChanges.odometerKm,
+          documentStatus: stockDocuments.status,
         })
         .from(oilChanges)
         .innerJoin(parts, eq(oilChanges.partId, parts.id))
+        .leftJoin(
+          stockDocuments,
+          eq(oilChanges.stockDocumentId, stockDocuments.id),
+        )
         .where(eq(oilChanges.jobCardId, card.id)),
       db
         .select({
@@ -243,12 +250,29 @@ export async function getJobCardDetail(actor: Actor, id: string) {
       getFittedTyres(card.busId),
     ]);
 
+  const pendingFitNotes = await db
+    .select({ notes: stockDocuments.notes })
+    .from(stockDocuments)
+    .where(
+      and(
+        eq(stockDocuments.jobCardId, card.id),
+        eq(stockDocuments.type, "BUS_ISSUE"),
+        eq(stockDocuments.status, "PENDING_APPROVAL"),
+      ),
+    );
+  const reserved = new Set(
+    pendingFitNotes.flatMap((row) => {
+      const payload = parseWorkshopNotes(row.notes);
+      return payload?.kind === "TYRE_FIT" ? [payload.tyreId] : [];
+    }),
+  );
+
   return {
     ...card,
     documents,
     tyreEvents: tyreRows,
     oilChanges: oilRows,
-    storeTyres,
+    storeTyres: storeTyres.filter((tyre) => !reserved.has(tyre.id)),
     oilParts,
     fitted,
   };

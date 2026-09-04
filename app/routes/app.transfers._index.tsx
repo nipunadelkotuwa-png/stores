@@ -1,7 +1,10 @@
 import { Form, Link, useActionData, useNavigation } from "react-router";
 import { CsrfField } from "~/components/csrf-field";
 import { workshopActionError } from "~/features/workshop/errors";
-import { receiveStoreTransfer } from "~/features/inventory/transfers.server";
+import {
+  receiveStoreTransfer,
+  voidStoreTransfer,
+} from "~/features/inventory/transfers.server";
 import { getInTransitTransfers } from "~/features/inventory/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
@@ -16,7 +19,17 @@ export async function action({ request }: Route.ActionArgs) {
   const actor = await requireUser(request);
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
+  const intent = String(formData.get("intent") ?? "receive");
   try {
+    if (intent === "void") {
+      await voidStoreTransfer(actor, {
+        documentId: String(formData.get("documentId") ?? ""),
+        businessDate: String(formData.get("businessDate") ?? ""),
+        reason: String(formData.get("reason") ?? "Transfer never arrived"),
+        idempotencyKey: String(formData.get("idempotencyKey") ?? ""),
+      });
+      return { ok: true, voided: true };
+    }
     await receiveStoreTransfer(actor, {
       documentId: String(formData.get("documentId") ?? ""),
       businessDate: String(formData.get("businessDate") ?? ""),
@@ -24,7 +37,14 @@ export async function action({ request }: Route.ActionArgs) {
     });
     return { ok: true };
   } catch (error) {
-    return { error: workshopActionError(error, "Unable to receive transfer") };
+    return {
+      error: workshopActionError(
+        error,
+        intent === "void"
+          ? "Unable to void transfer"
+          : "Unable to receive transfer",
+      ),
+    };
   }
 }
 
@@ -56,7 +76,13 @@ export default function TransfersPage({ loaderData }: Route.ComponentProps) {
       {actionData?.error ? (
         <p className="form-error">{actionData.error}</p>
       ) : null}
-      {actionData?.ok ? <p className="muted">Transfer received.</p> : null}
+      {actionData?.ok ? (
+        <p className="muted">
+          {"voided" in actionData && actionData.voided
+            ? "Transfer voided. Source stock restored."
+            : "Transfer received."}
+        </p>
+      ) : null}
 
       <section className="panel">
         <h2>In transit</h2>
@@ -101,34 +127,87 @@ export default function TransfersPage({ loaderData }: Route.ComponentProps) {
                             .join(", ")}
                     </td>
                     <td>
-                      {row.canReceive ? (
-                        <Form method="post">
-                          <CsrfField />
-                          <input
-                            type="hidden"
-                            name="documentId"
-                            value={row.id}
-                          />
-                          <input
-                            type="hidden"
-                            name="businessDate"
-                            value={today}
-                          />
-                          <input
-                            type="hidden"
-                            name="idempotencyKey"
-                            value={`tri-${row.id}`}
-                          />
-                          <button
-                            className="button button-secondary"
-                            disabled={navigation.state !== "idle"}
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "0.5rem",
+                          flexWrap: "wrap",
+                          justifyContent: "flex-end",
+                        }}
+                      >
+                        {row.canReceive ? (
+                          <Form method="post">
+                            <CsrfField />
+                            <input type="hidden" name="intent" value="receive" />
+                            <input
+                              type="hidden"
+                              name="documentId"
+                              value={row.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="businessDate"
+                              value={today}
+                            />
+                            <input
+                              type="hidden"
+                              name="idempotencyKey"
+                              value={`tri-${row.id}`}
+                            />
+                            <button
+                              className="button button-secondary"
+                              disabled={navigation.state !== "idle"}
+                            >
+                              Receive
+                            </button>
+                          </Form>
+                        ) : (
+                          <span className="muted">Awaiting destination</span>
+                        )}
+                        {row.canVoid ? (
+                          <Form
+                            method="post"
+                            onSubmit={(event) => {
+                              if (
+                                !window.confirm(
+                                  "Void this transfer and restore source stock?",
+                                )
+                              ) {
+                                event.preventDefault();
+                              }
+                            }}
                           >
-                            Receive
-                          </button>
-                        </Form>
-                      ) : (
-                        <span className="muted">Awaiting destination</span>
-                      )}
+                            <CsrfField />
+                            <input type="hidden" name="intent" value="void" />
+                            <input
+                              type="hidden"
+                              name="documentId"
+                              value={row.id}
+                            />
+                            <input
+                              type="hidden"
+                              name="businessDate"
+                              value={today}
+                            />
+                            <input
+                              type="hidden"
+                              name="reason"
+                              value="Transfer never arrived"
+                            />
+                            <input
+                              type="hidden"
+                              name="idempotencyKey"
+                              value={`trv-${row.id}`}
+                            />
+                            <button
+                              className="text-button"
+                              disabled={navigation.state !== "idle"}
+                            >
+                              Void
+                            </button>
+                          </Form>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -81,6 +81,12 @@ export default function ChangePassword({ loaderData }: Route.ComponentProps) {
               : "Update password"}
           </button>
         </Form>
+        <Form method="post" action="/logout" style={{ marginTop: "1rem" }}>
+          <input type="hidden" name="csrf" value={loaderData.csrf} />
+          <button type="submit" className="text-button">
+            Sign out instead
+          </button>
+        </Form>
       </section>
     </main>
   );

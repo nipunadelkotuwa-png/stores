@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { resolveSearchNavigation } from "~/lib/search-navigation";
@@ -7,6 +7,12 @@ import type { DashboardMode } from "~/lib/dashboard-mode";
 export function TopbarSearch({ mode }: { mode: DashboardMode }) {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [shortcutHint, setShortcutHint] = useState("Ctrl+K");
+
+  useEffect(() => {
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    setShortcutHint(mac ? "⌘K" : "Ctrl+K");
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -56,7 +62,7 @@ export function TopbarSearch({ mode }: { mode: DashboardMode }) {
           }}
         />
         <kbd className="topbar-search-hint" aria-hidden="true">
-          ⌘K
+          {shortcutHint}
         </kbd>
       </label>
       <button

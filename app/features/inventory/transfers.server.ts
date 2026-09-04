@@ -13,6 +13,7 @@ import {
 import type { Actor } from "~/lib/auth/authorization.server";
 import { requireStoreAccess } from "~/lib/auth/authorization.server";
 import {
+  postReversalInTransaction,
   postStockInTransaction,
   prepareStockCommand,
 } from "~/features/inventory/posting.server";
@@ -231,5 +232,91 @@ export async function receiveStoreTransfer(
       },
     });
     return posted;
+  });
+}
+
+export async function voidStoreTransfer(
+  actor: Actor,
+  input: {
+    documentId: string;
+    businessDate: string;
+    reason: string;
+    idempotencyKey: string;
+  },
+) {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+    const [outgoing] = await tx
+      .select()
+      .from(stockDocuments)
+      .where(eq(stockDocuments.id, input.documentId))
+      .limit(1);
+    if (
+      !outgoing ||
+      outgoing.type !== "TRANSFER_OUT" ||
+      outgoing.status !== "POSTED"
+    ) {
+      throw new WorkshopError("In-transit transfer not found");
+    }
+    await requireStoreAccess(actor, outgoing.storeId);
+
+    const [already] = await tx
+      .select({ id: stockDocuments.id })
+      .from(stockDocuments)
+      .where(eq(stockDocuments.linkedDocumentId, outgoing.id))
+      .limit(1);
+    if (already) {
+      throw new WorkshopError("This transfer has already been received");
+    }
+
+    const reversed = await postReversalInTransaction(tx, actor, {
+      documentId: outgoing.id,
+      businessDate: input.businessDate,
+      reason: input.reason,
+      idempotencyKey: input.idempotencyKey,
+    });
+
+    const serialEvents = await tx
+      .select({ tyreId: tyreEvents.tyreId })
+      .from(tyreEvents)
+      .where(
+        and(
+          eq(tyreEvents.stockDocumentId, outgoing.id),
+          eq(tyreEvents.type, "TRANSFER_OUT"),
+        ),
+      );
+    const serialIds = serialEvents.map((row) => row.tyreId);
+    if (serialIds.length > 0) {
+      await tx
+        .update(tyres)
+        .set({
+          status: "IN_STORE",
+          storeId: outgoing.storeId,
+        })
+        .where(inArray(tyres.id, serialIds));
+      await tx.insert(tyreEvents).values(
+        serialIds.map((tyreId) => ({
+          tyreId,
+          type: "TRANSFER_IN" as const,
+          stockDocumentId: reversed.id,
+          storeId: outgoing.storeId,
+          notes: "Returned to source after voided transfer",
+          createdBy: actor.id,
+        })),
+      );
+    }
+
+    await tx.insert(auditEvents).values({
+      actorId: actor.id,
+      eventType: "TRANSFER_VOIDED",
+      entityType: "stock_document",
+      entityId: reversed.id,
+      storeId: outgoing.storeId,
+      metadata: {
+        documentNumber: reversed.number,
+        voidedDocumentId: outgoing.id,
+      },
+    });
+    return reversed;
   });
 }

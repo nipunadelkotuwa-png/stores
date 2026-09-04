@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildNavSections,
   isNavItemActive,
   navItemEnd,
   operationsNavConfig,
@@ -38,6 +39,27 @@ describe("isNavItemActive", () => {
         exact: true,
       }),
     ).toBe(false);
+  });
+});
+
+describe("buildNavSections", () => {
+  it("hides admin-only operations from operators", () => {
+    const operations = buildNavSections("OPERATOR").find(
+      (section) => section.id === "operations",
+    );
+    const paths = operations?.items.map((item) => item.to) ?? [];
+    expect(paths).not.toContain("/returns");
+    expect(paths).not.toContain("/tires/conversion");
+    expect(paths).toContain("/returns/bus");
+  });
+
+  it("shows admin-only operations to administrators", () => {
+    const operations = buildNavSections("ADMIN").find(
+      (section) => section.id === "operations",
+    );
+    const paths = operations?.items.map((item) => item.to) ?? [];
+    expect(paths).toContain("/returns");
+    expect(paths).toContain("/tires/conversion");
   });
 });
 

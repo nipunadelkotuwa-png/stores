@@ -48,8 +48,8 @@ export default function NewJobCardPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Workshop</p>
           <h1>Create job card</h1>
           <p className="muted">
-            Submit for operator approval. One active card per bus. Parts can be
-            issued only after approval.
+            Submit for administrator approval. One active card per bus. Parts
+            can be issued only after the card is approved.
           </p>
         </div>
       </div>

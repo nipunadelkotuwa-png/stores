@@ -323,8 +323,9 @@ export function PosIssueCart({
           <p className="eyebrow">POS</p>
           <h1>Issue parts</h1>
           <p className="muted">
-            Scan or search, adjust quantities, then submit against an open job
-            card. <Link to="/issues/new">Classic issue form</Link>
+            Fast cart for the same bus-issue flow as the classic form. An
+            administrator verifies the request before stock is deducted.{" "}
+            <Link to="/issues/new">Classic issue form</Link>
           </p>
         </div>
       </div>

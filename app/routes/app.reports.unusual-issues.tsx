@@ -45,12 +45,14 @@ export default function UnusualIssuesPage({
                 <th>Part</th>
                 <th>Bus</th>
                 <th>Issues</th>
+                <th>Qty</th>
+                <th>Last issue</th>
               </tr>
             </thead>
             <tbody>
               {loaderData.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>No repetitive issues in the window.</td>
+                  <td colSpan={6}>No repetitive issues in the window.</td>
                 </tr>
               ) : (
                 loaderData.rows.map((row) => (
@@ -59,6 +61,8 @@ export default function UnusualIssuesPage({
                     <td>{row.part}</td>
                     <td>{row.fleetNumber}</td>
                     <td>{row.issueCount}</td>
+                    <td>{row.totalQty}</td>
+                    <td>{row.lastDate}</td>
                   </tr>
                 ))
               )}

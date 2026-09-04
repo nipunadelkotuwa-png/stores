@@ -443,7 +443,7 @@ export async function postConversion(
   await requireStoreAccess(actor, input.storeId);
   if (actor.role !== "ADMIN") {
     throw data(
-      { message: "Only administrators can convert tires." },
+      { message: "Only administrators can convert tyres." },
       { status: 403 },
     );
   }
@@ -451,7 +451,7 @@ export async function postConversion(
   const outCommand = prepareStockCommand("ADJUSTMENT", {
     storeId: input.storeId,
     businessDate: input.businessDate,
-    reason: `Tire Conversion to ${input.targetPartId}`,
+    reason: `Tyre conversion to ${input.targetPartId}`,
     direction: "decrease",
     lines: [{ partId: input.sourcePartId, quantity: input.quantity }],
     idempotencyKey: input.idempotencyKey + "-out",
@@ -460,7 +460,7 @@ export async function postConversion(
   const inCommand = prepareStockCommand("ADJUSTMENT", {
     storeId: input.storeId,
     businessDate: input.businessDate,
-    reason: `Tire Conversion from ${input.sourcePartId}`,
+    reason: `Tyre conversion from ${input.sourcePartId}`,
     direction: "increase",
     lines: [{ partId: input.targetPartId, quantity: input.quantity }],
     idempotencyKey: input.idempotencyKey + "-in",
@@ -486,7 +486,8 @@ export async function postConversion(
   return result;
 }
 
-export async function postReversal(
+export async function postReversalInTransaction(
+  tx: Transaction,
   actor: Actor,
   input: {
     documentId: string;
@@ -495,14 +496,6 @@ export async function postReversal(
     idempotencyKey: string;
   },
 ) {
-  if (actor.role !== "ADMIN") {
-    throw data(
-      { message: "Only administrators can reverse stock documents." },
-      { status: 403 },
-    );
-  }
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
     const existing = await tx
       .select({ id: stockDocuments.id, number: stockDocuments.documentNumber })
       .from(stockDocuments)
@@ -644,6 +637,26 @@ export async function postReversal(
       },
     });
     return { id: document.id, number };
+}
+
+export async function postReversal(
+  actor: Actor,
+  input: {
+    documentId: string;
+    businessDate: string;
+    reason: string;
+    idempotencyKey: string;
+  },
+) {
+  if (actor.role !== "ADMIN") {
+    throw data(
+      { message: "Only administrators can reverse stock documents." },
+      { status: 403 },
+    );
+  }
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+    return postReversalInTransaction(tx, actor, input);
   });
 }
 
@@ -673,12 +686,13 @@ async function persistApprovalError(documentId: string, error: unknown) {
     );
 }
 
-export async function submitIssueForApproval(actor: Actor, input: unknown) {
+export async function submitIssueForApprovalInTransaction(
+  tx: Transaction,
+  actor: Actor,
+  input: unknown,
+) {
   const command = prepareStockCommand("BUS_ISSUE", input);
   await requireStoreAccess(actor, command.storeId);
-
-  const result = await db.transaction(async (tx) => {
-    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
     const existing = await tx
       .select({
         id: stockDocuments.id,
@@ -774,19 +788,33 @@ export async function submitIssueForApproval(actor: Actor, input: unknown) {
       metadata: { documentNumber: number, type: "BUS_ISSUE" },
     });
     return { id: document.id, number, created: true };
+}
+
+export function notifyIssueSubmitted(result: {
+  id: string;
+  number: string;
+  created: boolean;
+}) {
+  if (!result.created) return;
+  void import("~/lib/notifications.server")
+    .then(({ notifyAdmins }) =>
+      notifyAdmins({
+        type: "ISSUE_PENDING",
+        title: "Item issue awaiting verification",
+        body: `${result.number} needs verification.`,
+        href: `/receipts/${result.id}`,
+      }),
+    )
+    .catch(() => undefined);
+  invalidatePendingApprovalCountCache();
+}
+
+export async function submitIssueForApproval(actor: Actor, input: unknown) {
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+    return submitIssueForApprovalInTransaction(tx, actor, input);
   });
-
-  if (result.created) {
-    const { notifyAdmins } = await import("~/lib/notifications.server");
-    void notifyAdmins({
-      type: "ISSUE_PENDING",
-      title: "Item issue awaiting verification",
-      body: `${result.number} needs verification.`,
-      href: `/receipts/${result.id}`,
-    }).catch(() => undefined);
-    invalidatePendingApprovalCountCache();
-  }
-
+  notifyIssueSubmitted(result);
   return { id: result.id, number: result.number };
 }
 
@@ -885,6 +913,10 @@ export async function approvePendingIssue(actor: Actor, documentId: string) {
         storeId: document.storeId,
         metadata: { documentNumber: document.documentNumber },
       });
+      const { completePendingWorkshopIssue } = await import(
+        "~/features/workshop/pending-completion.server"
+      );
+      await completePendingWorkshopIssue(tx, actor, document);
       return {
         id: document.id,
         number: document.documentNumber,
@@ -930,29 +962,36 @@ export async function rejectPendingIssue(
     throw new Error("A rejection reason of at least 3 characters is required");
   }
 
-  const [document] = await db
-    .update(stockDocuments)
-    .set({
-      status: "REJECTED",
-      lastApprovalError: `Rejected: ${trimmed}`,
-      lastApprovalAttemptedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(stockDocuments.id, documentId),
-        eq(stockDocuments.status, "PENDING_APPROVAL"),
-        eq(stockDocuments.type, "BUS_ISSUE"),
-      ),
-    )
-    .returning({
-      id: stockDocuments.id,
-      number: stockDocuments.documentNumber,
-      createdBy: stockDocuments.createdBy,
-      storeId: stockDocuments.storeId,
-    });
-  if (!document) {
-    throw new Error("Pending bus issue not found");
-  }
+  const document = await db.transaction(async (tx) => {
+    const [rejected] = await tx
+      .update(stockDocuments)
+      .set({
+        status: "REJECTED",
+        lastApprovalError: `Rejected: ${trimmed}`,
+        lastApprovalAttemptedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(stockDocuments.id, documentId),
+          eq(stockDocuments.status, "PENDING_APPROVAL"),
+          eq(stockDocuments.type, "BUS_ISSUE"),
+        ),
+      )
+      .returning({
+        id: stockDocuments.id,
+        number: stockDocuments.documentNumber,
+        createdBy: stockDocuments.createdBy,
+        storeId: stockDocuments.storeId,
+      });
+    if (!rejected) {
+      throw new Error("Pending bus issue not found");
+    }
+    const { revertPendingWorkshopIssue } = await import(
+      "~/features/workshop/pending-completion.server"
+    );
+    await revertPendingWorkshopIssue(tx, rejected.id);
+    return rejected;
+  });
 
   await db.insert(auditEvents).values({
     actorId: actor.id,

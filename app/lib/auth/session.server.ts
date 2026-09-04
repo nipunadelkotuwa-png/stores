@@ -87,3 +87,10 @@ export async function destroyUserSession(request: Request) {
     },
   });
 }
+
+export async function revokeUserSessions(userId: string) {
+  await db
+    .update(sessions)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+}

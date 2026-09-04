@@ -6,6 +6,7 @@ import {
   type PeriodDays,
 } from "~/features/dashboard/period";
 import type { getDashboard } from "~/features/dashboard/queries.server";
+import { greetingName } from "~/lib/display-name";
 
 const ClassicDashboardChart = lazy(() =>
   import("~/components/classic-dashboard-chart").then((module) => ({
@@ -280,7 +281,7 @@ export function ClassicDashboard({
   userName,
 }: ClassicDashboardProps) {
   const chartData = processTrendData(loaderData.trendData);
-  const firstName = userName.split(/\s+/)[0] ?? userName;
+  const firstName = greetingName(userName);
   const periodDays = loaderData.periodDays;
 
   const kpiCards = [

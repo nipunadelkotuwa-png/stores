@@ -4,7 +4,7 @@ import { getEnv } from "~/config/env.server";
 import { resolveReportPeriod } from "~/features/reports/period";
 import { getDagOutSummary } from "~/features/workshop/queries.server";
 import {
-  listStores,
+  listAuthorizedStores,
   listSuppliers,
 } from "~/features/master-data/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
@@ -22,7 +22,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       sentTo: range.end,
     }),
     listSuppliers(),
-    listStores(),
+    listAuthorizedStores(actor),
   ]);
   return { summary, suppliers, stores, range };
 }

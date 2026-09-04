@@ -15,6 +15,13 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     setSearchQuery(searchParams.get("q")?.trim() ?? "");
   }, [searchParams]);
+  const rows = loaderData.balances.filter((row) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      row.sku.toLowerCase().includes(q) || row.part.toLowerCase().includes(q)
+    );
+  });
   return (
     <>
       <div className="page-heading">
@@ -39,10 +46,11 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
             placeholder="Search parts or SKU..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            className="input"
             style={{
               padding: "0.5rem",
               borderRadius: "4px",
-              border: "1px solid #ccc",
+              border: "1px solid var(--border, #c5c9d4)",
             }}
           />
         </div>
@@ -59,16 +67,16 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
               </tr>
             </thead>
             <tbody>
-              {loaderData.balances
-                .filter((row) => {
-                  if (!searchQuery) return true;
-                  const q = searchQuery.toLowerCase();
-                  return (
-                    row.sku.toLowerCase().includes(q) ||
-                    row.part.toLowerCase().includes(q)
-                  );
-                })
-                .map((row) => (
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    {searchQuery
+                      ? "No balances match that search."
+                      : "No on-hand balances yet."}
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
                   <tr key={`${row.storeCode}-${row.partId}`}>
                     <td>
                       <strong>{row.storeCode}</strong>
@@ -94,7 +102,8 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
                       </Link>
                     </td>
                   </tr>
-                ))}
+                ))
+              )}
             </tbody>
           </table>
         </div>

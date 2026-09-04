@@ -39,21 +39,54 @@ export async function action({ request }: Route.ActionArgs) {
     return { ok: true };
   }
 
-  const parsed = z
-    .object({
-      sku: z.string().min(1),
-      name: z.string().min(1),
-      unit: z.string().min(1),
-      barcode: z.preprocess(
-        (v) => (v === "" ? undefined : v),
-        z.string().optional(),
-      ),
-      categoryId: z.preprocess(
-        (v) => (v === "" ? undefined : v),
-        z.string().uuid().optional(),
-      ),
-    })
-    .safeParse(Object.fromEntries(formData));
+  const partFields = z.object({
+    sku: z.string().min(1),
+    name: z.string().min(1),
+    unit: z.string().min(1),
+    brand: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.string().optional(),
+    ),
+    barcode: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.string().optional(),
+    ),
+    categoryId: z.preprocess(
+      (value) => (value === "" ? undefined : value),
+      z.string().uuid().optional(),
+    ),
+  });
+
+  if (intent === "update") {
+    const parsed = partFields
+      .extend({ id: z.string().uuid() })
+      .safeParse(Object.fromEntries(formData));
+    if (!parsed.success) return { error: "SKU, name, and unit are required." };
+    try {
+      await db
+        .update(parts)
+        .set({
+          sku: parsed.data.sku.toUpperCase(),
+          name: parsed.data.name,
+          unit: parsed.data.unit,
+          brand: parsed.data.brand ?? null,
+          barcode: parsed.data.barcode ?? null,
+          categoryId: parsed.data.categoryId ?? null,
+        })
+        .where(eq(parts.id, parsed.data.id));
+      return { ok: true };
+    } catch (error) {
+      return {
+        error: masterDataActionError(
+          error,
+          "A part with that SKU already exists.",
+          "Unable to update part.",
+        ),
+      };
+    }
+  }
+
+  const parsed = partFields.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "SKU, name, and unit are required." };
   try {
     await db
@@ -80,6 +113,8 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
     () => searchParams.get("q")?.trim() ?? "",
   );
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editing = loaderData.parts.find((part) => part.id === editingId);
 
   useEffect(() => {
     const query = searchParams.get("q")?.trim() ?? "";
@@ -244,6 +279,16 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
                               {part.active ? "Deactivate" : "Activate"}
                             </button>
                           </Form>
+                          <button
+                            className="text-button"
+                            type="button"
+                            onClick={() => {
+                              setEditingId(part.id);
+                              setScannedBarcode(part.barcode ?? "");
+                            }}
+                          >
+                            Edit
+                          </button>
                         </td>
                       ) : null}
                     </tr>
@@ -254,29 +299,52 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
         </section>
         {loaderData.canManage ? (
           <section className="panel form-panel" id="add-part-form">
-            <h2>Add spare part</h2>
-            <Form method="post" className="stack">
+            <h2>{editing ? "Edit spare part" : "Add spare part"}</h2>
+            <Form
+              method="post"
+              className="stack"
+              key={editing?.id ?? "create"}
+              onSubmit={() => setEditingId(null)}
+            >
               <CsrfField />
-              <input type="hidden" name="intent" value="create" />
+              <input
+                type="hidden"
+                name="intent"
+                value={editing ? "update" : "create"}
+              />
+              {editing ? (
+                <input type="hidden" name="id" value={editing.id} />
+              ) : null}
               <label>
                 SKU
-                <input name="sku" required />
+                <input name="sku" required defaultValue={editing?.sku ?? ""} />
               </label>
               <label>
                 Part name
-                <input name="name" required />
+                <input name="name" required defaultValue={editing?.name ?? ""} />
               </label>
               <label>
                 Unit
-                <input name="unit" defaultValue="EA" required />
+                <input
+                  name="unit"
+                  defaultValue={editing?.unit ?? "EA"}
+                  required
+                />
+              </label>
+              <label>
+                Brand
+                <input name="brand" defaultValue={editing?.brand ?? ""} />
               </label>
               <label>
                 Category
-                <select name="categoryId">
+                <select
+                  name="categoryId"
+                  defaultValue={editing?.categoryId ?? ""}
+                >
                   <option value="">-- Uncategorized --</option>
-                  {loaderData.categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
+                  {loaderData.categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
                     </option>
                   ))}
                 </select>
@@ -286,7 +354,7 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
                 <input
                   name="barcode"
                   value={scannedBarcode}
-                  onChange={(e) => setScannedBarcode(e.target.value)}
+                  onChange={(event) => setScannedBarcode(event.target.value)}
                   placeholder="Scan or type..."
                 />
               </label>
@@ -294,8 +362,20 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
                 className="button button-primary"
                 disabled={navigation.state !== "idle"}
               >
-                Add part
+                {editing ? "Save part" : "Add part"}
               </button>
+              {editing ? (
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setScannedBarcode("");
+                  }}
+                >
+                  Cancel edit
+                </button>
+              ) : null}
             </Form>
           </section>
         ) : null}

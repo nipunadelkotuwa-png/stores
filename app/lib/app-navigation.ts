@@ -28,9 +28,9 @@ export const operationsNavConfig: NavItemConfig[] = [
   { to: "/stock-in/new", label: "Stock in" },
   { to: "/issues/new", label: "Bus issue" },
   { to: "/returns/bus", label: "Bus return" },
-  { to: "/returns", label: "Returns & reversals", exact: true },
+  { to: "/returns", label: "Returns & reversals", exact: true, adminOnly: true },
   { to: "/transfers", label: "Transfers" },
-  { to: "/tires/conversion", label: "Tire conversion" },
+  { to: "/tires/conversion", label: "Tyre conversion", adminOnly: true },
   { to: "/purchases", label: "Purchases" },
   { to: "/alerts/low-stock", label: "Low stock" },
 ];
@@ -92,34 +92,39 @@ export function isNavItemActive(pathname: string, item: NavItemConfig): boolean 
   return pathname === item.to || pathname.startsWith(`${item.to}/`);
 }
 
+function visibleNavItems(
+  items: NavItemConfig[],
+  role: "ADMIN" | "OPERATOR",
+): NavItemConfig[] {
+  return items.filter((item) => !item.adminOnly || role === "ADMIN");
+}
+
 export function buildNavSections(
   role: "ADMIN" | "OPERATOR",
 ): NavSectionConfig[] {
-  const operations = [...operationsNavConfig];
-
   const sections: NavSectionConfig[] = [
     {
       id: "operations",
       label: "Operations",
-      items: operations,
+      items: visibleNavItems(operationsNavConfig, role),
       defaultOpen: true,
     },
     {
       id: "workshop",
       label: "Workshop",
-      items: workshopNavConfig,
+      items: visibleNavItems(workshopNavConfig, role),
       defaultOpen: true,
     },
     {
       id: "master-data",
       label: "Master data",
-      items: masterDataNavConfig,
+      items: visibleNavItems(masterDataNavConfig, role),
       defaultOpen: false,
     },
     {
       id: "reports",
       label: "Reports",
-      items: reportNavConfig,
+      items: visibleNavItems(reportNavConfig, role),
       defaultOpen: false,
     },
   ];

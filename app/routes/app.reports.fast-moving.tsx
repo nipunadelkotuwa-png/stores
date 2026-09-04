@@ -64,6 +64,9 @@ export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
                   Part Name
                 </th>
                 <th style={{ textAlign: "right", padding: "0.5rem" }}>
+                  Documents
+                </th>
+                <th style={{ textAlign: "right", padding: "0.5rem" }}>
                   Total Issued
                 </th>
                 <th className="no-print" />
@@ -73,7 +76,7 @@ export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
               {loaderData.rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={5}
                     style={{ textAlign: "center", padding: "1rem" }}
                   >
                     No items issued in this period.
@@ -89,6 +92,9 @@ export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
                       {row.sku}
                     </td>
                     <td style={{ padding: "0.5rem" }}>{row.part}</td>
+                    <td style={{ padding: "0.5rem", textAlign: "right" }}>
+                      {row.issueCount}
+                    </td>
                     <td style={{ padding: "0.5rem", textAlign: "right" }}>
                       {row.totalIssued}
                     </td>

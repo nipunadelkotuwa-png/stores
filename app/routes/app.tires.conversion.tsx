@@ -6,24 +6,29 @@ import {
   postConversion,
 } from "~/features/inventory/posting.server";
 import { getTransactionOptions } from "~/features/inventory/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requireAdmin } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.tires.conversion";
 import { randomUUID } from "node:crypto";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requireAdmin(request);
   const options = await getTransactionOptions(actor);
-  options.parts = options.parts.filter(
-    (p) =>
-      p.name.toLowerCase().includes("tire") ||
-      p.sku.toLowerCase().startsWith("tr-"),
-  );
+  options.parts = options.parts.filter((p) => {
+    const name = p.name.toLowerCase();
+    const sku = p.sku.toLowerCase();
+    return (
+      name.includes("tyre") ||
+      name.includes("tire") ||
+      sku.startsWith("ty-") ||
+      sku.startsWith("tr-")
+    );
+  });
   return options;
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requireAdmin(request);
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const form = Object.fromEntries(formData);
@@ -52,7 +57,7 @@ export async function action({ request }: Route.ActionArgs) {
   } catch (error) {
     if (error instanceof Response) throw error;
     return {
-      error: inventoryActionError(error, "Unable to convert tires"),
+      error: inventoryActionError(error, "Unable to convert tyres"),
     };
   }
 }
@@ -69,10 +74,10 @@ export default function TireConversionPage({
       <div className="page-heading">
         <div>
           <p className="eyebrow">Lifecycle</p>
-          <h1>Tire Conversion</h1>
+          <h1>Tyre conversion</h1>
           <p className="muted">
-            Convert tires from one lifecycle stage to another (e.g., ORG to
-            DAG1) after retreading.
+            Convert tyres from one lifecycle stage to another (e.g., ORG to
+            DAG1) after retreading. Administrators only.
           </p>
         </div>
       </div>
@@ -127,7 +132,7 @@ export default function TireConversionPage({
           >
             {navigation.state === "submitting"
               ? "Converting…"
-              : "Convert Tires"}
+              : "Convert tyres"}
           </button>
         </div>
       </Form>

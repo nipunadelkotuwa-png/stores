@@ -3,7 +3,7 @@ import { BUSINESS_DAG_STAGES } from "~/features/workshop/constants";
 import { getTyreStockReport } from "~/features/workshop/queries.server";
 import { statusLabel } from "~/features/workshop/tyre-lifecycle";
 import {
-  listStores,
+  listAuthorizedStores,
   listSuppliers,
 } from "~/features/master-data/queries.server";
 import { requireUser } from "~/lib/auth/authorization.server";
@@ -21,7 +21,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       supplierId: url.searchParams.get("supplier") || undefined,
     }),
     listSuppliers(),
-    listStores(),
+    listAuthorizedStores(actor),
   ]);
   return { report, suppliers, stores };
 }

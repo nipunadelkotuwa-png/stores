@@ -464,6 +464,7 @@ export async function getFastMovingParts(
       sku: parts.sku,
       part: parts.name,
       totalIssued: sql<string>`SUM(${stockMovements.quantityDelta} * -1)`,
+      issueCount: sql<number>`count(distinct ${stockDocuments.id})::int`,
     })
     .from(stockMovements)
     .innerJoin(stockDocuments, eq(stockMovements.documentId, stockDocuments.id))
@@ -711,12 +712,16 @@ export async function getItemUsage(
   };
 }
 
-export async function getDailyIssues(actor: Actor, date: string) {
+export async function getDailyIssues(
+  actor: Actor,
+  range: { start: string; end: string },
+) {
   const ids = await getAuthorizedStoreIds(actor);
   return db
     .select({
       id: stockDocuments.id,
       number: stockDocuments.documentNumber,
+      date: stockDocuments.businessDate,
       store: stores.name,
       fleetNumber: buses.fleetNumber,
       sku: parts.sku,
@@ -735,11 +740,16 @@ export async function getDailyIssues(actor: Actor, date: string) {
       and(
         eq(stockDocuments.type, "BUS_ISSUE"),
         eq(stockDocuments.status, "POSTED"),
-        eq(stockDocuments.businessDate, date),
+        sql`${stockDocuments.businessDate} >= ${range.start}`,
+        sql`${stockDocuments.businessDate} <= ${range.end}`,
         scopedStoreCondition(stockDocuments.storeId, ids),
       ),
     )
-    .orderBy(asc(stores.name), asc(parts.sku));
+    .orderBy(
+      desc(stockDocuments.businessDate),
+      asc(stores.name),
+      asc(parts.sku),
+    );
 }
 
 export async function getUnusualIssues(actor: Actor) {
@@ -756,6 +766,8 @@ export async function getUnusualIssues(actor: Actor) {
       busId: buses.id,
       fleetNumber: buses.fleetNumber,
       issueCount: sql<number>`count(${stockDocuments.id})::int`,
+      totalQty: sql<string>`SUM(${stockDocumentLines.quantity})`,
+      lastDate: sql<string>`MAX(${stockDocuments.businessDate})`,
     })
     .from(stockDocuments)
     .innerJoin(
@@ -935,5 +947,6 @@ export async function getInTransitTransfers(actor: Actor) {
     canReceive:
       ids === null ||
       (row.destinationId != null && ids.includes(row.destinationId)),
+    canVoid: ids === null || ids.includes(row.sourceId),
   }));
 }

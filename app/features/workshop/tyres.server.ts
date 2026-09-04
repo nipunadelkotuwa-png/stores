@@ -13,11 +13,13 @@ import {
 import type { Actor } from "~/lib/auth/authorization.server";
 import { requireStoreAccess } from "~/lib/auth/authorization.server";
 import {
-  getReturnableQuantitiesByPart,
+  notifyIssueSubmitted,
   postStockInTransaction,
   prepareStockCommand,
+  submitIssueForApprovalInTransaction,
   type Transaction,
 } from "~/features/inventory/posting.server";
+import { encodeWorkshopNotes, parseWorkshopNotes } from "./pending-notes";
 import { requirePartCategory } from "./category.server";
 import { WorkshopError } from "./errors";
 import { loadOpenJobCard } from "./job-cards.server";
@@ -112,10 +114,28 @@ export async function registerTyre(actor: Actor, input: unknown) {
   });
 }
 
+async function reservedTyreIds(tx: Transaction) {
+  const pending = await tx
+    .select({ notes: stockDocuments.notes })
+    .from(stockDocuments)
+    .where(
+      and(
+        eq(stockDocuments.type, "BUS_ISSUE"),
+        eq(stockDocuments.status, "PENDING_APPROVAL"),
+      ),
+    );
+  const ids = new Set<string>();
+  for (const row of pending) {
+    const payload = parseWorkshopNotes(row.notes);
+    if (payload?.kind === "TYRE_FIT") ids.add(payload.tyreId);
+  }
+  return ids;
+}
+
 export async function fitOrReplaceTyre(actor: Actor, input: unknown) {
   const command = fitTyreSchema.parse(input);
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
     const card = await loadOpenJobCard(tx, command.jobCardId);
     await requireStoreAccess(actor, card.storeId);
@@ -132,6 +152,12 @@ export async function fitOrReplaceTyre(actor: Actor, input: unknown) {
     ) {
       throw new WorkshopError("Tyre must be in stock at this job card's store");
     }
+    const reserved = await reservedTyreIds(tx);
+    if (reserved.has(incoming.id)) {
+      throw new WorkshopError(
+        "This tyre is already reserved for a pending fit",
+      );
+    }
 
     const [occupant] = await tx
       .select()
@@ -145,112 +171,34 @@ export async function fitOrReplaceTyre(actor: Actor, input: unknown) {
       )
       .limit(1);
 
-    let removedDocumentId: string | undefined;
-    if (occupant) {
-      const returnable = await getReturnableQuantitiesByPart(tx, card.id);
-      const available = returnable.get(occupant.partId)?.available;
-      const canReturnStock =
-        available != null && available.greaterThanOrEqualTo(1);
-
-      if (canReturnStock) {
-        const returned = await postStockInTransaction(
-          tx,
-          actor,
-          "BUS_RETURN",
-          prepareStockCommand("BUS_RETURN", {
-            storeId: card.storeId,
-            busId: card.busId,
-            jobCardId: card.id,
-            businessDate: card.businessDate,
-            notes: `Tyre ${occupant.serialNumber} removed from ${command.position}`,
-            idempotencyKey: `${command.idempotencyKey}-remove`,
-            lines: [{ partId: occupant.partId, quantity: "1" }],
-          }),
-        );
-        removedDocumentId = returned.id;
-      }
-
-      await tx
-        .update(tyres)
-        .set({
-          status: "IN_STORE",
-          storeId: card.storeId,
-          currentBusId: null,
-          currentPosition: null,
-        })
-        .where(eq(tyres.id, occupant.id));
-      await tx.insert(tyreEvents).values({
-        tyreId: occupant.id,
-        type: "REMOVE",
-        jobCardId: card.id,
-        stockDocumentId: removedDocumentId || null,
-        storeId: card.storeId,
-        busId: card.busId,
-        fromPosition: command.position,
-        fromStage: occupant.lifecycleStage,
-        odometerKm: card.odometerKm,
-        notes: canReturnStock
-          ? null
-          : "Serial returned to warehouse; stock already returned on this job card",
-        createdBy: actor.id,
-      });
-    }
-
-    const issued = await postStockInTransaction(
-      tx,
-      actor,
-      "BUS_ISSUE",
-      prepareStockCommand("BUS_ISSUE", {
-        storeId: card.storeId,
-        busId: card.busId,
-        jobCardId: card.id,
-        businessDate: card.businessDate,
-        notes: `Tyre ${incoming.serialNumber} fitted to ${command.position}`,
-        idempotencyKey: `${command.idempotencyKey}-fit`,
-        lines: [{ partId: incoming.partId, quantity: "1" }],
-      }),
-    );
-
-    await tx
-      .update(tyres)
-      .set({
-        status: "FITTED",
-        storeId: null,
-        currentBusId: card.busId,
-        currentPosition: command.position,
-      })
-      .where(eq(tyres.id, incoming.id));
-
-    await tx.insert(tyreEvents).values({
-      tyreId: incoming.id,
-      type: occupant ? "REPLACE" : "FIT",
-      jobCardId: card.id,
-      stockDocumentId: issued.id,
+    const pending = await submitIssueForApprovalInTransaction(tx, actor, {
       storeId: card.storeId,
       busId: card.busId,
-      toPosition: command.position,
-      toStage: incoming.lifecycleStage,
-      odometerKm: card.odometerKm,
-      notes: occupant ? `Replaced ${occupant.serialNumber}` : null,
-      createdBy: actor.id,
+      jobCardId: card.id,
+      businessDate: card.businessDate,
+      notes: encodeWorkshopNotes(
+        {
+          kind: "TYRE_FIT",
+          tyreId: incoming.id,
+          position: command.position,
+          occupantId: occupant?.id,
+        },
+        `Tyre ${incoming.serialNumber} fitted to ${command.position}`,
+      ),
+      idempotencyKey: `${command.idempotencyKey}-fit`,
+      lines: [{ partId: incoming.partId, quantity: "1" }],
     });
 
-    await tx.insert(auditEvents).values({
-      actorId: actor.id,
-      eventType: occupant ? "TYRE_REPLACED" : "TYRE_FITTED",
-      entityType: "tyre",
-      entityId: incoming.id,
-      storeId: card.storeId,
-      metadata: {
-        serialNumber: incoming.serialNumber,
-        position: command.position,
-        jobNumber: card.jobNumber,
-        removedDocumentId,
-      },
-    });
-
-    return { id: incoming.id, documentId: issued.id };
+    return {
+      id: incoming.id,
+      documentId: pending.id,
+      number: pending.number,
+      created: pending.created,
+    };
   });
+
+  notifyIssueSubmitted(result);
+  return result;
 }
 
 export async function sendTyreToDag(actor: Actor, input: unknown) {

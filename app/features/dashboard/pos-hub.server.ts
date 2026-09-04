@@ -16,26 +16,20 @@ import {
   type Actor,
 } from "~/lib/auth/authorization.server";
 import { lowStockCondition } from "~/features/inventory/low-stock";
+import { getEnv } from "~/config/env.server";
+import { zonedDayBounds } from "~/features/reports/period";
 
 function pctChange(current: number, previous: number): number | null {
   if (previous === 0) return current > 0 ? 100 : null;
   return ((current - previous) / previous) * 100;
 }
 
-function dayBounds(daysAgo: number) {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - daysAgo);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
-}
-
 export async function getPosHubData(actor: Actor) {
   const storeIds = await getAuthorizedStoreIds(actor);
   const documentScope = scopedStoreCondition(stockDocuments.storeId, storeIds);
-  const today = dayBounds(0);
-  const yesterday = dayBounds(1);
+  const timeZone = getEnv().APP_TIME_ZONE;
+  const today = zonedDayBounds(timeZone, 0);
+  const yesterday = zonedDayBounds(timeZone, 1);
 
   const [
     [todayTransactionTotal],

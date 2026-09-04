@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveReportPeriod } from "../../app/features/reports/period";
+import {
+  resolveReportPeriod,
+  zonedDayBounds,
+  zonedYmdToUtc,
+} from "../../app/features/reports/period";
 
 describe("resolveReportPeriod", () => {
   it("defaults to this month", () => {
@@ -16,6 +20,14 @@ describe("resolveReportPeriod", () => {
     expect(range.period).toBe("last_7_days");
     expect(range.start).toBeTruthy();
     expect(range.end).toBeTruthy();
+  });
+
+  it("maps Colombo midnight to the correct UTC instant", () => {
+    expect(zonedYmdToUtc("2026-09-05", "Asia/Colombo").toISOString()).toBe(
+      "2026-09-04T18:30:00.000Z",
+    );
+    const today = zonedDayBounds("Asia/Colombo", 0);
+    expect(today.end.getTime() - today.start.getTime()).toBe(24 * 60 * 60 * 1000);
   });
 
   it("falls back from empty custom to this month", () => {

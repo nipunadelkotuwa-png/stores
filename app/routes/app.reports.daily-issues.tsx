@@ -11,15 +11,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   const range = resolveReportPeriod(url.searchParams, getEnv().APP_TIME_ZONE, {
     period: "today",
   });
-  const date =
-    url.searchParams.get("date") ||
-    range.end ||
+  const start =
     range.start ||
+    url.searchParams.get("date") ||
     new Date().toISOString().slice(0, 10);
+  const end = range.end || start;
   return {
-    date,
+    start,
+    end,
     range,
-    rows: await getDailyIssues(await requireUser(request), date),
+    rows: await getDailyIssues(await requireUser(request), { start, end }),
   };
 }
 
@@ -31,7 +32,7 @@ export default function DailyIssuesPage({ loaderData }: Route.ComponentProps) {
         <div>
           <p className="eyebrow">Reports</p>
           <h1>Daily issues</h1>
-          <p className="muted">Posted bus issues for one business date.</p>
+          <p className="muted">Posted bus issues for the selected period.</p>
         </div>
         <button
           className="button button-secondary"
@@ -49,7 +50,10 @@ export default function DailyIssuesPage({ loaderData }: Route.ComponentProps) {
             end={params.get("end") || loaderData.range.end}
           />
           <p className="muted" style={{ marginTop: "0.75rem" }}>
-            Uses period end date: {loaderData.date}
+            Showing {loaderData.start}
+            {loaderData.start !== loaderData.end
+              ? ` to ${loaderData.end}`
+              : ""}
           </p>
         </Form>
       </section>
@@ -58,6 +62,7 @@ export default function DailyIssuesPage({ loaderData }: Route.ComponentProps) {
           <table>
             <thead>
               <tr>
+                <th>Date</th>
                 <th>Document</th>
                 <th>Store</th>
                 <th>Bus</th>
@@ -68,11 +73,12 @@ export default function DailyIssuesPage({ loaderData }: Route.ComponentProps) {
             <tbody>
               {loaderData.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>No posted issues for this date.</td>
+                  <td colSpan={6}>No posted issues for this period.</td>
                 </tr>
               ) : (
                 loaderData.rows.map((row, index) => (
                   <tr key={`${row.id}-${index}`}>
+                    <td>{row.date}</td>
                     <td className="mono">
                       <Link to={`/receipts/${row.id}`}>{row.number}</Link>
                     </td>
