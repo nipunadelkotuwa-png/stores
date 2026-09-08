@@ -14,6 +14,7 @@ export async function requirePartCategory(
       id: parts.id,
       sku: parts.sku,
       name: parts.name,
+      unit: parts.unit,
       active: parts.active,
       categoryCode: partCategories.code,
     })

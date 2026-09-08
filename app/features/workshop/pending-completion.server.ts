@@ -8,8 +8,14 @@ import {
   type Transaction,
 } from "~/features/inventory/posting.server";
 import type { Actor } from "~/lib/auth/authorization.server";
-import { WorkshopError } from "./errors";
+import {
+  LIFECYCLE_CONFLICT,
+  WorkshopConflictError,
+  WorkshopError,
+} from "./errors";
 import { parseWorkshopNotes } from "./pending-notes";
+import { lockTyre, loadTyreLifecycleEvents } from "./tyre-lock.server";
+import { getTyreLifecycleActions } from "./tyre-lifecycle";
 
 export async function revertPendingWorkshopIssue(
   tx: Transaction,
@@ -36,13 +42,20 @@ export async function completePendingWorkshopIssue(
     throw new WorkshopError("Pending tyre fit is missing job card details");
   }
 
-  const [incoming] = await tx
-    .select()
-    .from(tyres)
-    .where(eq(tyres.id, payload.tyreId))
-    .limit(1);
+  const incoming = await lockTyre(tx, payload.tyreId);
   if (!incoming) throw new WorkshopError("Tyre not found");
-  if (incoming.status !== "IN_STORE" || incoming.storeId !== document.storeId) {
+  const incomingEvents = await loadTyreLifecycleEvents(tx, incoming.id);
+  if (
+    !getTyreLifecycleActions({
+      tyreId: incoming.id,
+      stage: incoming.lifecycleStage,
+      status: incoming.status,
+      events: incomingEvents,
+    }).canFit
+  ) {
+    throw new WorkshopConflictError(LIFECYCLE_CONFLICT);
+  }
+  if (incoming.storeId !== document.storeId) {
     throw new WorkshopError(
       "Reserved tyre is no longer in stock at this store",
     );
@@ -66,11 +79,7 @@ export async function completePendingWorkshopIssue(
 
   let removedDocumentId: string | undefined;
   if (occupantId) {
-    const [occupant] = await tx
-      .select()
-      .from(tyres)
-      .where(eq(tyres.id, occupantId))
-      .limit(1);
+    const occupant = await lockTyre(tx, occupantId);
     if (!occupant) throw new WorkshopError("Occupant tyre not found");
 
     const returnable = await getReturnableQuantitiesByPart(

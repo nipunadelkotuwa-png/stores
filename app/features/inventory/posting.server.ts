@@ -429,63 +429,6 @@ export async function postStock(actor: Actor, type: StockType, input: unknown) {
   return result;
 }
 
-export async function postConversion(
-  actor: Actor,
-  input: {
-    storeId: string;
-    businessDate: string;
-    sourcePartId: string;
-    targetPartId: string;
-    quantity: string;
-    idempotencyKey: string;
-  },
-) {
-  await requireStoreAccess(actor, input.storeId);
-  if (actor.role !== "ADMIN") {
-    throw data(
-      { message: "Only administrators can convert tyres." },
-      { status: 403 },
-    );
-  }
-
-  const outCommand = prepareStockCommand("ADJUSTMENT", {
-    storeId: input.storeId,
-    businessDate: input.businessDate,
-    reason: `Tyre conversion to ${input.targetPartId}`,
-    direction: "decrease",
-    lines: [{ partId: input.sourcePartId, quantity: input.quantity }],
-    idempotencyKey: input.idempotencyKey + "-out",
-  });
-
-  const inCommand = prepareStockCommand("ADJUSTMENT", {
-    storeId: input.storeId,
-    businessDate: input.businessDate,
-    reason: `Tyre conversion from ${input.sourcePartId}`,
-    direction: "increase",
-    lines: [{ partId: input.targetPartId, quantity: input.quantity }],
-    idempotencyKey: input.idempotencyKey + "-in",
-  });
-
-  const result = await db.transaction(async (tx) => {
-    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
-    await postStockInTransaction(tx, actor, "ADJUSTMENT", outCommand);
-    const inResult = await postStockInTransaction(
-      tx,
-      actor,
-      "ADJUSTMENT",
-      inCommand,
-    );
-    return inResult; // We return the receipt document as the main result
-  });
-
-  const { notifyLowStockForParts } = await import("~/lib/notifications.server");
-  void notifyLowStockForParts(actor, input.storeId, [input.sourcePartId]).catch(
-    () => undefined,
-  );
-
-  return result;
-}
-
 export async function postReversalInTransaction(
   tx: Transaction,
   actor: Actor,

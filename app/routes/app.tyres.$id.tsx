@@ -1,7 +1,14 @@
-import { data, Link } from "react-router";
+import { data, Link, useActionData } from "react-router";
+import { TyreDisposeForm } from "~/components/tyre-dispose-form";
+import { workshopActionResult } from "~/features/workshop/errors";
 import { getTyreDetail } from "~/features/workshop/queries.server";
-import { statusLabel } from "~/features/workshop/tyre-lifecycle";
+import {
+  fitActionLabel,
+  statusLabel,
+} from "~/features/workshop/tyre-lifecycle";
+import { disposeTyre } from "~/features/workshop/tyres.server";
 import { requireUser } from "~/lib/auth/authorization.server";
+import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.tyres.$id";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -13,8 +20,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return { tyre };
 }
 
+export async function action({ request }: Route.ActionArgs) {
+  const actor = await requireUser(request);
+  const formData = await request.formData();
+  await requireValidCsrf(request, formData);
+  try {
+    await disposeTyre(actor, Object.fromEntries(formData));
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof Response) throw error;
+    return workshopActionResult(error, "Unable to dispose tyre");
+  }
+}
+
 export default function TyreDetailPage({ loaderData }: Route.ComponentProps) {
   const { tyre } = loaderData;
+  const actionData = useActionData<typeof action>();
+  const today = new Date().toISOString().slice(0, 10);
   return (
     <>
       <div className="page-heading">
@@ -29,11 +51,36 @@ export default function TyreDetailPage({ loaderData }: Route.ComponentProps) {
           <Link className="button button-secondary" to="/tyres">
             Back to register
           </Link>
-          <Link className="button button-secondary" to="/tyres/dag">
-            DAG OUT / IN
-          </Link>
+          {tyre.actions.canFit ? (
+            <Link className="button button-secondary" to="/job-cards">
+              {fitActionLabel(tyre.actions)}
+            </Link>
+          ) : null}
+          {tyre.actions.canSendToDag ? (
+            <Link
+              className="button button-primary"
+              to={`/tyres/dag?send=${tyre.id}`}
+            >
+              Send to DAG
+            </Link>
+          ) : null}
+          {tyre.status === "AT_DAG" ? (
+            <Link
+              className="button button-primary"
+              to={`/tyres/dag?receive=${tyre.id}`}
+            >
+              DAG IN
+            </Link>
+          ) : null}
         </div>
       </div>
+
+      {actionData && "error" in actionData ? (
+        <p className="form-error">{actionData.error}</p>
+      ) : null}
+      {actionData && "ok" in actionData && actionData.ok ? (
+        <p className="muted">Tyre disposed.</p>
+      ) : null}
 
       <section className="panel" style={{ marginBottom: "1.5rem" }}>
         <p>
@@ -51,6 +98,16 @@ export default function TyreDetailPage({ loaderData }: Route.ComponentProps) {
           <p>
             <strong>Notes:</strong> {tyre.notes}
           </p>
+        ) : null}
+        {tyre.actions.canDispose ? (
+          <div style={{ marginTop: "1rem" }}>
+            <TyreDisposeForm
+              tyreId={tyre.id}
+              businessDate={today}
+              className="stack"
+              buttonClassName="button button-secondary"
+            />
+          </div>
         ) : null}
       </section>
 
@@ -95,8 +152,7 @@ export default function TyreDetailPage({ loaderData }: Route.ComponentProps) {
                   {event.documentNumber ? (
                     <>
                       {" "}
-                      ·{" "}
-                      <span className="mono">{event.documentNumber}</span>
+                      · <span className="mono">{event.documentNumber}</span>
                     </>
                   ) : null}
                   {event.odometerKm ? ` · ${event.odometerKm} km` : ""}

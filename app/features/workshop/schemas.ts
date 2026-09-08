@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+import Decimal from "decimal.js";
 import { z } from "zod";
-import { TYRE_POSITIONS, USABLE_TYRE_STAGES } from "./constants";
+import { TYRE_POSITIONS } from "./constants";
+import { normalizeTyreSerial } from "./tyre-lifecycle";
 
 const optionalKmSchema = z
   .union([z.string(), z.number()])
@@ -51,11 +54,24 @@ export const rejectJobCardSchema = z.object({
   reason: z.string().trim().min(3).max(1000),
 });
 
+export const TYRE_REGISTER_REASONS = [
+  "OPENING_BALANCE",
+  "LEGACY_RECONCILIATION",
+  "INVENTORY_CORRECTION",
+] as const;
+
+export type TyreRegisterReason = (typeof TYRE_REGISTER_REASONS)[number];
+
 export const registerTyreSchema = z.object({
   storeId: z.string().uuid(),
   partId: z.string().uuid(),
-  serialNumber: z.string().trim().min(2).max(80),
-  lifecycleStage: z.enum(USABLE_TYRE_STAGES).default("ORG"),
+  serialNumber: z
+    .string()
+    .trim()
+    .min(2)
+    .max(80)
+    .transform((value) => value.toLowerCase()),
+  reason: z.enum(TYRE_REGISTER_REASONS),
   notes: z.string().trim().max(1000).optional(),
 });
 
@@ -102,3 +118,100 @@ export const recordOilChangeSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
   idempotencyKey: z.string().min(16).max(100),
 });
+
+const serialListSchema = z
+  .union([z.string(), z.array(z.string())])
+  .transform((value) => {
+    const lines = Array.isArray(value) ? value : value.split(/\r?\n|,/);
+    return lines.map(normalizeTyreSerial).filter((serial) => serial.length > 0);
+  });
+
+export const importOrgTyresSchema = z
+  .object({
+    storeId: z.string().uuid(),
+    supplierId: z.string().uuid(),
+    businessDate: z.string().date(),
+    invoiceReference: z
+      .string()
+      .trim()
+      .max(120)
+      .optional()
+      .transform((value) => value || undefined),
+    partId: z.string().uuid(),
+    quantity: z.coerce.number().int().positive(),
+    unitCost: z
+      .string()
+      .trim()
+      .regex(/^\d+(\.\d{1,2})?$/, "Unit cost must be a non-negative decimal"),
+    serials: serialListSchema,
+    idempotencyKey: z.string().min(16).max(100),
+    notes: z.string().trim().max(1000).optional(),
+  })
+  .superRefine((value, ctx) => {
+    const unique = [
+      ...new Set(value.serials.map((serial) => serial.toLowerCase())),
+    ];
+    if (unique.length !== value.serials.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["serials"],
+        message: "Serial numbers must be unique",
+      });
+    }
+    if (value.serials.length !== value.quantity) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["serials"],
+        message: "Number of serials must match the received quantity",
+      });
+    }
+    for (const serial of value.serials) {
+      if (serial.length < 2 || serial.length > 80) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["serials"],
+          message: "Each serial must be between 2 and 80 characters",
+        });
+        break;
+      }
+    }
+  });
+
+export type CanonicalTyreImport = {
+  storeId: string;
+  supplierId: string;
+  businessDate: string;
+  invoiceReference: string;
+  partId: string;
+  quantity: number;
+  unitCost: string;
+  serials: string[];
+};
+
+export function canonicalizeTyreImport(command: {
+  storeId: string;
+  supplierId: string;
+  businessDate: string;
+  invoiceReference?: string;
+  partId: string;
+  quantity: number;
+  unitCost: string;
+  serials: string[];
+}): CanonicalTyreImport {
+  return {
+    storeId: command.storeId,
+    supplierId: command.supplierId,
+    businessDate: command.businessDate,
+    invoiceReference: command.invoiceReference?.trim() ?? "",
+    partId: command.partId,
+    quantity: command.quantity,
+    unitCost: new Decimal(command.unitCost).toFixed(2),
+    serials: [...new Set(command.serials.map(normalizeTyreSerial))].sort(
+      (a, b) => a.localeCompare(b),
+    ),
+  };
+}
+
+export function tyreImportRequestHash(canonical: CanonicalTyreImport) {
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}

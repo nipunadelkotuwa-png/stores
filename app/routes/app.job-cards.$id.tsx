@@ -8,6 +8,7 @@ import {
   useNavigation,
 } from "react-router";
 import { CsrfField } from "~/components/csrf-field";
+import { TyreDisposeForm } from "~/components/tyre-dispose-form";
 import { StockLineItems } from "~/components/stock-line-items";
 import { TyreMap } from "~/components/tyre-map";
 import {
@@ -27,14 +28,22 @@ import {
   TYRE_POSITIONS,
   UNUSUAL_ISSUE_THRESHOLD,
 } from "~/features/workshop/constants";
-import { workshopActionError } from "~/features/workshop/errors";
+import { ZodError } from "zod";
+import {
+  WorkshopError,
+  workshopActionResult,
+} from "~/features/workshop/errors";
+import { isSerializationFailure } from "~/lib/postgres-error";
 import {
   cancelJobCard,
   closeJobCard,
 } from "~/features/workshop/job-cards.server";
 import { recordOilChange } from "~/features/workshop/oil.server";
 import { getJobCardDetail } from "~/features/workshop/queries.server";
-import { fitOrReplaceTyre } from "~/features/workshop/tyres.server";
+import {
+  fitOrReplaceTyre,
+  disposeTyre,
+} from "~/features/workshop/tyres.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.job-cards.$id";
@@ -110,6 +119,10 @@ export async function action({ request, params }: Route.ActionArgs) {
       });
       throw redirect(`/receipts/${result.documentId}`);
     }
+    if (intent === "dispose-tyre") {
+      await disposeTyre(actor, Object.fromEntries(formData));
+      throw redirect(`/job-cards/${jobCardId}`);
+    }
     if (intent === "oil") {
       const result = await recordOilChange(actor, {
         jobCardId,
@@ -134,10 +147,15 @@ export async function action({ request, params }: Route.ActionArgs) {
     return { error: "Unknown action" };
   } catch (error) {
     if (error instanceof Response) throw error;
+    if (
+      error instanceof WorkshopError ||
+      error instanceof ZodError ||
+      isSerializationFailure(error)
+    ) {
+      return workshopActionResult(error, "Unable to update job card");
+    }
     return {
-      error:
-        workshopActionError(error, "") ||
-        inventoryActionError(error, "Unable to update job card"),
+      error: inventoryActionError(error, "Unable to update job card"),
     };
   }
 }
@@ -210,7 +228,7 @@ export default function JobCardDetailPage({
         </div>
       </div>
 
-      {actionData?.error ? (
+      {actionData && "error" in actionData ? (
         <p className="form-error no-print">{actionData.error}</p>
       ) : null}
 
@@ -293,7 +311,11 @@ export default function JobCardDetailPage({
               <StockLineItems
                 parts={loaderData.parts}
                 initialPartId={loaderData.initialPartId || undefined}
-                lineErrors={actionData?.lineErrors}
+                lineErrors={
+                  actionData && "lineErrors" in actionData
+                    ? actionData.lineErrors
+                    : undefined
+                }
                 onLinesChange={(rows) =>
                   setIssuePartIds(rows.map((row) => row.partId))
                 }
@@ -324,12 +346,12 @@ export default function JobCardDetailPage({
             className="two-column no-print"
             style={{ marginBottom: "1.5rem" }}
           >
-            <section className="panel form-panel">
+            <section className="panel form-panel" id="fit-tyre">
               <h2>Fit / replace tyre</h2>
               {card.storeTyres.length === 0 ? (
                 <p className="muted">
                   Register a tyre serial in store stock first.{" "}
-                  <Link to="/tyres">Tyres</Link>
+                  <Link to="/tyres/import">Import new tyres</Link>
                 </p>
               ) : (
                 <Form method="post" className="stack">
@@ -436,6 +458,50 @@ export default function JobCardDetailPage({
               </Form>
             </section>
           </div>
+
+          {card.removedWarehouse.length > 0 ? (
+            <section
+              className="panel no-print"
+              style={{ marginBottom: "1.5rem" }}
+            >
+              <h2>Removed tyres in warehouse</h2>
+              <p className="muted">
+                Shown after the replacement issue is verified.
+              </p>
+              <ul className="stack">
+                {card.removedWarehouse.map((tyre) => (
+                  <li key={tyre.id}>
+                    <Link to={`/tyres/${tyre.id}`}>{tyre.serialNumber}</Link>
+                    {" — "}
+                    {tyre.sku} ({tyre.stage})
+                    {tyre.actions.canFit ? (
+                      <>
+                        {" · "}
+                        <a href="#fit-tyre">Fit again</a>
+                      </>
+                    ) : null}
+                    {tyre.actions.canSendToDag ? (
+                      <>
+                        {" · "}
+                        <Link to={`/tyres/dag?send=${tyre.id}`}>
+                          Send to DAG
+                        </Link>
+                      </>
+                    ) : null}
+                    {tyre.actions.canDispose ? (
+                      <span style={{ display: "inline", marginLeft: "0.5rem" }}>
+                        <TyreDisposeForm
+                          tyreId={tyre.id}
+                          businessDate={card.businessDate}
+                          intent="dispose-tyre"
+                        />
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </>
       ) : null}
 

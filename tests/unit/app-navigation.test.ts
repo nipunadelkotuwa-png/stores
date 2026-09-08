@@ -59,7 +59,16 @@ describe("buildNavSections", () => {
     );
     const paths = operations?.items.map((item) => item.to) ?? [];
     expect(paths).toContain("/returns");
-    expect(paths).toContain("/tires/conversion");
+    expect(paths).not.toContain("/tires/conversion");
+  });
+
+  it("includes tyre import in workshop nav", () => {
+    const workshop = buildNavSections("OPERATOR").find(
+      (section) => section.id === "workshop",
+    );
+    const paths = workshop?.items.map((item) => item.to) ?? [];
+    expect(paths).toContain("/tyres/import");
+    expect(paths).toContain("/tyres/dag");
   });
 });
 

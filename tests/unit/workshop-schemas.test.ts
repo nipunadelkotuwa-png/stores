@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalizeTyreImport,
   closeJobCardSchema,
   disposeTyreSchema,
   fitTyreSchema,
+  importOrgTyresSchema,
   openJobCardSchema,
   receiveTyreFromDagSchema,
   recordOilChangeSchema,
   registerTyreSchema,
   sendTyreToDagSchema,
+  tyreImportRequestHash,
 } from "../../app/features/workshop/schemas";
 import {
   UNUSUAL_ISSUE_THRESHOLD,
@@ -121,8 +124,16 @@ describe("workshop schemas", () => {
         storeId: "11111111-1111-4111-8111-111111111111",
         partId: "22222222-2222-4222-8222-222222222222",
         serialNumber: "SN-1",
+        reason: "OPENING_BALANCE",
       }).success,
     ).toBe(true);
+    expect(
+      registerTyreSchema.safeParse({
+        storeId: "11111111-1111-4111-8111-111111111111",
+        partId: "22222222-2222-4222-8222-222222222222",
+        serialNumber: "SN-1",
+      }).success,
+    ).toBe(false);
     expect(
       registerTyreSchema.safeParse({
         storeId: "11111111-1111-4111-8111-111111111111",
@@ -164,5 +175,62 @@ describe("workshop schemas", () => {
         idempotencyKey: "0123456789abcdef",
       }).success,
     ).toBe(true);
+  });
+
+  it("requires serial count to match quantity and hashes a canonical payload", () => {
+    const base = {
+      storeId: "11111111-1111-4111-8111-111111111111",
+      supplierId: "66666666-6666-4666-8666-666666666666",
+      businessDate: "2026-08-17",
+      partId: "22222222-2222-4222-8222-222222222222",
+      quantity: 2,
+      unitCost: "10",
+      idempotencyKey: "0123456789abcdef",
+    };
+    expect(
+      importOrgTyresSchema.safeParse({
+        ...base,
+        serials: "TY001\nTY002",
+      }).success,
+    ).toBe(true);
+    expect(
+      importOrgTyresSchema.safeParse({
+        ...base,
+        serials: "TY001",
+      }).success,
+    ).toBe(false);
+    expect(
+      importOrgTyresSchema.safeParse({
+        ...base,
+        serials: "TY001\nTY001",
+      }).success,
+    ).toBe(false);
+
+    const a = canonicalizeTyreImport({
+      ...base,
+      unitCost: "10.00",
+      serials: [" TY002 ", "TY001"],
+    });
+    const b = canonicalizeTyreImport({
+      ...base,
+      unitCost: "10",
+      serials: ["TY001", "TY002"],
+    });
+    expect(tyreImportRequestHash(a)).toBe(tyreImportRequestHash(b));
+    expect(a.serials).toEqual(["ty001", "ty002"]);
+    expect(a.unitCost).toBe("10.00");
+
+    const mixedCase = canonicalizeTyreImport({
+      ...base,
+      unitCost: "10.00",
+      serials: ["ty001", "TY002"],
+    });
+    expect(tyreImportRequestHash(mixedCase)).toBe(tyreImportRequestHash(a));
+    expect(
+      importOrgTyresSchema.safeParse({
+        ...base,
+        serials: "TY001\nty001",
+      }).success,
+    ).toBe(false);
   });
 });

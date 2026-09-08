@@ -22,8 +22,46 @@ import {
 } from "~/lib/auth/authorization.server";
 import { TYRE_POSITIONS, type TyrePosition } from "./constants";
 import { parseWorkshopNotes } from "./pending-notes";
+import { reservedTyreIds } from "./tyre-lock.server";
+import {
+  getTyreLifecycleActions,
+  type TyreLifecycleActions,
+  type TyreLifecycleEvent,
+} from "./tyre-lifecycle";
 
 const LIST_LIMIT = 200;
+
+async function lifecycleEventsForTyres(tyreIds: string[]) {
+  if (tyreIds.length === 0) return [] as TyreLifecycleEvent[];
+  return db
+    .select({
+      tyreId: tyreEvents.tyreId,
+      type: tyreEvents.type,
+      sequence: tyreEvents.sequence,
+    })
+    .from(tyreEvents)
+    .where(inArray(tyreEvents.tyreId, tyreIds))
+    .orderBy(asc(tyreEvents.sequence));
+}
+
+export async function attachLifecycleActions<
+  T extends { id: string; stage: string; status: string },
+>(rows: T[]): Promise<Array<T & { actions: TyreLifecycleActions }>> {
+  const [events, reserved] = await Promise.all([
+    lifecycleEventsForTyres(rows.map((row) => row.id)),
+    reservedTyreIds(db),
+  ]);
+  return rows.map((row) => ({
+    ...row,
+    actions: getTyreLifecycleActions({
+      tyreId: row.id,
+      stage: row.stage,
+      status: row.status,
+      events,
+      reserved: reserved.has(row.id),
+    }),
+  }));
+}
 
 export async function listOpenJobCards(
   actor: Actor,
@@ -207,6 +245,7 @@ export async function getJobCardDetail(actor: Actor, id: string) {
       db
         .select({
           id: tyreEvents.id,
+          tyreId: tyreEvents.tyreId,
           type: tyreEvents.type,
           serialNumber: tyres.serialNumber,
           occurredAt: tyreEvents.occurredAt,
@@ -267,6 +306,29 @@ export async function getJobCardDetail(actor: Actor, id: string) {
     }),
   );
 
+  const removedIds = [
+    ...new Set(
+      tyreRows.filter((row) => row.type === "REMOVE").map((row) => row.tyreId),
+    ),
+  ];
+  const removedWarehouseRows =
+    removedIds.length === 0
+      ? []
+      : await db
+          .select({
+            id: tyres.id,
+            serialNumber: tyres.serialNumber,
+            sku: parts.sku,
+            stage: tyres.lifecycleStage,
+            status: tyres.status,
+          })
+          .from(tyres)
+          .innerJoin(parts, eq(tyres.partId, parts.id))
+          .where(
+            and(inArray(tyres.id, removedIds), eq(tyres.status, "IN_STORE")),
+          );
+  const removedWarehouse = await attachLifecycleActions(removedWarehouseRows);
+
   return {
     ...card,
     documents,
@@ -275,6 +337,7 @@ export async function getJobCardDetail(actor: Actor, id: string) {
     storeTyres: storeTyres.filter((tyre) => !reserved.has(tyre.id)),
     oilParts,
     fitted,
+    removedWarehouse,
   };
 }
 
@@ -304,7 +367,7 @@ export async function listTyres(
   },
 ) {
   const ids = await getAuthorizedStoreIds(actor);
-  return db
+  const rows = await db
     .select({
       id: tyres.id,
       serialNumber: tyres.serialNumber,
@@ -360,6 +423,7 @@ export async function listTyres(
     )
     .orderBy(asc(tyres.serialNumber))
     .limit(LIST_LIMIT);
+  return attachLifecycleActions(rows);
 }
 
 export async function getTyreRegisterCounts(actor: Actor) {
@@ -449,6 +513,7 @@ export async function getTyreDetail(actor: Actor, tyreId: string) {
     .select({
       id: tyreEvents.id,
       type: tyreEvents.type,
+      sequence: tyreEvents.sequence,
       occurredAt: tyreEvents.occurredAt,
       fromStage: tyreEvents.fromStage,
       toStage: tyreEvents.toStage,
@@ -467,9 +532,22 @@ export async function getTyreDetail(actor: Actor, tyreId: string) {
     .leftJoin(stockDocuments, eq(tyreEvents.stockDocumentId, stockDocuments.id))
     .innerJoin(users, eq(tyreEvents.createdBy, users.id))
     .where(eq(tyreEvents.tyreId, tyreId))
-    .orderBy(asc(tyreEvents.occurredAt));
+    .orderBy(asc(tyreEvents.sequence));
 
-  return { ...tyre, events };
+  const reserved = await reservedTyreIds(db);
+  const actions = getTyreLifecycleActions({
+    tyreId: tyre.id,
+    stage: tyre.stage,
+    status: tyre.status,
+    events: events.map((event) => ({
+      tyreId,
+      type: event.type,
+      sequence: event.sequence,
+    })),
+    reserved: reserved.has(tyre.id),
+  });
+
+  return { ...tyre, events, actions };
 }
 
 export async function listTyresAtDag(actor: Actor) {
@@ -511,7 +589,7 @@ export async function listTyresAtDag(actor: Actor) {
         .where(
           and(eq(tyreEvents.tyreId, tyre.id), eq(tyreEvents.type, "SEND_DAG")),
         )
-        .orderBy(desc(tyreEvents.occurredAt))
+        .orderBy(desc(tyreEvents.sequence))
         .limit(1);
       return {
         ...tyre,
@@ -528,12 +606,13 @@ export async function listTyresAtDag(actor: Actor) {
 
 export async function listInStoreTyres(actor: Actor) {
   const ids = await getAuthorizedStoreIds(actor);
-  return db
+  const rows = await db
     .select({
       id: tyres.id,
       serialNumber: tyres.serialNumber,
       sku: parts.sku,
       stage: tyres.lifecycleStage,
+      status: tyres.status,
       storeId: tyres.storeId,
       store: stores.code,
     })
@@ -547,6 +626,7 @@ export async function listInStoreTyres(actor: Actor) {
       ),
     )
     .orderBy(asc(tyres.serialNumber));
+  return attachLifecycleActions(rows);
 }
 
 export async function getFittedTyres(busId: string) {

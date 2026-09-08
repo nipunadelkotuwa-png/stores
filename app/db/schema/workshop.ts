@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   index,
   integer,
@@ -194,11 +195,41 @@ export const tyreEvents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    sequence: bigint("sequence", { mode: "number" })
+      .notNull()
+      .default(sql`nextval('tyre_events_sequence_seq')`),
   },
   (table) => [
+    uniqueIndex("tyre_events_sequence_unique").on(table.sequence),
+    index("tyre_events_tyre_sequence_idx").on(table.tyreId, table.sequence),
     index("tyre_events_tyre_time_idx").on(table.tyreId, table.occurredAt),
     index("tyre_events_job_card_idx").on(table.jobCardId),
     index("tyre_events_bus_time_idx").on(table.busId, table.occurredAt),
+  ],
+);
+
+export const tyreImports = pgTable(
+  "tyre_imports",
+  {
+    id: idColumn(),
+    storeId: uuid("store_id")
+      .references(() => stores.id)
+      .notNull(),
+    createdBy: uuid("created_by")
+      .references(() => users.id)
+      .notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    purchaseId: uuid("purchase_id").notNull(),
+    receiptDocumentId: uuid("receipt_document_id").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("tyre_imports_idempotency_unique").on(
+      table.storeId,
+      table.createdBy,
+      table.idempotencyKey,
+    ),
   ],
 );
 

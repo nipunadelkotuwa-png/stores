@@ -30,13 +30,13 @@ export const operationsNavConfig: NavItemConfig[] = [
   { to: "/returns/bus", label: "Bus return" },
   { to: "/returns", label: "Returns & reversals", exact: true, adminOnly: true },
   { to: "/transfers", label: "Transfers" },
-  { to: "/tires/conversion", label: "Tyre conversion", adminOnly: true },
   { to: "/purchases", label: "Purchases" },
   { to: "/alerts/low-stock", label: "Low stock" },
 ];
 
 export const workshopNavConfig: NavItemConfig[] = [
   { to: "/job-cards", label: "Job cards" },
+  { to: "/tyres/import", label: "Import new tyres" },
   { to: "/tyres", label: "Tyres", exact: true },
   { to: "/tyres/dag", label: "DAG" },
 ];

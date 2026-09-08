@@ -47,30 +47,31 @@ Typical day-to-day use:
 
 ### Operations
 
-| Area                    | What you can do                                                                                                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Dashboard**           | Store, part, bus, and transaction counts, a receipts-vs-issues trend, and links from low-stock / top-consumed rows into stock-in or issue                              |
-| **Balances**            | On-hand quantity per store and part, with unit, reorder level, and issue / stock-in links                                                                              |
-| **Scan barcode**        | Match a printed QR (SKU or barcode), pick the store when the part exists in more than one location, then jump to issue or stock-in with the part and store preselected |
-| **Stock in**            | Post a stock receipt into a store (optional supplier and unit cost)                                                                                                    |
-| **Bus issue**           | Issue parts against an **open job card**; stock cannot go below zero                                                                                                   |
-| **Bus return**          | Return unused parts or worn items from a bus against the open job card                                                                                                 |
-| **Job cards**           | Open / close workshop cards (one open per bus). Required for new issues and returns                                                                                    |
-| **Tyres**               | Register serials against on-hand tyre SKUs, fit/replace on a job card (positions FL/FR/RLI/RLO/RRI/RRO/SPARE)                                                          |
-| **DAG**                 | Send a store serial to retread and receive it as the next stage (ORG → DAG1 → DAG2 → DAG3, then scrap)                                                                 |
-| **Oil change**          | Issue litres of an OIL-category part on a job card and log km/date                                                                                                     |
-| **Bus history**         | Per-bus timeline of job cards, stock, tyres, and oil, plus the current tyre map                                                                                        |
-| **Returns & reversals** | Reverse a posted document with a compensating movement                                                                                                                 |
-| **Tire conversion**     | Convert tire stock from one lifecycle SKU to another (for example original to retread)                                                                                 |
-| **Purchases**           | Record a local purchase and post the linked stock receipt in one transaction                                                                                           |
-| **Low stock**           | Parts at or below `store_part_settings.reorder_level` (computed; no alerts table), with a stock-in link                                                                |
-| **Receipts**            | Printable posted-document view. Linked from movements, daily movement, bus usage, purchases, and the admin audit log                                                   |
+| Area                    | What you can do                                                                                                                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dashboard**           | Store, part, bus, and transaction counts, a receipts-vs-issues trend, and links from low-stock / top-consumed rows into stock-in or issue                                                |
+| **Balances**            | On-hand quantity per store and part, with unit, reorder level, and issue / stock-in links                                                                                                |
+| **Scan barcode**        | Match a printed QR (SKU or barcode), pick the store when the part exists in more than one location, then jump to issue or stock-in with the part and store preselected                   |
+| **Stock in**            | Post a stock receipt into a store (optional supplier and unit cost)                                                                                                                      |
+| **Bus issue**           | Issue parts against an **open job card**; stock cannot go below zero                                                                                                                     |
+| **Bus return**          | Return unused parts or worn items from a bus against the open job card                                                                                                                   |
+| **Job cards**           | Open / close workshop cards (one open per bus). Required for new issues and returns                                                                                                      |
+| **Tyres**               | Import new ORG serials with stock in one transaction, then fit/replace on a job card (positions FL/FR/RLI/RLO/RRI/RRO/SPARE). Manual serial register is an admin correction.             |
+| **DAG**                 | After a completed fit→remove in the current stage, send a serial to retread and receive it as the next stage (ORG → DAG1 → DAG2 → DAG3). Fresh receipts cannot go to DAG or be disposed. |
+| **Oil change**          | Issue litres of an OIL-category part on a job card and log km/date                                                                                                                       |
+| **Bus history**         | Per-bus timeline of job cards, stock, tyres, and oil, plus the current tyre map                                                                                                          |
+| **Returns & reversals** | Reverse a posted document with a compensating movement                                                                                                                                   |
+| **Purchases**           | Record a local purchase and post the linked stock receipt in one transaction                                                                                                             |
+| **Low stock**           | Parts at or below `store_part_settings.reorder_level` (computed; no alerts table), with a stock-in link                                                                                  |
+| **Receipts**            | Printable posted-document view. Linked from movements, daily movement, bus usage, purchases, and the admin audit log                                                                     |
+
+**Tyre lifecycle** — Import (or admin correction) registers an ORG serial. Only a successful DAG receive advances the stage; each new stage starts fresh. DAG send and dispose require a verified **FIT or REPLACE, then REMOVE of the same serial** in the current stage, ordered by `tyre_events.sequence`. DAG3 can be fitted and then disposed, but cannot be sent for another DAG cycle. Serials never change.
 
 ### Master data
 
 - **Parts** — SKU, name, barcode, unit, brand, category, active flag. Operators can browse; only admins add or activate/deactivate.
 - **Categories** — group parts (Engine, Brakes, Electrical, and so on). Mutations are admin-only.
-- **Part selector** — searchable dropdown grouped by category (name, SKU, or barcode), used on stock forms, purchases, tire conversion, and corrections
+- **Part selector** — searchable dropdown grouped by category (name, SKU, or barcode), used on stock forms, purchases, and corrections
 - **Print labels** — QR labels (`barcode` or SKU). Select which active parts to print, including uncategorized items.
 - **Buses** — fleet number, registration, make/model (admin mutations). Each bus has a history page.
 - **Suppliers** — local procurement counterparts (admin mutations)
@@ -318,21 +319,21 @@ Compose can also override `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, a
 
 `pnpm db:seed` is **blocked in production**. It upserts master data and, on the first run, posts mock workshop/inventory history (skipped if seed documents already exist):
 
-| Entity | Seed value |
-| --- | --- |
-| Stores | `CMB` Colombo Central Store, `KDY` Kandy Store |
-| Admin | `admin@dsgunasekara.local` / `ChangeMe123!` (or `DEV_ADMIN_PASSWORD`) |
-| Operator | `operator@dsgunasekara.local` / same password, assigned to Colombo |
-| Categories | Engine, Brakes, Electrical, Tyres, Oil |
-| Parts | Filters, brake pads/shoes, belt, battery, headlamp, ORG/DAG1/DAG2 tyres, 15W-40 and gear oil (with barcodes) |
-| Suppliers | Local Supplier, Ceat Kelani Tyres, Lanka IOC Lubricants |
-| Buses | `BUS-001` … `BUS-006` (Leyland / Tata, WP / CP / KY / NW plates) |
-| Reorder | Per-part levels and bin locations for both stores |
-| Stock | Opening receipts, bus issues, DAG send/receive, balances |
-| Purchases | One posted Ceat tyre purchase linked to a Colombo receipt |
-| Job cards | Three closed cards plus one open card on `BUS-003` |
-| Tyres | Serials fitted on `BUS-001`, in-store ORG stock, one casing at DAG, one DAG1 returned |
-| Oil | 18 L change logged on `BUS-001` |
+| Entity     | Seed value                                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------ |
+| Stores     | `CMB` Colombo Central Store, `KDY` Kandy Store                                                               |
+| Admin      | `admin@dsgunasekara.local` / `ChangeMe123!` (or `DEV_ADMIN_PASSWORD`)                                        |
+| Operator   | `operator@dsgunasekara.local` / same password, assigned to Colombo                                           |
+| Categories | Engine, Brakes, Electrical, Tyres, Oil                                                                       |
+| Parts      | Filters, brake pads/shoes, belt, battery, headlamp, ORG/DAG1/DAG2 tyres, 15W-40 and gear oil (with barcodes) |
+| Suppliers  | Local Supplier, Ceat Kelani Tyres, Lanka IOC Lubricants                                                      |
+| Buses      | `BUS-001` … `BUS-006` (Leyland / Tata, WP / CP / KY / NW plates)                                             |
+| Reorder    | Per-part levels and bin locations for both stores                                                            |
+| Stock      | Opening receipts, bus issues, DAG send/receive, balances                                                     |
+| Purchases  | One posted Ceat tyre purchase linked to a Colombo receipt                                                    |
+| Job cards  | Three closed cards plus one open card on `BUS-003`                                                           |
+| Tyres      | Serials fitted on `BUS-001`, in-store ORG stock, one casing at DAG, one DAG1 returned                        |
+| Oil        | 18 L change logged on `BUS-001`                                                                              |
 
 The admin is created with `must_change_password = true`. You will be sent to `/change-password` on first login. Re-running the seed does **not** reset an existing admin password.
 
@@ -387,8 +388,8 @@ Unauthenticated users are sent to `/login`. Forced password change applies to ev
 | `/job-cards/new`          | Open a job card                                                      |
 | `/job-cards/:id`          | Job card detail (issue, tyre, oil, close, print)                     |
 | `/tyres`                  | Tyre serial register                                                 |
+| `/tyres/import`           | Import new ORG tyres with serials                                    |
 | `/tyres/dag`              | DAG send / receive                                                   |
-| `/tires/conversion`       | Admin bulk tire SKU conversion                                       |
 | `/purchases`              | Local purchase list                                                  |
 | `/purchases/new`          | Post local purchase + receipt                                        |
 | `/alerts/low-stock`       | Below reorder level                                                  |
@@ -466,6 +467,7 @@ Put trigger or constraint SQL that Drizzle cannot express in a new file under `d
 - **Master data** — `part_categories`, `parts`, `store_part_settings`, `buses`, `suppliers`
 - **Inventory** — `stock_documents`, `stock_document_lines`, `stock_movements`, `inventory_balances`, `document_sequences`
 - **Purchases** — `local_purchases`, `local_purchase_lines` (linked to a receipt document)
+- **Workshop** — `job_cards`, `tyres`, `tyre_events` (append-only, ordered by `sequence`), `tyre_imports`, `oil_changes`
 - **Audit** — `audit_events`
 
 ---
@@ -475,7 +477,7 @@ Put trigger or constraint SQL that Drizzle cannot express in a new file under `d
 | Suite       | Command                 | What it covers                                                                                                                                       |
 | ----------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Unit        | `pnpm test`             | Password hashing, inventory command/schema, scan matching, audit detail text, movement query-param filters, action error mapping, master-data errors |
-| Integration | `pnpm test:integration` | Posting path against the database                                                                                                                    |
+| Integration | `pnpm test:integration` | Posting path and tyre lifecycle against the database                                                                                                 |
 | E2E         | `pnpm test:e2e`         | Admin login → forced password change → dashboard                                                                                                     |
 | Full gate   | `pnpm verify`           | Format, lint, types, tests, production build                                                                                                         |
 

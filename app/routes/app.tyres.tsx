@@ -7,15 +7,20 @@ import {
   useSearchParams,
 } from "react-router";
 import { CsrfField } from "~/components/csrf-field";
+import { TyreDisposeForm } from "~/components/tyre-dispose-form";
 import { BUSINESS_DAG_STAGES } from "~/features/workshop/constants";
-import { workshopActionError } from "~/features/workshop/errors";
+import { workshopActionResult } from "~/features/workshop/errors";
 import {
   getJobCardFormOptions,
   getTyreRegisterCounts,
   listCategoryParts,
   listTyres,
 } from "~/features/workshop/queries.server";
-import { statusLabel } from "~/features/workshop/tyre-lifecycle";
+import { TYRE_REGISTER_REASONS } from "~/features/workshop/schemas";
+import {
+  fitActionLabel,
+  statusLabel,
+} from "~/features/workshop/tyre-lifecycle";
 import { registerTyre, disposeTyre } from "~/features/workshop/tyres.server";
 import { requireUser } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
@@ -44,6 +49,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     stores: formOptions.stores,
     buses: formOptions.buses,
     counts,
+    isAdmin: actor.role === "ADMIN",
   };
 }
 
@@ -60,14 +66,12 @@ export async function action({ request }: Route.ActionArgs) {
     await registerTyre(actor, Object.fromEntries(formData));
     return { ok: true };
   } catch (error) {
-    return {
-      error: workshopActionError(
-        error,
-        intent === "dispose"
-          ? "Unable to dispose tyre"
-          : "Unable to register tyre",
-      ),
-    };
+    return workshopActionResult(
+      error,
+      intent === "dispose"
+        ? "Unable to dispose tyre"
+        : "Unable to register tyre",
+    );
   }
 }
 
@@ -98,11 +102,15 @@ export default function TyresPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Workshop</p>
           <h1>Tyres</h1>
           <p className="muted">
-            Register serials against warehouse tyre stock, then fit them from a
-            job card. Lifecycle stages are ORG → DAG1 → DAG2 → DAG3.
+            Import new ORG serials, then fit them from a job card. After a
+            completed service cycle: send to DAG or dispose. Stages are ORG →
+            DAG1 → DAG2 → DAG3.
           </p>
         </div>
         <div className="heading-actions">
+          <Link className="button button-primary" to="/tyres/import">
+            Import new tyres
+          </Link>
           <Link className="button button-secondary" to="/tyres/dag">
             DAG send / return
           </Link>
@@ -221,7 +229,10 @@ export default function TyresPage({ loaderData }: Route.ComponentProps) {
                     <td colSpan={6}>
                       <div className="empty-state">
                         <strong>No tyres registered</strong>
-                        <p>Receive tyre stock, then register each serial.</p>
+                        <p>
+                          <Link to="/tyres/import">Import new tyres</Link> with
+                          serials, then fit them from a job card.
+                        </p>
                       </div>
                     </td>
                   </tr>
@@ -229,7 +240,9 @@ export default function TyresPage({ loaderData }: Route.ComponentProps) {
                   loaderData.tyres.map((tyre) => (
                     <tr key={tyre.id}>
                       <td className="mono">
-                        <Link to={`/tyres/${tyre.id}`}>{tyre.serialNumber}</Link>
+                        <Link to={`/tyres/${tyre.id}`}>
+                          {tyre.serialNumber}
+                        </Link>
                       </td>
                       <td className="mono">{tyre.sku}</td>
                       <td>{tyre.stage}</td>
@@ -247,32 +260,39 @@ export default function TyresPage({ loaderData }: Route.ComponentProps) {
                       </td>
                       <td>
                         {tyre.status === "IN_STORE" ? (
-                          <Form method="post">
-                            <CsrfField />
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="dispose"
-                            />
-                            <input
-                              type="hidden"
-                              name="tyreId"
-                              value={tyre.id}
-                            />
-                            <input
-                              type="hidden"
-                              name="businessDate"
-                              value={new Date().toISOString().slice(0, 10)}
-                            />
-                            <input
-                              type="hidden"
-                              name="idempotencyKey"
-                              value={`dispose-${tyre.id}`}
-                            />
-                            <button className="text-button" type="submit">
-                              Dispose
-                            </button>
-                          </Form>
+                          <span
+                            className="heading-actions"
+                            style={{ gap: "0.5rem" }}
+                          >
+                            {tyre.actions.canFit ? (
+                              <Link className="text-button" to="/job-cards">
+                                {fitActionLabel(tyre.actions)}
+                              </Link>
+                            ) : null}
+                            {tyre.actions.canSendToDag ? (
+                              <Link
+                                className="text-button"
+                                to={`/tyres/dag?send=${tyre.id}`}
+                              >
+                                Send to DAG
+                              </Link>
+                            ) : null}
+                            {tyre.actions.canDispose ? (
+                              <TyreDisposeForm
+                                tyreId={tyre.id}
+                                businessDate={new Date()
+                                  .toISOString()
+                                  .slice(0, 10)}
+                              />
+                            ) : null}
+                          </span>
+                        ) : tyre.status === "AT_DAG" ? (
+                          <Link
+                            className="text-button"
+                            to={`/tyres/dag?receive=${tyre.id}`}
+                          >
+                            DAG IN
+                          </Link>
                         ) : null}
                       </td>
                     </tr>
@@ -283,78 +303,101 @@ export default function TyresPage({ loaderData }: Route.ComponentProps) {
           </div>
         </section>
 
-        <section className="panel form-panel">
-          <h2>Register serial</h2>
-          {loaderData.tyreParts.length === 0 ? (
-            <p className="muted">Create a TYRE category and tyre SKUs first.</p>
-          ) : (
-            <Form
-              method="post"
-              className="stack"
-              key={key + String(actionData?.ok)}
-            >
-              <CsrfField />
-              <label>
-                Store
-                <select name="storeId" required>
-                  <option value="">Select store</option>
-                  {loaderData.stores.map((store) => (
-                    <option key={store.id} value={store.id}>
-                      {store.code} — {store.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Tyre SKU
-                <select name="partId" required>
-                  <option value="">Select SKU</option>
-                  {loaderData.tyreParts.map((part) => (
-                    <option key={part.id} value={part.id}>
-                      {part.sku} — {part.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Serial number
-                <input name="serialNumber" required minLength={2} />
-              </label>
-              <label>
-                Stage
-                <select name="lifecycleStage" defaultValue="ORG">
-                  {BUSINESS_DAG_STAGES.map((stage) => (
-                    <option key={stage} value={stage}>
-                      {stage}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Notes
-                <textarea name="notes" rows={2} />
-              </label>
-              {actionData?.error ? (
-                <p className="form-error">{actionData.error}</p>
-              ) : null}
-              {actionData?.ok &&
-              "disposed" in actionData &&
-              actionData.disposed ? (
-                <p className="muted">Tyre disposed.</p>
-              ) : null}
-              {actionData?.ok &&
-              !("disposed" in actionData && actionData.disposed) ? (
-                <p className="muted">Serial registered.</p>
-              ) : null}
-              <button
-                className="button button-primary"
-                disabled={navigation.state !== "idle"}
+        {loaderData.isAdmin ? (
+          <section className="panel form-panel">
+            <h2>Inventory correction</h2>
+            <p className="muted">
+              Opening balance, legacy stock, or correction only. Stage is taken
+              from the SKU. Day-to-day intake is{" "}
+              <Link to="/tyres/import">Import new tyres</Link>.
+            </p>
+            {loaderData.tyreParts.length === 0 ? (
+              <p className="muted">
+                Create a TYRE category and tyre SKUs first.
+              </p>
+            ) : (
+              <Form
+                method="post"
+                className="stack"
+                key={key + String(actionData && "ok" in actionData)}
               >
-                Register tyre
-              </button>
-            </Form>
-          )}
-        </section>
+                <CsrfField />
+                <label>
+                  Store
+                  <select name="storeId" required>
+                    <option value="">Select store</option>
+                    {loaderData.stores.map((store) => (
+                      <option key={store.id} value={store.id}>
+                        {store.code} — {store.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Tyre SKU
+                  <select name="partId" required>
+                    <option value="">Select SKU</option>
+                    {loaderData.tyreParts.map((part) => (
+                      <option key={part.id} value={part.id}>
+                        {part.sku} — {part.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Serial number
+                  <input name="serialNumber" required minLength={2} />
+                </label>
+                <label>
+                  Reason
+                  <select name="reason" required>
+                    <option value="">Select reason</option>
+                    {TYRE_REGISTER_REASONS.map((reason) => (
+                      <option key={reason} value={reason}>
+                        {reason.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Notes
+                  <textarea name="notes" rows={2} />
+                </label>
+                {actionData && "error" in actionData ? (
+                  <p className="form-error">{actionData.error}</p>
+                ) : null}
+                {actionData &&
+                "ok" in actionData &&
+                "disposed" in actionData &&
+                actionData.disposed ? (
+                  <p className="muted">Tyre disposed.</p>
+                ) : null}
+                {actionData &&
+                "ok" in actionData &&
+                !("disposed" in actionData && actionData.disposed) ? (
+                  <p className="muted">Serial registered.</p>
+                ) : null}
+                <button
+                  className="button button-primary"
+                  disabled={navigation.state !== "idle"}
+                >
+                  Register correction
+                </button>
+              </Form>
+            )}
+          </section>
+        ) : (
+          <section className="panel">
+            <h2>New tyres</h2>
+            <p className="muted">
+              Use <Link to="/tyres/import">Import new tyres</Link> to receive
+              ORG stock with serials.
+            </p>
+            {actionData && "error" in actionData ? (
+              <p className="form-error">{actionData.error}</p>
+            ) : null}
+          </section>
+        )}
       </div>
     </>
   );

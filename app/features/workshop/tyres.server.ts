@@ -1,13 +1,18 @@
 import { and, desc, eq, sql } from "drizzle-orm";
+import Decimal from "decimal.js";
 import { data } from "react-router";
 
 import { db } from "~/db/client.server";
 import {
   auditEvents,
   inventoryBalances,
+  localPurchaseLines,
+  localPurchases,
   parts,
   stockDocuments,
+  suppliers,
   tyreEvents,
+  tyreImports,
   tyres,
 } from "~/db/schema";
 import type { Actor } from "~/lib/auth/authorization.server";
@@ -19,25 +24,44 @@ import {
   submitIssueForApprovalInTransaction,
   type Transaction,
 } from "~/features/inventory/posting.server";
-import { encodeWorkshopNotes, parseWorkshopNotes } from "./pending-notes";
+import { encodeWorkshopNotes } from "./pending-notes";
 import { requirePartCategory } from "./category.server";
-import { WorkshopError } from "./errors";
+import {
+  WorkshopConflictError,
+  WorkshopError,
+  LIFECYCLE_CONFLICT,
+} from "./errors";
 import { loadOpenJobCard } from "./job-cards.server";
 import {
+  lockTyre,
+  loadTyreLifecycleEvents,
+  reservedTyreIds,
+} from "./tyre-lock.server";
+import {
+  canonicalizeTyreImport,
   disposeTyreSchema,
   fitTyreSchema,
+  importOrgTyresSchema,
   receiveTyreFromDagSchema,
   registerTyreSchema,
   rejectTyreAtDagSchema,
   sendTyreToDagSchema,
+  tyreImportRequestHash,
 } from "./schemas";
 import {
   canSendToDag,
+  getTyreLifecycleActions,
   isOperableInStore,
+  lifecycleStageFromSku,
   nextDagStage,
   skuMatchesLifecycleStage,
+  type TyreLifecycleEvent,
 } from "./tyre-lifecycle";
 import type { TyreLifecycleStage } from "./constants";
+import {
+  isSerializationFailure,
+  isUniqueViolation,
+} from "~/lib/postgres-error";
 
 async function inStoreCount(tx: Transaction, storeId: string, partId: string) {
   const [row] = await tx
@@ -67,39 +91,102 @@ async function onHand(tx: Transaction, storeId: string, partId: string) {
   return Number(row?.onHand ?? 0);
 }
 
-export async function registerTyre(actor: Actor, input: unknown) {
-  const command = registerTyreSchema.parse(input);
-  await requireStoreAccess(actor, command.storeId);
+async function runTyreTransaction<T>(
+  work: (tx: Transaction) => Promise<T>,
+): Promise<T> {
+  try {
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+      return work(tx);
+    });
+  } catch (error) {
+    if (isSerializationFailure(error)) {
+      throw new WorkshopConflictError(LIFECYCLE_CONFLICT);
+    }
+    throw error;
+  }
+}
 
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
-    await requirePartCategory(tx, command.partId, "TYRE");
-    const stored = await inStoreCount(tx, command.storeId, command.partId);
-    const stock = await onHand(tx, command.storeId, command.partId);
+async function assertNotReserved(tx: Transaction, tyreId: string) {
+  const reserved = await reservedTyreIds(tx);
+  if (reserved.has(tyreId)) {
+    throw new WorkshopConflictError(
+      "This tyre is already reserved for a pending fit",
+    );
+  }
+}
+
+function actionsFor(
+  tyre: { id: string; lifecycleStage: string; status: string },
+  events: TyreLifecycleEvent[],
+) {
+  return getTyreLifecycleActions({
+    tyreId: tyre.id,
+    stage: tyre.lifecycleStage,
+    status: tyre.status,
+    events,
+  });
+}
+
+export async function registerTyreInTransaction(
+  tx: Transaction,
+  actor: Actor,
+  input: {
+    storeId: string;
+    partId: string;
+    serialNumber: string;
+    notes?: string | null;
+    reason?: string | null;
+    skipStockCheck?: boolean;
+  },
+) {
+  const part = await requirePartCategory(tx, input.partId, "TYRE");
+  const stage = lifecycleStageFromSku(part.sku);
+  if (!stage) {
+    throw new WorkshopError(
+      `SKU ${part.sku} does not include a tyre lifecycle stage`,
+    );
+  }
+  if (!input.skipStockCheck) {
+    const stored = await inStoreCount(tx, input.storeId, input.partId);
+    const stock = await onHand(tx, input.storeId, input.partId);
     if (stored + 1 > stock) {
       throw new WorkshopError(
         "Not enough on-hand tyre stock to register another serial at this store",
       );
     }
+  }
 
+  const [duplicate] = await tx
+    .select({ serialNumber: tyres.serialNumber })
+    .from(tyres)
+    .where(
+      sql`lower(${tyres.serialNumber}) = ${input.serialNumber.toLowerCase()}`,
+    )
+    .limit(1);
+  if (duplicate) {
+    throw new WorkshopError(`Serial ${duplicate.serialNumber} already exists`);
+  }
+
+  try {
     const [tyre] = await tx
       .insert(tyres)
       .values({
-        serialNumber: command.serialNumber,
-        partId: command.partId,
-        lifecycleStage: command.lifecycleStage,
+        serialNumber: input.serialNumber,
+        partId: input.partId,
+        lifecycleStage: stage,
         status: "IN_STORE",
-        storeId: command.storeId,
-        notes: command.notes || null,
+        storeId: input.storeId,
+        notes: input.notes || null,
       })
       .returning();
 
     await tx.insert(tyreEvents).values({
       tyreId: tyre.id,
       type: "REGISTER",
-      storeId: command.storeId,
-      toStage: command.lifecycleStage,
-      notes: command.notes || null,
+      storeId: input.storeId,
+      toStage: stage,
+      notes: input.notes || null,
       createdBy: actor.id,
     });
     await tx.insert(auditEvents).values({
@@ -107,57 +194,224 @@ export async function registerTyre(actor: Actor, input: unknown) {
       eventType: "TYRE_REGISTERED",
       entityType: "tyre",
       entityId: tyre.id,
-      storeId: command.storeId,
-      metadata: { serialNumber: tyre.serialNumber },
+      storeId: input.storeId,
+      metadata: {
+        serialNumber: tyre.serialNumber,
+        stage,
+        reason: input.reason ?? null,
+      },
     });
     return tyre;
+  } catch (error) {
+    if (
+      isUniqueViolation(error, "tyres_serial_unique") ||
+      isUniqueViolation(error, "tyres_serial_lower_unique")
+    ) {
+      throw new WorkshopError(`Serial ${input.serialNumber} already exists`);
+    }
+    throw error;
+  }
+}
+
+export async function registerTyre(actor: Actor, input: unknown) {
+  if (actor.role !== "ADMIN") {
+    throw data(
+      {
+        message:
+          "Only administrators can register serials as an inventory correction. Import new tyres instead.",
+      },
+      { status: 403 },
+    );
+  }
+  const command = registerTyreSchema.parse(input);
+  await requireStoreAccess(actor, command.storeId);
+
+  return runTyreTransaction(async (tx) => {
+    return registerTyreInTransaction(tx, actor, {
+      storeId: command.storeId,
+      partId: command.partId,
+      serialNumber: command.serialNumber,
+      notes: [command.reason, command.notes].filter(Boolean).join(" — "),
+      reason: command.reason,
+    });
   });
 }
 
-async function reservedTyreIds(tx: Transaction) {
-  const pending = await tx
-    .select({ notes: stockDocuments.notes })
-    .from(stockDocuments)
-    .where(
-      and(
-        eq(stockDocuments.type, "BUS_ISSUE"),
-        eq(stockDocuments.status, "PENDING_APPROVAL"),
-      ),
+export async function importOrgTyres(actor: Actor, input: unknown) {
+  const command = importOrgTyresSchema.parse(input);
+  await requireStoreAccess(actor, command.storeId);
+  const canonical = canonicalizeTyreImport(command);
+  const requestHash = tyreImportRequestHash(canonical);
+
+  return runTyreTransaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT 1 FROM tyre_imports WHERE store_id = ${command.storeId}::uuid AND created_by = ${actor.id}::uuid AND idempotency_key = ${command.idempotencyKey} FOR UPDATE`,
     );
-  const ids = new Set<string>();
-  for (const row of pending) {
-    const payload = parseWorkshopNotes(row.notes);
-    if (payload?.kind === "TYRE_FIT") ids.add(payload.tyreId);
-  }
-  return ids;
+    const [existing] = await tx
+      .select()
+      .from(tyreImports)
+      .where(
+        and(
+          eq(tyreImports.storeId, command.storeId),
+          eq(tyreImports.createdBy, actor.id),
+          eq(tyreImports.idempotencyKey, command.idempotencyKey),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      if (existing.requestHash !== requestHash) {
+        throw new WorkshopConflictError(
+          "This import key was already used with different data",
+        );
+      }
+      return {
+        purchaseId: existing.purchaseId,
+        receiptId: existing.receiptDocumentId,
+        created: false,
+      };
+    }
+
+    const [supplier] = await tx
+      .select()
+      .from(suppliers)
+      .where(eq(suppliers.id, command.supplierId))
+      .limit(1);
+    if (!supplier?.active) throw new WorkshopError("Supplier is not available");
+    const part = await requirePartCategory(tx, command.partId, "TYRE");
+    if (!skuMatchesLifecycleStage(part.sku, "ORG")) {
+      throw new WorkshopError("Import SKU must be an ORG tyre");
+    }
+
+    const unitPrice = new Decimal(canonical.unitCost);
+    const quantity = new Decimal(canonical.quantity);
+    const lineTotal = quantity.times(unitPrice).toDecimalPlaces(2);
+    const purchaseNumber = `LPO-${command.businessDate.replaceAll("-", "")}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+
+    const [purchase] = await tx
+      .insert(localPurchases)
+      .values({
+        purchaseNumber,
+        storeId: command.storeId,
+        supplierId: command.supplierId,
+        supplierNameSnapshot: supplier.name,
+        supplierInvoiceReference: command.invoiceReference || null,
+        businessDate: command.businessDate,
+        subtotal: lineTotal.toFixed(2),
+        total: lineTotal.toFixed(2),
+        status: "DRAFT",
+        notes: command.notes || null,
+        idempotencyKey: `tyre-import-${command.storeId}-${command.idempotencyKey}`,
+        createdBy: actor.id,
+      })
+      .returning();
+
+    await tx.insert(localPurchaseLines).values({
+      purchaseId: purchase.id,
+      lineNumber: 1,
+      partId: part.id,
+      quantity: quantity.toFixed(3),
+      unitPrice: unitPrice.toFixed(2),
+      lineTotal: lineTotal.toFixed(2),
+      skuSnapshot: part.sku,
+      nameSnapshot: part.name,
+      unitSnapshot: part.unit,
+    });
+
+    const receipt = await postStockInTransaction(
+      tx,
+      actor,
+      "STOCK_RECEIPT",
+      prepareStockCommand("STOCK_RECEIPT", {
+        storeId: command.storeId,
+        supplierId: command.supplierId,
+        businessDate: command.businessDate,
+        idempotencyKey: `tyre-import-receipt-${command.storeId}-${command.idempotencyKey}`,
+        lines: [
+          {
+            partId: command.partId,
+            quantity: String(canonical.quantity),
+            unitCost: canonical.unitCost,
+          },
+        ],
+      }),
+    );
+
+    await tx
+      .update(localPurchases)
+      .set({
+        status: "POSTED",
+        receiptDocumentId: receipt.id,
+        postedBy: actor.id,
+        postedAt: new Date(),
+      })
+      .where(eq(localPurchases.id, purchase.id));
+
+    const registered = [];
+    for (const serial of canonical.serials) {
+      registered.push(
+        await registerTyreInTransaction(tx, actor, {
+          storeId: command.storeId,
+          partId: command.partId,
+          serialNumber: serial,
+          notes: command.notes || null,
+          reason: "IMPORT",
+          skipStockCheck: true,
+        }),
+      );
+    }
+
+    await tx.insert(tyreImports).values({
+      storeId: command.storeId,
+      createdBy: actor.id,
+      idempotencyKey: command.idempotencyKey,
+      requestHash,
+      purchaseId: purchase.id,
+      receiptDocumentId: receipt.id,
+    });
+    await tx.insert(auditEvents).values({
+      actorId: actor.id,
+      eventType: "TYRE_IMPORT_POSTED",
+      entityType: "tyre_import",
+      entityId: purchase.id,
+      storeId: command.storeId,
+      metadata: {
+        purchaseNumber,
+        receiptNumber: receipt.number,
+        serials: canonical.serials,
+        quantity: canonical.quantity,
+      },
+    });
+
+    return {
+      purchaseId: purchase.id,
+      receiptId: receipt.id,
+      receiptNumber: receipt.number,
+      tyreIds: registered.map((tyre) => tyre.id),
+      created: true,
+    };
+  });
 }
 
 export async function fitOrReplaceTyre(actor: Actor, input: unknown) {
   const command = fitTyreSchema.parse(input);
 
-  const result = await db.transaction(async (tx) => {
-    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
+  const result = await runTyreTransaction(async (tx) => {
     const card = await loadOpenJobCard(tx, command.jobCardId);
     await requireStoreAccess(actor, card.storeId);
 
-    const [incoming] = await tx
-      .select()
-      .from(tyres)
-      .where(eq(tyres.id, command.tyreId))
-      .limit(1);
+    const incoming = await lockTyre(tx, command.tyreId);
     if (!incoming) throw new WorkshopError("Tyre not found");
+    const events = await loadTyreLifecycleEvents(tx, incoming.id);
+    if (!actionsFor(incoming, events).canFit) {
+      throw new WorkshopConflictError(LIFECYCLE_CONFLICT);
+    }
     if (
       !isOperableInStore(incoming.status) ||
       incoming.storeId !== card.storeId
     ) {
       throw new WorkshopError("Tyre must be in stock at this job card's store");
     }
-    const reserved = await reservedTyreIds(tx);
-    if (reserved.has(incoming.id)) {
-      throw new WorkshopError(
-        "This tyre is already reserved for a pending fit",
-      );
-    }
+    await assertNotReserved(tx, incoming.id);
 
     const [occupant] = await tx
       .select()
@@ -170,6 +424,9 @@ export async function fitOrReplaceTyre(actor: Actor, input: unknown) {
         ),
       )
       .limit(1);
+    if (occupant) {
+      await lockTyre(tx, occupant.id);
+    }
 
     const pending = await submitIssueForApprovalInTransaction(tx, actor, {
       storeId: card.storeId,
@@ -204,25 +461,24 @@ export async function fitOrReplaceTyre(actor: Actor, input: unknown) {
 export async function sendTyreToDag(actor: Actor, input: unknown) {
   const command = sendTyreToDagSchema.parse(input);
 
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
-    const [tyre] = await tx
-      .select()
-      .from(tyres)
-      .where(eq(tyres.id, command.tyreId))
-      .limit(1);
+  return runTyreTransaction(async (tx) => {
+    const tyre = await lockTyre(tx, command.tyreId);
     if (!tyre) throw new WorkshopError("Tyre not found");
-    if (!isOperableInStore(tyre.status) || !tyre.storeId) {
+    if (!tyre.storeId) {
       throw new WorkshopError("Tyre must be in store stock to send to DAG");
     }
-    if (!canSendToDag(tyre.lifecycleStage)) {
-      throw new WorkshopError(
-        tyre.lifecycleStage === "DAG3"
-          ? "DAG3 tyres cannot be sent for another DAG cycle"
-          : "This tyre stage cannot be sent to DAG",
+    await requireStoreAccess(actor, tyre.storeId);
+    await assertNotReserved(tx, tyre.id);
+    const events = await loadTyreLifecycleEvents(tx, tyre.id);
+    if (!actionsFor(tyre, events).canSendToDag) {
+      throw new WorkshopConflictError(
+        canSendToDag(tyre.lifecycleStage as TyreLifecycleStage)
+          ? LIFECYCLE_CONFLICT
+          : tyre.lifecycleStage === "DAG3"
+            ? "DAG3 tyres cannot be sent for another DAG cycle"
+            : "This tyre is not eligible to send to DAG",
       );
     }
-    await requireStoreAccess(actor, tyre.storeId);
 
     const posted = await postStockInTransaction(
       tx,
@@ -268,13 +524,8 @@ export async function sendTyreToDag(actor: Actor, input: unknown) {
 export async function receiveTyreFromDag(actor: Actor, input: unknown) {
   const command = receiveTyreFromDagSchema.parse(input);
 
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
-    const [tyre] = await tx
-      .select()
-      .from(tyres)
-      .where(eq(tyres.id, command.tyreId))
-      .limit(1);
+  return runTyreTransaction(async (tx) => {
+    const tyre = await lockTyre(tx, command.tyreId);
     if (!tyre) throw new WorkshopError("Tyre not found");
     if (tyre.status !== "AT_DAG" || !tyre.storeId) {
       throw new WorkshopError("Tyre is not at DAG");
@@ -291,7 +542,7 @@ export async function receiveTyreFromDag(actor: Actor, input: unknown) {
       .where(
         and(eq(tyreEvents.tyreId, tyre.id), eq(tyreEvents.type, "SEND_DAG")),
       )
-      .orderBy(desc(tyreEvents.occurredAt))
+      .orderBy(desc(tyreEvents.sequence))
       .limit(1);
     if (!sendEvent?.stockDocumentId) {
       throw new WorkshopError("Original DAG send document not found");
@@ -396,16 +647,13 @@ export async function rejectTyreAtDag(actor: Actor, input: unknown) {
   }
   const command = rejectTyreAtDagSchema.parse(input);
 
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
-    const [tyre] = await tx
-      .select()
-      .from(tyres)
-      .where(eq(tyres.id, command.tyreId))
-      .limit(1);
+  return runTyreTransaction(async (tx) => {
+    const tyre = await lockTyre(tx, command.tyreId);
     if (!tyre) throw new WorkshopError("Tyre not found");
     if (tyre.status !== "AT_DAG") {
-      throw new WorkshopError("Tyre must be at DAG to record a supplier reject");
+      throw new WorkshopError(
+        "Tyre must be at DAG to record a supplier reject",
+      );
     }
 
     const [sendEvent] = await tx
@@ -416,7 +664,7 @@ export async function rejectTyreAtDag(actor: Actor, input: unknown) {
       .where(
         and(eq(tyreEvents.tyreId, tyre.id), eq(tyreEvents.type, "SEND_DAG")),
       )
-      .orderBy(desc(tyreEvents.occurredAt))
+      .orderBy(desc(tyreEvents.sequence))
       .limit(1);
 
     await tx
@@ -458,18 +706,18 @@ export async function rejectTyreAtDag(actor: Actor, input: unknown) {
 export async function disposeTyre(actor: Actor, input: unknown) {
   const command = disposeTyreSchema.parse(input);
 
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
-    const [tyre] = await tx
-      .select()
-      .from(tyres)
-      .where(eq(tyres.id, command.tyreId))
-      .limit(1);
+  return runTyreTransaction(async (tx) => {
+    const tyre = await lockTyre(tx, command.tyreId);
     if (!tyre) throw new WorkshopError("Tyre not found");
     if (!isOperableInStore(tyre.status) || !tyre.storeId) {
       throw new WorkshopError("Tyre must be in store stock to dispose");
     }
     await requireStoreAccess(actor, tyre.storeId);
+    await assertNotReserved(tx, tyre.id);
+    const events = await loadTyreLifecycleEvents(tx, tyre.id);
+    if (!actionsFor(tyre, events).canDispose) {
+      throw new WorkshopConflictError(LIFECYCLE_CONFLICT);
+    }
 
     const posted = await postStockInTransaction(
       tx,

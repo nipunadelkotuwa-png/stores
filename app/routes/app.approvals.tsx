@@ -10,7 +10,12 @@ import {
   approveJobCard,
   rejectJobCard,
 } from "~/features/workshop/job-cards.server";
-import { workshopActionError } from "~/features/workshop/errors";
+import { ZodError } from "zod";
+import {
+  WorkshopError,
+  workshopActionResult,
+} from "~/features/workshop/errors";
+import { isSerializationFailure } from "~/lib/postgres-error";
 import { getPendingJobCards } from "~/features/workshop/queries.server";
 import { requireAdmin } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
@@ -19,8 +24,7 @@ import type { Route } from "./+types/app.approvals";
 export async function loader({ request }: Route.LoaderArgs) {
   const actor = await requireAdmin(request);
   const url = new URL(request.url);
-  const tab =
-    url.searchParams.get("tab") === "issues" ? "issues" : "job-cards";
+  const tab = url.searchParams.get("tab") === "issues" ? "issues" : "job-cards";
   const [jobCards, issues] = await Promise.all([
     getPendingJobCards(actor),
     getPendingIssues(actor),
@@ -63,10 +67,15 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: "Unknown action" };
   } catch (error) {
     if (error instanceof Response) throw error;
+    if (
+      error instanceof WorkshopError ||
+      error instanceof ZodError ||
+      isSerializationFailure(error)
+    ) {
+      return workshopActionResult(error, "Unable to update approval");
+    }
     return {
-      error:
-        workshopActionError(error, "") ||
-        inventoryActionError(error, "Unable to update approval"),
+      error: inventoryActionError(error, "Unable to update approval"),
     };
   }
 }
@@ -95,7 +104,10 @@ export default function ApprovalsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      <div className="heading-actions" style={{ marginBottom: "1rem", gap: "0.5rem" }}>
+      <div
+        className="heading-actions"
+        style={{ marginBottom: "1rem", gap: "0.5rem" }}
+      >
         <Link
           className={`button ${loaderData.tab === "job-cards" ? "button-primary" : "button-secondary"}`}
           to="/approvals?tab=job-cards"
@@ -110,19 +122,19 @@ export default function ApprovalsPage({ loaderData }: Route.ComponentProps) {
         </Link>
       </div>
 
-      {actionData?.error ? (
+      {actionData && "error" in actionData ? (
         <p className="form-error">{actionData.error}</p>
       ) : null}
-      {actionData?.ok === "job-card-approved" ? (
+      {actionData && "ok" in actionData && actionData.ok === "job-card-approved" ? (
         <p className="muted">Job card approved for work.</p>
       ) : null}
-      {actionData?.ok === "job-card-rejected" ? (
+      {actionData && "ok" in actionData && actionData.ok === "job-card-rejected" ? (
         <p className="muted">Job card rejected.</p>
       ) : null}
-      {actionData?.ok === "issue-verified" ? (
+      {actionData && "ok" in actionData && actionData.ok === "issue-verified" ? (
         <p className="muted">Item issue verified and posted.</p>
       ) : null}
-      {actionData?.ok === "issue-rejected" ? (
+      {actionData && "ok" in actionData && actionData.ok === "issue-rejected" ? (
         <p className="muted">Item issue rejected.</p>
       ) : null}
 
@@ -302,11 +314,7 @@ export default function ApprovalsPage({ loaderData }: Route.ComponentProps) {
                             : "Verify & Post"}
                         </button>
                       </Form>
-                      <Form
-                        method="post"
-                        className="stack"
-                        style={{ flex: 1 }}
-                      >
+                      <Form method="post" className="stack" style={{ flex: 1 }}>
                         <CsrfField />
                         <input type="hidden" name="documentId" value={id} />
                         <input type="hidden" name="intent" value="reject" />

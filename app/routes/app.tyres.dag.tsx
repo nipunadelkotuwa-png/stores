@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { Form, Link, useActionData, useNavigation } from "react-router";
+import {
+  Form,
+  Link,
+  useActionData,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 import { CsrfField } from "~/components/csrf-field";
-import { workshopActionError } from "~/features/workshop/errors";
+import { workshopActionResult } from "~/features/workshop/errors";
 import {
   listCategoryParts,
   listInStoreTyres,
   listTyresAtDag,
 } from "~/features/workshop/queries.server";
 import {
-  canSendToDag,
   dagAttemptLabel,
   expectedReturnStage,
   nextDagStage,
@@ -34,9 +39,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     listSuppliers(),
   ]);
   return {
-    inStore: inStore.filter((tyre) =>
-      canSendToDag(tyre.stage as TyreLifecycleStage),
-    ),
+    inStore: inStore.filter((tyre) => tyre.actions.canSendToDag),
     atDag,
     tyreParts,
     suppliers: suppliers.filter((row) => row.active),
@@ -65,31 +68,42 @@ export async function action({ request }: Route.ActionArgs) {
     return { error: "Unknown action" };
   } catch (error) {
     if (error instanceof Response) throw error;
-    return { error: workshopActionError(error, "Unable to update DAG tyre") };
+    return workshopActionResult(error, "Unable to update DAG tyre");
   }
 }
 
 export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const [params] = useSearchParams();
   const [sendKey, setSendKey] = useState(() => crypto.randomUUID());
   const [receiveKey, setReceiveKey] = useState(() => crypto.randomUUID());
   const [sendTyreId, setSendTyreId] = useState("");
-  const [receiveTyreId, setReceiveTyreId] = useState("");
+  const [receiveTyreId, setReceiveTyreId] = useState(
+    params.get("receive") || "",
+  );
   const [result, setResult] = useState<"success" | "reject">("success");
   const busy = navigation.state !== "idle";
   const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
-    if (actionData?.ok === "sent") {
+    const requested = params.get("send") || "";
+    setSendTyreId(
+      loaderData.inStore.some((tyre) => tyre.id === requested) ? requested : "",
+    );
+  }, [loaderData.inStore, params]);
+
+  useEffect(() => {
+    if (!actionData || !("ok" in actionData)) return;
+    if (actionData.ok === "sent") {
       setSendKey(crypto.randomUUID());
       setSendTyreId("");
     }
-    if (actionData?.ok === "received" || actionData?.ok === "rejected") {
+    if (actionData.ok === "received" || actionData.ok === "rejected") {
       setReceiveKey(crypto.randomUUID());
       setReceiveTyreId("");
     }
-  }, [actionData?.ok]);
+  }, [actionData]);
 
   const selectedSend = loaderData.inStore.find((t) => t.id === sendTyreId);
   const selectedReceive = loaderData.atDag.find((t) => t.id === receiveTyreId);
@@ -121,8 +135,9 @@ export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Workshop</p>
           <h1>DAG OUT / DAG IN</h1>
           <p className="muted">
-            Three successful DAG cycles only: ORG → DAG1 → DAG2 → DAG3. Return
-            stage is calculated automatically.
+            Three successful DAG cycles only: ORG → DAG1 → DAG2 → DAG3. A serial
+            must complete a fit and removal in its current stage before DAG OUT.
+            Return stage is calculated automatically.
           </p>
         </div>
         <div className="heading-actions">
@@ -135,16 +150,16 @@ export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      {actionData?.error ? (
+      {actionData && "error" in actionData ? (
         <p className="form-error">{actionData.error}</p>
       ) : null}
-      {actionData?.ok === "sent" ? (
+      {actionData && "ok" in actionData && actionData.ok === "sent" ? (
         <p className="muted">Tyre sent to DAG.</p>
       ) : null}
-      {actionData?.ok === "received" ? (
+      {actionData && "ok" in actionData && actionData.ok === "received" ? (
         <p className="muted">Tyre received from DAG.</p>
       ) : null}
-      {actionData?.ok === "rejected" ? (
+      {actionData && "ok" in actionData && actionData.ok === "rejected" ? (
         <p className="muted">Supplier cannot-DAG recorded. Tyre disposed.</p>
       ) : null}
 
@@ -153,7 +168,8 @@ export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
           <h2>DAG OUT</h2>
           {loaderData.inStore.length === 0 ? (
             <p className="muted">
-              No warehouse serials eligible for DAG (ORG / DAG1 / DAG2 only).
+              No warehouse serials eligible for DAG. A tyre must complete a fit
+              and removal in its current stage (ORG / DAG1 / DAG2).
             </p>
           ) : (
             <Form method="post" className="stack">
