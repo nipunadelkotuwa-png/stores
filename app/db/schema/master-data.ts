@@ -42,7 +42,9 @@ export const parts = pgTable(
   },
   (table) => [
     uniqueIndex("parts_sku_unique").on(table.sku),
-    uniqueIndex("parts_barcode_unique").on(table.barcode),
+    uniqueIndex("parts_barcode_unique")
+      .on(table.barcode)
+      .where(sql`${table.barcode} is not null`),
     index("parts_active_idx")
       .on(table.active)
       .where(sql`${table.active} = true`),

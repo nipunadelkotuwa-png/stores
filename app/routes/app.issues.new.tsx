@@ -14,12 +14,12 @@ import {
 } from "~/features/inventory/queries.server";
 import { UNUSUAL_ISSUE_THRESHOLD } from "~/features/workshop/constants";
 import { listOpenJobCards } from "~/features/workshop/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.issues.new";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "issues.create");
   const url = new URL(request.url);
   const storeId = url.searchParams.get("store") || undefined;
   const [options, openJobCards, unusualCounts] = await Promise.all([
@@ -36,7 +36,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "issues.create");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const form = Object.fromEntries(formData);

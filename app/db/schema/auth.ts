@@ -13,7 +13,13 @@ import {
 
 import { idColumn, timestamps } from "./common";
 
-export const userRole = pgEnum("user_role", ["ADMIN", "OPERATOR"]);
+export const userRole = pgEnum("user_role", [
+  "ADMIN",
+  "OPERATOR",
+  "STORE_KEEPER",
+  "WORKSHOP",
+  "VIEWER",
+]);
 export const userStatus = pgEnum("user_status", ["ACTIVE", "DISABLED"]);
 
 export const stores = pgTable(

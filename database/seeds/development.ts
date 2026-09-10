@@ -50,13 +50,32 @@ try {
   `,
     [passwordHash],
   );
+  await client.query(
+    `
+    INSERT INTO users (email, display_name, password_hash, role, must_change_password)
+    VALUES
+      ('keeper@dsgunasekara.local', 'Colombo Store Keeper', $1, 'STORE_KEEPER', false),
+      ('workshop@dsgunasekara.local', 'Colombo Workshop', $1, 'WORKSHOP', false),
+      ('viewer@dsgunasekara.local', 'Colombo Viewer', $1, 'VIEWER', false)
+    ON CONFLICT (email) DO UPDATE SET
+      display_name = EXCLUDED.display_name,
+      role = EXCLUDED.role,
+      status = 'ACTIVE'
+  `,
+    [passwordHash],
+  );
   await client.query(`
     INSERT INTO user_store_assignments (user_id, store_id, assigned_by)
     SELECT u.id, s.id, a.id
     FROM users u
     JOIN stores s ON s.code = 'CMB'
     JOIN users a ON a.email = 'admin@dsgunasekara.local'
-    WHERE u.email = 'operator@dsgunasekara.local'
+    WHERE u.email IN (
+      'operator@dsgunasekara.local',
+      'keeper@dsgunasekara.local',
+      'workshop@dsgunasekara.local',
+      'viewer@dsgunasekara.local'
+    )
     ON CONFLICT (user_id, store_id) DO NOTHING
   `);
   await client.query(`
@@ -219,7 +238,7 @@ try {
     await client.query(
       `
       INSERT INTO parts (sku, name, unit, brand, barcode, category_id)
-      SELECT $1, $2, $3, $4, $5, id
+      SELECT $1, $2, $3, $4, NULLIF(BTRIM($5::text), ''), id
       FROM part_categories WHERE code = $6
       ON CONFLICT (sku) DO UPDATE SET
         name = EXCLUDED.name,
@@ -457,6 +476,9 @@ try {
   );
   console.log("Admin: admin@dsgunasekara.local");
   console.log("Operator: operator@dsgunasekara.local (Colombo store)");
+  console.log("Store keeper: keeper@dsgunasekara.local (Colombo store)");
+  console.log("Workshop: workshop@dsgunasekara.local (Colombo store)");
+  console.log("Viewer: viewer@dsgunasekara.local (Colombo store)");
 } catch (error) {
   await client.query("ROLLBACK");
   throw error;

@@ -6,17 +6,21 @@ import {
   voidStoreTransfer,
 } from "~/features/inventory/transfers.server";
 import { getInTransitTransfers } from "~/features/inventory/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.transfers._index";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
-  return { inTransit: await getInTransitTransfers(actor) };
+  const actor = await requirePermission(request, "reports.read");
+  return {
+    inTransit: await getInTransitTransfers(actor),
+    canCreate: can(actor.role, "transfers.create"),
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "transfers.create");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "receive");
@@ -65,9 +69,11 @@ export default function TransfersPage({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="heading-actions">
-          <Link className="button button-primary" to="/transfers/new">
-            New transfer
-          </Link>
+          {loaderData.canCreate ? (
+            <Link className="button button-primary" to="/transfers/new">
+              New transfer
+            </Link>
+          ) : null}
           <Link className="button button-secondary" to="/reports/transfers">
             Transfer report
           </Link>
@@ -135,7 +141,7 @@ export default function TransfersPage({ loaderData }: Route.ComponentProps) {
                           justifyContent: "flex-end",
                         }}
                       >
-                        {row.canReceive ? (
+                        {loaderData.canCreate && row.canReceive ? (
                           <Form method="post">
                             <CsrfField />
                             <input type="hidden" name="intent" value="receive" />
@@ -161,10 +167,10 @@ export default function TransfersPage({ loaderData }: Route.ComponentProps) {
                               Receive
                             </button>
                           </Form>
-                        ) : (
+                        ) : loaderData.canCreate ? (
                           <span className="muted">Awaiting destination</span>
-                        )}
-                        {row.canVoid ? (
+                        ) : null}
+                        {loaderData.canCreate && row.canVoid ? (
                           <Form
                             method="post"
                             onSubmit={(event) => {

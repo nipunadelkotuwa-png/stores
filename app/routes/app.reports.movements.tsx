@@ -4,7 +4,7 @@ import { getEnv } from "~/config/env.server";
 import { movementFiltersFromSearch } from "~/features/inventory/movement-filters";
 import { getMovements } from "~/features/inventory/queries.server";
 import { resolveReportPeriod } from "~/features/reports/period";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.movements";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -15,7 +15,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     focusFilters.documentNumber || focusFilters.purchaseNumber,
   );
   return {
-    ...(await getMovements(await requireUser(request), {
+    ...(await getMovements(await requirePermission(request, "reports.read"), {
       ...focusFilters,
       start: focused ? undefined : range.start,
       end: focused ? undefined : range.end,

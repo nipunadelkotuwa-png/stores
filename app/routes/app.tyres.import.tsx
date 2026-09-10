@@ -13,12 +13,12 @@ import { listCategoryParts } from "~/features/workshop/queries.server";
 import { skuMatchesLifecycleStage } from "~/features/workshop/tyre-lifecycle";
 import { importOrgTyres } from "~/features/workshop/tyres.server";
 import { getTransactionOptions } from "~/features/inventory/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.tyres.import";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "tyres.manage");
   const [options, tyreParts] = await Promise.all([
     getTransactionOptions(actor),
     listCategoryParts("TYRE"),
@@ -33,7 +33,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "tyres.manage");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   try {

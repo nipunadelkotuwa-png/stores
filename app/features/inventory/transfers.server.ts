@@ -11,7 +11,10 @@ import {
   tyres,
 } from "~/db/schema";
 import type { Actor } from "~/lib/auth/authorization.server";
-import { requireStoreAccess } from "~/lib/auth/authorization.server";
+import {
+  assertPermission,
+  requireStoreAccess,
+} from "~/lib/auth/authorization.server";
 import {
   postReversalInTransaction,
   postStockInTransaction,
@@ -24,6 +27,7 @@ function uniqueIds(values: string[] | undefined) {
 }
 
 export async function sendStoreTransfer(actor: Actor, input: unknown) {
+  assertPermission(actor, "transfers.create");
   const command = prepareStockCommand("TRANSFER_OUT", input);
   await requireStoreAccess(actor, command.storeId);
 
@@ -142,6 +146,7 @@ export async function receiveStoreTransfer(
   actor: Actor,
   input: { documentId: string; businessDate: string; idempotencyKey: string },
 ) {
+  assertPermission(actor, "transfers.create");
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
     const [outgoing] = await tx
@@ -244,6 +249,7 @@ export async function voidStoreTransfer(
     idempotencyKey: string;
   },
 ) {
+  assertPermission(actor, "transfers.create");
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
     const [outgoing] = await tx

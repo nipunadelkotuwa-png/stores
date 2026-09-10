@@ -1,6 +1,7 @@
 import { createCookie } from "react-router";
 
 import { getEnv } from "~/config/env.server";
+import type { Role } from "~/lib/auth/permissions";
 import {
   DASHBOARD_MODE_COOKIE,
   parseDashboardMode,
@@ -23,7 +24,7 @@ function modeCookie() {
 
 export async function readDashboardMode(
   request: Request,
-  role: "ADMIN" | "OPERATOR",
+  role: Role,
 ): Promise<DashboardMode> {
   const raw = await modeCookie().parse(request.headers.get("Cookie"));
   return resolveDashboardMode(raw, role);

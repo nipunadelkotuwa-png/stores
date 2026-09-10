@@ -3,7 +3,7 @@ import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getDailyIssues } from "~/features/inventory/queries.server";
 import { resolveReportPeriod } from "~/features/reports/period";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.daily-issues";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -20,7 +20,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     start,
     end,
     range,
-    rows: await getDailyIssues(await requireUser(request), { start, end }),
+    rows: await getDailyIssues(await requirePermission(request, "reports.read"), { start, end }),
   };
 }
 

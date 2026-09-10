@@ -2,6 +2,7 @@ import { ZodError } from "zod";
 import { data } from "react-router";
 
 import { isSerializationFailure } from "~/lib/postgres-error";
+import { rethrowAuthorizationError } from "~/lib/auth/http-error";
 
 export class WorkshopError extends Error {}
 
@@ -34,7 +35,7 @@ export function workshopActionResult(
   error: unknown,
   fallback: string,
 ): { error: string } {
-  if (error instanceof Response) throw error;
+  rethrowAuthorizationError(error);
   const message = workshopActionError(error, fallback);
   if (
     error instanceof WorkshopConflictError ||

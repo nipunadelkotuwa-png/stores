@@ -71,7 +71,7 @@ describe.runIf(hasDb)("bus fleet lifecycle", () => {
     );
     await expect(
       restoreSoldBus({ ...admin!, role: "OPERATOR" }, bus!.id, true),
-    ).rejects.toThrow(/administrators/);
+    ).rejects.toMatchObject({ init: { status: 403 } });
 
     const soldOptions = await getJobCardFormOptions(admin!);
     expect(soldOptions.buses.some((row) => row.id === bus!.id)).toBe(false);

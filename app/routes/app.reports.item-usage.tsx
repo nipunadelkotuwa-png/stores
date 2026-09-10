@@ -6,11 +6,11 @@ import { resolveReportPeriod } from "~/features/reports/period";
 import { db } from "~/db/client.server";
 import { parts } from "~/db/schema";
 import { and, asc, eq, or, sql } from "drizzle-orm";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.item-usage";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "reports.read");
   const url = new URL(request.url);
   const { APP_TIME_ZONE } = getEnv();
   const range = resolveReportPeriod(url.searchParams, APP_TIME_ZONE);

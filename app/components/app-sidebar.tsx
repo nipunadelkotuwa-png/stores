@@ -10,15 +10,17 @@ import {
   type NavItemConfig,
   type NavSectionConfig,
 } from "~/lib/app-navigation";
+import { roleLabel, type Role } from "~/lib/auth/permissions";
 
 const STORAGE_KEY = "storeops.sidebar.sections";
 
 type AppSidebarProps = {
   displayName: string;
-  role: "ADMIN" | "OPERATOR";
+  role: Role;
   csrf: string;
   pendingApprovals: number;
   mobileOpen: boolean;
+  collapsed: boolean;
   onMobileClose: () => void;
 };
 
@@ -269,6 +271,8 @@ function SidebarNavLink({
         to={item.to}
         end={navItemEnd(item)}
         onClick={onNavigate}
+        title={item.label}
+        aria-label={item.label}
         className={({ isActive }) =>
           isActive ? "sidebar-nav-link active" : "sidebar-nav-link"
         }
@@ -309,6 +313,8 @@ function SidebarSection({
         className="sidebar-section-toggle"
         aria-expanded={open}
         aria-controls={`sidebar-section-${section.id}`}
+        title={section.label}
+        aria-label={section.label}
         onClick={onToggle}
       >
         <span>{section.label}</span>
@@ -330,15 +336,17 @@ function SidebarSection({
 export function SidebarMenuButton({
   onClick,
   expanded = false,
+  label,
 }: {
   onClick: () => void;
   expanded?: boolean;
+  label: string;
 }) {
   return (
     <button
       type="button"
       className="sidebar-menu-button"
-      aria-label={expanded ? "Close navigation menu" : "Open navigation menu"}
+      aria-label={label}
       aria-expanded={expanded}
       aria-controls="app-sidebar"
       onClick={onClick}
@@ -374,6 +382,7 @@ export function AppSidebar({
   csrf,
   pendingApprovals,
   mobileOpen,
+  collapsed,
   onMobileClose,
 }: AppSidebarProps) {
   const location = useLocation();
@@ -384,7 +393,7 @@ export function AppSidebar({
     () => withIcons(buildPrimaryNav(role), pendingApprovals),
     [role, pendingApprovals],
   );
-  const roleLabel = role === "ADMIN" ? "Admin" : "Operator";
+  const roleCopy = roleLabel(role);
   const initials = displayName
     .split(/\s+/)
     .slice(0, 2)
@@ -491,13 +500,19 @@ export function AppSidebar({
       <aside
         ref={sidebarRef}
         id="app-sidebar"
-        className={`sidebar${mobileOpen ? " mobile-open" : ""}`}
+        className={`sidebar${mobileOpen ? " mobile-open" : ""}${collapsed ? " collapsed" : ""}`}
         aria-label="Main navigation"
         aria-hidden={sidebarInert ? true : undefined}
         {...(sidebarInert ? { inert: true } : {})}
       >
         <div className="sidebar-brand">
-          <Link to="/" className="sidebar-brand-link" onClick={onMobileClose}>
+          <Link
+            to="/"
+            className="sidebar-brand-link"
+            onClick={onMobileClose}
+            title="StoreOps"
+            aria-label="StoreOps dashboard"
+          >
             <div className="brand-mark small brand-mark-so">SO</div>
             <div className="sidebar-brand-copy">
               <strong>StoreOps</strong>
@@ -532,7 +547,10 @@ export function AppSidebar({
             <SidebarSection
               key={section.id}
               section={section}
-              open={sectionOpen[section.id] ?? section.defaultOpen ?? false}
+              open={
+                collapsed ||
+                (sectionOpen[section.id] ?? section.defaultOpen ?? false)
+              }
               onToggle={() => toggleSection(section.id)}
               onNavigate={onMobileClose}
             />
@@ -546,12 +564,12 @@ export function AppSidebar({
             </span>
             <div>
               <strong>{displayName}</strong>
-              <span className="sidebar-role-badge">{roleLabel}</span>
+              <span className="sidebar-role-badge">{roleCopy}</span>
             </div>
           </div>
           <Form method="post" action="/logout">
             <input type="hidden" name="csrf" value={csrf} />
-            <button type="submit" className="sidebar-signout">
+            <button type="submit" className="sidebar-signout" title="Sign out">
               Sign out
             </button>
           </Form>

@@ -17,12 +17,12 @@ import {
 } from "~/features/workshop/errors";
 import { isSerializationFailure } from "~/lib/postgres-error";
 import { getPendingJobCards } from "~/features/workshop/queries.server";
-import { requireAdmin } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.approvals";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireAdmin(request);
+  const actor = await requirePermission(request, "approvals.manage");
   const url = new URL(request.url);
   const tab = url.searchParams.get("tab") === "issues" ? "issues" : "job-cards";
   const [jobCards, issues] = await Promise.all([
@@ -33,7 +33,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireAdmin(request);
+  const actor = await requirePermission(request, "approvals.manage");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "");

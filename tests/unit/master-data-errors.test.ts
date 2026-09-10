@@ -13,6 +13,29 @@ describe("masterDataActionError", () => {
     ).toBe("Already exists.");
   });
 
+  it("maps barcode unique violations separately from SKU", () => {
+    expect(
+      masterDataActionError(
+        Object.assign(new Error("duplicate barcode"), {
+          code: "23505",
+          constraint: "parts_barcode_unique",
+        }),
+        "A part with that SKU already exists.",
+        "Fallback",
+      ),
+    ).toBe("A part with that barcode already exists.");
+    expect(
+      masterDataActionError(
+        Object.assign(new Error("duplicate sku"), {
+          code: "23505",
+          constraint: "parts_sku_unique",
+        }),
+        "Already exists.",
+        "Fallback",
+      ),
+    ).toBe("A part with that SKU already exists.");
+  });
+
   it("hides Failed query messages", () => {
     expect(
       masterDataActionError(

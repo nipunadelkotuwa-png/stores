@@ -22,12 +22,16 @@ import {
   statusLabel,
 } from "~/features/workshop/tyre-lifecycle";
 import { registerTyre, disposeTyre } from "~/features/workshop/tyres.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import {
+  assertPermission,
+  requirePermission,
+} from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.tyres";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "tyres.read");
   const url = new URL(request.url);
   const filters = {
     status: url.searchParams.get("status") || undefined,
@@ -49,20 +53,22 @@ export async function loader({ request }: Route.LoaderArgs) {
     stores: formOptions.stores,
     buses: formOptions.buses,
     counts,
-    isAdmin: actor.role === "ADMIN",
+    isAdmin: can(actor.role, "adjustments.create"),
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "tyres.read");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "register");
   try {
     if (intent === "dispose") {
+      assertPermission(actor, "tyres.manage");
       await disposeTyre(actor, Object.fromEntries(formData));
       return { ok: true, disposed: true };
     }
+    assertPermission(actor, "adjustments.create");
     await registerTyre(actor, Object.fromEntries(formData));
     return { ok: true };
   } catch (error) {

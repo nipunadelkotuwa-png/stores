@@ -7,12 +7,12 @@ import {
   statusLabel,
 } from "~/features/workshop/tyre-lifecycle";
 import { disposeTyre } from "~/features/workshop/tyres.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.tyres.$id";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "tyres.read");
   const tyre = await getTyreDetail(actor, params.id);
   if (!tyre) {
     throw data("Tyre not found or you do not have access.", { status: 404 });
@@ -21,7 +21,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "tyres.manage");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   try {

@@ -6,7 +6,7 @@ import { db } from "~/db/client.server";
 import { parts, partCategories } from "~/db/schema";
 import { eq, asc } from "drizzle-orm";
 import type { Route } from "./+types/app.parts.print-labels";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 
 type LabelMode = "qr" | "barcode" | "both";
 type LabelSize = "50x25" | "50x30" | "70x40" | "a4";
@@ -19,7 +19,7 @@ const SIZE_PRESETS: { id: LabelSize; label: string }[] = [
 ];
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request);
+  await requirePermission(request, "masterData.read");
   const allParts = await db
     .select({
       id: parts.id,

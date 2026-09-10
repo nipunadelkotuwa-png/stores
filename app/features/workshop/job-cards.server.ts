@@ -1,5 +1,4 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { data } from "react-router";
 
 import { db } from "~/db/client.server";
 import {
@@ -13,7 +12,10 @@ import {
   tyreEvents,
 } from "~/db/schema";
 import type { Actor } from "~/lib/auth/authorization.server";
-import { requireStoreAccess } from "~/lib/auth/authorization.server";
+import {
+  assertPermission,
+  requireStoreAccess,
+} from "~/lib/auth/authorization.server";
 import type { Transaction } from "~/features/inventory/posting.server";
 import { invalidatePendingApprovalCountCache } from "~/features/inventory/approval-count-cache.server";
 import { busUnavailableForJobCardMessage } from "~/features/master-data/bus-lifecycle";
@@ -100,6 +102,7 @@ async function loadActiveJobCard(tx: Transaction, jobCardId: string) {
 }
 
 export async function openJobCard(actor: Actor, input: unknown) {
+  assertPermission(actor, "jobCards.create");
   const command = openJobCardSchema.parse(input);
   await requireStoreAccess(actor, command.storeId);
 
@@ -173,12 +176,7 @@ export async function openJobCard(actor: Actor, input: unknown) {
 }
 
 export async function approveJobCard(actor: Actor, jobCardId: string) {
-  if (actor.role !== "ADMIN") {
-    throw data(
-      { message: "Only administrators can approve job cards." },
-      { status: 403 },
-    );
-  }
+  assertPermission(actor, "approvals.manage");
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
@@ -223,12 +221,7 @@ export async function approveJobCard(actor: Actor, jobCardId: string) {
 }
 
 export async function rejectJobCard(actor: Actor, input: unknown) {
-  if (actor.role !== "ADMIN") {
-    throw data(
-      { message: "Only administrators can reject job cards." },
-      { status: 403 },
-    );
-  }
+  assertPermission(actor, "approvals.manage");
   const command = rejectJobCardSchema.parse(input);
 
   return db.transaction(async (tx) => {
@@ -278,6 +271,7 @@ export async function rejectJobCard(actor: Actor, input: unknown) {
 }
 
 export async function closeJobCard(actor: Actor, input: unknown) {
+  assertPermission(actor, "jobCards.update");
   const command = closeJobCardSchema.parse(input);
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
@@ -325,6 +319,7 @@ export async function closeJobCard(actor: Actor, input: unknown) {
 }
 
 export async function cancelJobCard(actor: Actor, jobCardId: string) {
+  assertPermission(actor, "jobCards.update");
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
     const card = await loadActiveJobCard(tx, jobCardId);

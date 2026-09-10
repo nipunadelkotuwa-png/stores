@@ -25,8 +25,8 @@ import {
 } from "~/features/inventory/posting.server";
 import { getTransactionOptions } from "~/features/inventory/queries.server";
 import {
+  requirePermission,
   requireStoreAccess,
-  requireUser,
 } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.purchases.new";
@@ -52,11 +52,11 @@ const schema = z.object({
 });
 
 export async function loader({ request }: Route.LoaderArgs) {
-  return getTransactionOptions(await requireUser(request));
+  return getTransactionOptions(await requirePermission(request, "purchases.create"));
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "purchases.create");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const loaded = loadStockLines(formData, "unitPrice");

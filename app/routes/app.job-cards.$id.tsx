@@ -44,12 +44,17 @@ import {
   fitOrReplaceTyre,
   disposeTyre,
 } from "~/features/workshop/tyres.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import {
+  assertPermission,
+  requirePermission,
+  rethrowAuthorizationError,
+} from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.job-cards.$id";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "jobCards.read");
   const card = await getJobCardDetail(actor, params.id);
   if (!card) {
     throw data("Job card not found or you do not have access.", {
@@ -67,12 +72,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     initialPartId: url.searchParams.get("part") || "",
     unusualCounts,
     unusualThreshold: UNUSUAL_ISSUE_THRESHOLD,
-    canManage: actor.role === "ADMIN",
+    canManage: can(actor.role, "approvals.manage"),
+    canUpdate: can(actor.role, "jobCards.update"),
   };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "jobCards.read");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "");
@@ -80,6 +86,8 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   try {
     if (intent === "issue") {
+      assertPermission(actor, "issues.create");
+      assertPermission(actor, "jobCards.update");
       const card = await getJobCardDetail(actor, jobCardId);
       if (!card || card.status !== "OPEN") {
         return { error: "Job card must be open to issue parts" };
@@ -100,6 +108,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         });
         throw redirect(`/receipts/${result.id}`);
       } catch (error) {
+        rethrowAuthorizationError(error);
         if (error instanceof Response) throw error;
         const failure = stockLinesActionError(
           error,
@@ -111,6 +120,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       }
     }
     if (intent === "fit-tyre") {
+      assertPermission(actor, "tyres.manage");
       const result = await fitOrReplaceTyre(actor, {
         jobCardId,
         tyreId: formData.get("tyreId"),
@@ -120,10 +130,12 @@ export async function action({ request, params }: Route.ActionArgs) {
       throw redirect(`/receipts/${result.documentId}`);
     }
     if (intent === "dispose-tyre") {
+      assertPermission(actor, "tyres.manage");
       await disposeTyre(actor, Object.fromEntries(formData));
       throw redirect(`/job-cards/${jobCardId}`);
     }
     if (intent === "oil") {
+      assertPermission(actor, "jobCards.update");
       const result = await recordOilChange(actor, {
         jobCardId,
         partId: formData.get("partId"),
@@ -134,6 +146,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       throw redirect(`/receipts/${result.documentId}`);
     }
     if (intent === "close") {
+      assertPermission(actor, "jobCards.update");
       await closeJobCard(actor, {
         jobCardId,
         workDone: formData.get("workDone"),
@@ -141,12 +154,13 @@ export async function action({ request, params }: Route.ActionArgs) {
       throw redirect(`/job-cards/${jobCardId}`);
     }
     if (intent === "cancel") {
+      assertPermission(actor, "jobCards.update");
       await cancelJobCard(actor, jobCardId);
       throw redirect("/job-cards");
     }
     return { error: "Unknown action" };
   } catch (error) {
-    if (error instanceof Response) throw error;
+    rethrowAuthorizationError(error);
     if (
       error instanceof WorkshopError ||
       error instanceof ZodError ||
@@ -287,17 +301,19 @@ export default function JobCardDetailPage({
           ) : (
             <p className="muted">Ask an administrator to approve this card.</p>
           )}
-          <Form method="post" style={{ marginTop: "1rem" }}>
-            <CsrfField />
-            <input type="hidden" name="intent" value="cancel" />
-            <button className="text-button" disabled={busy}>
-              Cancel unused card
-            </button>
-          </Form>
+          {loaderData.canUpdate ? (
+            <Form method="post" style={{ marginTop: "1rem" }}>
+              <CsrfField />
+              <input type="hidden" name="intent" value="cancel" />
+              <button className="text-button" disabled={busy}>
+                Cancel unused card
+              </button>
+            </Form>
+          ) : null}
         </section>
       ) : null}
 
-      {open ? (
+      {open && loaderData.canUpdate ? (
         <>
           <section
             className="panel form-panel no-print"

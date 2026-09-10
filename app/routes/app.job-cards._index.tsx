@@ -1,37 +1,41 @@
 import { Form, Link, useSearchParams } from "react-router";
 import { listJobCards } from "~/features/workshop/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import type { Route } from "./+types/app.job-cards._index";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "jobCards.read");
   const url = new URL(request.url);
   const status = url.searchParams.get("status");
-  return listJobCards(actor, {
-    status:
-      status === "PENDING_APPROVAL" ||
-      status === "OPEN" ||
-      status === "REJECTED" ||
-      status === "CLOSED" ||
-      status === "CANCELLED"
-        ? status
-        : undefined,
-    bus: url.searchParams.get("bus") || undefined,
-    start: url.searchParams.get("start") || undefined,
-    end: url.searchParams.get("end") || undefined,
-  });
+  return {
+    canCreate: can(actor.role, "jobCards.create"),
+    cards: await listJobCards(actor, {
+      status:
+        status === "PENDING_APPROVAL" ||
+        status === "OPEN" ||
+        status === "REJECTED" ||
+        status === "CLOSED" ||
+        status === "CANCELLED"
+          ? status
+          : undefined,
+      bus: url.searchParams.get("bus") || undefined,
+      start: url.searchParams.get("start") || undefined,
+      end: url.searchParams.get("end") || undefined,
+    }),
+  };
 }
 
 export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
   const [params] = useSearchParams();
   const query = params.get("q")?.trim().toLowerCase() ?? "";
   const cards = query
-    ? loaderData.filter((card) =>
+    ? loaderData.cards.filter((card) =>
         [card.jobNumber, card.fleetNumber, card.registrationNumber, card.complaint]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(query)),
       )
-    : loaderData;
+    : loaderData.cards;
 
   return (
     <>
@@ -45,9 +49,11 @@ export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
         <div className="heading-actions">
-          <Link className="button button-primary" to="/job-cards/new">
-            Open job card
-          </Link>
+          {loaderData.canCreate ? (
+            <Link className="button button-primary" to="/job-cards/new">
+              Open job card
+            </Link>
+          ) : null}
         </div>
       </div>
 

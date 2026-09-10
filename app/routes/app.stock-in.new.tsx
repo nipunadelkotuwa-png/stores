@@ -9,17 +9,17 @@ import {
   postStock,
 } from "~/features/inventory/posting.server";
 import { getTransactionOptions } from "~/features/inventory/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.stock-in.new";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "stockIn.create");
   return getTransactionOptions(actor);
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "stockIn.create");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const form = Object.fromEntries(formData);

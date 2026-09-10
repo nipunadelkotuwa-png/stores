@@ -15,17 +15,21 @@ import {
 } from "~/features/master-data/buses.server";
 import { masterDataActionError } from "~/features/master-data/errors";
 import { listBuses } from "~/features/master-data/queries.server";
-import { requireAdmin, requireUser } from "~/lib/auth/authorization.server";
+import {
+  rethrowAuthorizationError,
+  requirePermission,
+} from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.buses";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
-  return { buses: await listBuses(), canManage: user.role === "ADMIN" };
+  const user = await requirePermission(request, "masterData.read");
+  return { buses: await listBuses(), canManage: can(user.role, "masterData.write") };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireAdmin(request);
+  const actor = await requirePermission(request, "masterData.write");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "create");
@@ -49,6 +53,7 @@ export async function action({ request }: Route.ActionArgs) {
       return { ok: true };
     }
   } catch (error) {
+    rethrowAuthorizationError(error);
     return {
       error: masterDataActionError(
         error,

@@ -34,13 +34,15 @@ export function isUniqueViolation(
   if (postgresErrorCode(error) !== "23505") return false;
   if (!constraint) return true;
   const haystack = walkCauses(error)
-    .map((node) =>
-      node instanceof Error
-        ? node.message
-        : typeof node === "object" && node && "constraint" in node
+    .map((node) => {
+      if (!node || typeof node !== "object") return "";
+      const named =
+        "constraint" in node
           ? String((node as { constraint?: string }).constraint ?? "")
-          : "",
-    )
+          : "";
+      const message = node instanceof Error ? node.message : "";
+      return `${named} ${message}`;
+    })
     .join(" ");
   return haystack.includes(constraint);
 }

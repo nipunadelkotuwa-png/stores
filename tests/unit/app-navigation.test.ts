@@ -53,6 +53,48 @@ describe("buildNavSections", () => {
     expect(paths).toContain("/returns/bus");
   });
 
+  it("hides workshop and DAG from store keepers", () => {
+    const sections = buildNavSections("STORE_KEEPER");
+    const paths = sections.flatMap((section) =>
+      section.items.map((item) => item.to),
+    );
+    expect(paths).toContain("/job-cards");
+    expect(paths).toContain("/stock-in/new");
+    expect(paths).toContain("/purchases");
+    expect(paths).toContain("/transfers");
+    expect(paths).not.toContain("/tyres");
+    expect(paths).not.toContain("/tyres/dag");
+    expect(paths).not.toContain("/tyres/import");
+    expect(paths).not.toContain("/returns");
+  });
+
+  it("hides stock-in from workshop and DAG reject stays admin-only", () => {
+    const sections = buildNavSections("WORKSHOP");
+    const paths = sections.flatMap((section) =>
+      section.items.map((item) => item.to),
+    );
+    expect(paths).toContain("/tyres/dag");
+    expect(paths).toContain("/job-cards");
+    expect(paths).toContain("/purchases");
+    expect(paths).toContain("/transfers");
+    expect(paths).not.toContain("/stock-in/new");
+    expect(paths).not.toContain("/admin/users");
+  });
+
+  it("limits viewers to read-only nav", () => {
+    const sections = buildNavSections("VIEWER");
+    const paths = sections.flatMap((section) =>
+      section.items.map((item) => item.to),
+    );
+    expect(paths).toContain("/balances");
+    expect(paths).toContain("/parts");
+    expect(paths).toContain("/purchases");
+    expect(paths).toContain("/transfers");
+    expect(paths).not.toContain("/stock-in/new");
+    expect(paths).not.toContain("/job-cards");
+    expect(paths).not.toContain("/admin/users");
+  });
+
   it("shows admin-only operations to administrators", () => {
     const operations = buildNavSections("ADMIN").find(
       (section) => section.id === "operations",

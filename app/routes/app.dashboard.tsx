@@ -7,15 +7,16 @@ import { getPosHubData } from "~/features/dashboard/pos-hub.server";
 import { parsePeriodDays } from "~/features/dashboard/period";
 import { dashboardShouldRevalidate } from "~/lib/app-layout-revalidation";
 import { listOpenJobCards } from "~/features/workshop/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import { readDashboardMode } from "~/lib/dashboard-mode.server";
 import type { Route } from "./+types/app.dashboard";
 import type { AppOutletContext } from "./app";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "dashboard.read");
   const mode = await readDashboardMode(request, actor.role);
-  const canManage = actor.role === "ADMIN";
+  const canManage = can(actor.role, "masterData.write");
 
   if (mode === "pos") {
     const [pos, openJobCards] = await Promise.all([

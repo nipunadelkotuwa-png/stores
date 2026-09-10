@@ -2,11 +2,11 @@ import { data, Link } from "react-router";
 import { TyreMap } from "~/components/tyre-map";
 import { busStatusLabel } from "~/features/master-data/bus-lifecycle";
 import { getBusHistory } from "~/features/workshop/history.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.buses.$id";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "masterData.read");
   const history = await getBusHistory(actor, params.id);
   if (!history) {
     throw data("Bus not found.", { status: 404 });

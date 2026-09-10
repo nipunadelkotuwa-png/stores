@@ -1,19 +1,11 @@
 /** Shared helpers for master-data create/update actions. */
 
+import { isUniqueViolation as isPostgresUniqueViolation } from "~/lib/postgres-error";
+
 import { BusLifecycleError } from "./bus-lifecycle";
 
 export function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const code =
-    "code" in error
-      ? String((error as { code?: unknown }).code)
-      : "cause" in error &&
-          error.cause &&
-          typeof error.cause === "object" &&
-          "code" in error.cause
-        ? String((error.cause as { code?: unknown }).code)
-        : undefined;
-  return code === "23505";
+  return isPostgresUniqueViolation(error);
 }
 
 export function masterDataActionError(
@@ -22,6 +14,12 @@ export function masterDataActionError(
   fallback: string,
 ): string {
   if (error instanceof BusLifecycleError) return error.message;
+  if (isPostgresUniqueViolation(error, "parts_barcode_unique")) {
+    return "A part with that barcode already exists.";
+  }
+  if (isPostgresUniqueViolation(error, "parts_sku_unique")) {
+    return "A part with that SKU already exists.";
+  }
   if (isUniqueViolation(error)) return duplicateMessage;
   if (error instanceof Error && error.message.startsWith("Failed query:")) {
     return fallback;

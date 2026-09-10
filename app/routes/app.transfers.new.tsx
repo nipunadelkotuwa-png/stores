@@ -17,12 +17,12 @@ import { sendStoreTransfer } from "~/features/inventory/transfers.server";
 import { workshopActionError } from "~/features/workshop/errors";
 import { listInStoreTyres } from "~/features/workshop/queries.server";
 import { listStores } from "~/features/master-data/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.transfers.new";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "transfers.create");
   const [options, allStores, inStoreTyres] = await Promise.all([
     getTransactionOptions(actor),
     listStores(),
@@ -36,7 +36,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "transfers.create");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const form = Object.fromEntries(formData);

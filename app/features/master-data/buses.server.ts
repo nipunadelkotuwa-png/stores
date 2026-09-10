@@ -4,16 +4,17 @@ import { z } from "zod";
 import { db } from "~/db/client.server";
 import { auditEvents, buses, jobCards } from "~/db/schema";
 import type { Actor } from "~/lib/auth/authorization.server";
+import { assertPermission } from "~/lib/auth/authorization.server";
 import { BusLifecycleError, unresolvedJobCardsMessage } from "./bus-lifecycle";
 
 const busIdSchema = z.string().uuid();
 
 function requireBusAdmin(actor: Actor) {
-  if (actor.role !== "ADMIN") {
-    throw new BusLifecycleError(
-      "Only administrators can change bus fleet status.",
-    );
-  }
+  assertPermission(
+    actor,
+    "masterData.write",
+    "Only administrators can change bus fleet status.",
+  );
 }
 
 async function loadBus(busId: string) {

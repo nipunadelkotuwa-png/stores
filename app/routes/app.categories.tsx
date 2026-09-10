@@ -5,21 +5,22 @@ import { db } from "~/db/client.server";
 import { partCategories } from "~/db/schema";
 import { masterDataActionError } from "~/features/master-data/errors";
 import { listPartCategories } from "~/features/master-data/queries.server";
-import { requireAdmin, requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import { eq } from "drizzle-orm";
 import type { Route } from "./+types/app.categories";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+  const user = await requirePermission(request, "masterData.read");
   return {
     categories: await listPartCategories(),
-    canManage: user.role === "ADMIN",
+    canManage: can(user.role, "masterData.write"),
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireAdmin(request);
+  await requirePermission(request, "masterData.write");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "create");

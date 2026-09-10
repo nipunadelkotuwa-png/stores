@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Form, useActionData } from "react-router";
 import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
@@ -9,6 +9,15 @@ import {
   listUserAssignments,
   listUsers,
 } from "~/features/master-data/queries.server";
+import { USER_ROLES, roleLabel } from "~/lib/auth/permissions";
+import {
+  assertNonAdminHasStore,
+  assertNotLastActiveAdmin,
+  auditAccessChange,
+  LastAdminError,
+  lockUserAccess,
+  NonAdminStoreError,
+} from "~/features/master-data/users-access.server";
 import { requireAdmin } from "~/lib/auth/authorization.server";
 import { hashPassword } from "~/lib/auth/password.server";
 import { revokeUserSessions } from "~/lib/auth/session.server";
@@ -20,15 +29,15 @@ const createSchema = z
     intent: z.literal("create"),
     email: z.string().email(),
     displayName: z.string().min(1),
-    role: z.enum(["ADMIN", "OPERATOR"]),
+    role: z.enum(USER_ROLES),
     password: z.string().min(12),
     storeId: z.string().uuid().optional().or(z.literal("")),
   })
   .superRefine((value, ctx) => {
-    if (value.role === "OPERATOR" && !value.storeId) {
+    if (value.role !== "ADMIN" && !value.storeId) {
       ctx.addIssue({
         code: "custom",
-        message: "Operators require an assigned store",
+        message: "Non-admin users require an assigned store",
         path: ["storeId"],
       });
     }
@@ -70,20 +79,30 @@ export async function action({ request }: Route.ActionArgs) {
         return { error: parsed.error.issues[0]?.message ?? "Invalid user" };
       }
       const { email, displayName, role, password, storeId } = parsed.data;
-      const [created] = await db
-        .insert(users)
-        .values({
-          email: email.toLowerCase(),
-          displayName,
-          role,
-          passwordHash: await hashPassword(password),
-        })
-        .returning({ id: users.id });
-      if (role === "OPERATOR" && storeId) {
-        await db
-          .insert(userStoreAssignments)
-          .values({ userId: created.id, storeId, assignedBy: actor.id });
-      }
+      const created = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(users)
+          .values({
+            email: email.toLowerCase(),
+            displayName,
+            role,
+            passwordHash: await hashPassword(password),
+          })
+          .returning({ id: users.id });
+        if (role !== "ADMIN" && storeId) {
+          await tx.insert(userStoreAssignments).values({
+            userId: row.id,
+            storeId,
+            assignedBy: actor.id,
+          });
+        }
+        return row;
+      });
+      await auditAccessChange(actor, created.id, {
+        action: "create",
+        role,
+        storeId: storeId || null,
+      });
       return { ok: true };
     }
 
@@ -111,8 +130,23 @@ export async function action({ request }: Route.ActionArgs) {
         return { error: "You cannot disable your own account." };
       }
       const status = intent === "disable" ? "DISABLED" : "ACTIVE";
-      await db.update(users).set({ status }).where(eq(users.id, target.id));
+      try {
+        await db.transaction(async (tx) => {
+          if (status === "DISABLED") {
+            await assertNotLastActiveAdmin(tx, target.id, { status });
+          }
+          await tx.update(users).set({ status }).where(eq(users.id, target.id));
+        });
+      } catch (error) {
+        if (error instanceof LastAdminError) return { error: error.message };
+        throw error;
+      }
       if (status === "DISABLED") await revokeUserSessions(target.id);
+      await auditAccessChange(actor, target.id, {
+        action: status === "DISABLED" ? "disable" : "enable",
+        oldStatus: target.status,
+        newStatus: status,
+      });
       return { ok: true };
     }
 
@@ -137,24 +171,28 @@ export async function action({ request }: Route.ActionArgs) {
       if (target.id === actor.id) {
         return { error: "You cannot change your own role." };
       }
-      const role = z.enum(["ADMIN", "OPERATOR"]).safeParse(formData.get("role"));
+      const role = z.enum(USER_ROLES).safeParse(formData.get("role"));
       if (!role.success) return { error: "Invalid role." };
-      if (role.data === "OPERATOR") {
-        const [assignment] = await db
-          .select({ storeId: userStoreAssignments.storeId })
-          .from(userStoreAssignments)
-          .where(eq(userStoreAssignments.userId, target.id))
-          .limit(1);
-        if (!assignment) {
-          return {
-            error: "Assign a store before changing this user to operator.",
-          };
-        }
+      try {
+        await db.transaction(async (tx) => {
+          await assertNotLastActiveAdmin(tx, target.id, { role: role.data });
+          const { assignments } = await lockUserAccess(tx, target.id);
+          assertNonAdminHasStore(role.data, assignments);
+          await tx
+            .update(users)
+            .set({ role: role.data })
+            .where(eq(users.id, target.id));
+        });
+      } catch (error) {
+        if (error instanceof LastAdminError) return { error: error.message };
+        if (error instanceof NonAdminStoreError) return { error: error.message };
+        throw error;
       }
-      await db
-        .update(users)
-        .set({ role: role.data })
-        .where(eq(users.id, target.id));
+      await auditAccessChange(actor, target.id, {
+        action: "change-role",
+        oldRole: target.role,
+        newRole: role.data,
+      });
       return { ok: true };
     }
 
@@ -169,34 +207,38 @@ export async function action({ request }: Route.ActionArgs) {
           assignedBy: actor.id,
         })
         .onConflictDoNothing();
+      await auditAccessChange(actor, target.id, {
+        action: "add-store",
+        storeId: storeId.data,
+      });
       return { ok: true };
     }
 
     if (intent === "remove-store") {
       const storeId = z.string().uuid().safeParse(formData.get("storeId"));
       if (!storeId.success) return { error: "Invalid store." };
-      if (target.role === "OPERATOR") {
-        const remaining = await db
-          .select({ storeId: userStoreAssignments.storeId })
-          .from(userStoreAssignments)
-          .where(
-            and(
-              eq(userStoreAssignments.userId, target.id),
-              ne(userStoreAssignments.storeId, storeId.data),
-            ),
-          );
-        if (remaining.length === 0) {
-          return { error: "Operators must keep at least one assigned store." };
-        }
+      try {
+        await db.transaction(async (tx) => {
+          const { user, assignments } = await lockUserAccess(tx, target.id);
+          if (!user) throw new Error("User not found.");
+          assertNonAdminHasStore(user.role, assignments, storeId.data);
+          await tx
+            .delete(userStoreAssignments)
+            .where(
+              and(
+                eq(userStoreAssignments.userId, target.id),
+                eq(userStoreAssignments.storeId, storeId.data),
+              ),
+            );
+        });
+      } catch (error) {
+        if (error instanceof NonAdminStoreError) return { error: error.message };
+        throw error;
       }
-      await db
-        .delete(userStoreAssignments)
-        .where(
-          and(
-            eq(userStoreAssignments.userId, target.id),
-            eq(userStoreAssignments.storeId, storeId.data),
-          ),
-        );
+      await auditAccessChange(actor, target.id, {
+        action: "remove-store",
+        storeId: storeId.data,
+      });
       return { ok: true };
     }
 
@@ -217,10 +259,11 @@ export default function UsersPage({ loaderData }: Route.ComponentProps) {
       <div className="page-heading">
         <div>
           <p className="eyebrow">Administration</p>
-          <h1>Users and access</h1>
+          <h1>Users & Roles</h1>
           <p className="muted">
-            Operators are constrained to assigned store locations. Disable an
-            account or reset a password without rewriting history.
+            Permissions are fixed by role. Assign a role and store here.
+            Operators, store keepers, workshop users, and viewers are limited
+            to assigned stores.
           </p>
         </div>
       </div>
@@ -252,8 +295,11 @@ export default function UsersPage({ loaderData }: Route.ComponentProps) {
                         <input type="hidden" name="intent" value="change-role" />
                         <input type="hidden" name="userId" value={user.id} />
                         <select name="role" defaultValue={user.role}>
-                          <option value="OPERATOR">Operator</option>
-                          <option value="ADMIN">Admin</option>
+                          {USER_ROLES.map((role) => (
+                            <option key={role} value={role}>
+                              {roleLabel(role)}
+                            </option>
+                          ))}
                         </select>
                         <button className="text-button" type="submit">
                           Save role
@@ -262,9 +308,16 @@ export default function UsersPage({ loaderData }: Route.ComponentProps) {
                     </td>
                     <td>
                       {user.role === "ADMIN" ? (
-                        <span>All stores</span>
-                      ) : (
-                        <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
+                        <>
+                          <span>All stores</span>
+                          <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                            Assign a store before changing this user away from
+                            admin.
+                          </p>
+                        </>
+                      ) : null}
+                      {user.role !== "ADMIN" || user.stores.length > 0 ? (
+                        <ul style={{ margin: user.role === "ADMIN" ? "0.35rem 0 0" : 0, paddingLeft: "1.1rem" }}>
                           {user.stores.length === 0 ? (
                             <li>None</li>
                           ) : (
@@ -299,7 +352,7 @@ export default function UsersPage({ loaderData }: Route.ComponentProps) {
                             ))
                           )}
                         </ul>
-                      )}
+                      ) : null}
                       <Form
                         method="post"
                         style={{
@@ -394,12 +447,16 @@ export default function UsersPage({ loaderData }: Route.ComponentProps) {
             <label>
               Role
               <select name="role">
-                <option value="OPERATOR">Operator</option>
+                {USER_ROLES.filter((role) => role !== "ADMIN").map((role) => (
+                  <option key={role} value={role}>
+                    {roleLabel(role)}
+                  </option>
+                ))}
                 <option value="ADMIN">Admin</option>
               </select>
             </label>
             <label>
-              Assigned store (required for Operators)
+              Assigned store (required except Admin)
               <select name="storeId">
                 <option value="">Select store</option>
                 {loaderData.stores.map((store) => (

@@ -7,7 +7,7 @@ import {
   postReversal,
 } from "~/features/inventory/posting.server";
 import { getPostedDocumentsForReversal } from "~/features/inventory/queries.server";
-import { requireAdmin } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.returns";
 
@@ -19,13 +19,13 @@ const reversalSchema = z.object({
 });
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireAdmin(request);
+  const actor = await requirePermission(request, "reversals.manage");
   const documents = await getPostedDocumentsForReversal(actor);
   return { documents };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireAdmin(request);
+  const actor = await requirePermission(request, "reversals.manage");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const entries = Object.fromEntries(formData);

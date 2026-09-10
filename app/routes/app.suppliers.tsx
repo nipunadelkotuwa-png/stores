@@ -6,17 +6,21 @@ import { db } from "~/db/client.server";
 import { suppliers } from "~/db/schema";
 import { masterDataActionError } from "~/features/master-data/errors";
 import { listSuppliers } from "~/features/master-data/queries.server";
-import { requireAdmin, requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.suppliers";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
-  return { suppliers: await listSuppliers(), canManage: user.role === "ADMIN" };
+  const user = await requirePermission(request, "masterData.read");
+  return {
+    suppliers: await listSuppliers(),
+    canManage: can(user.role, "masterData.write"),
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireAdmin(request);
+  await requirePermission(request, "masterData.write");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "create");

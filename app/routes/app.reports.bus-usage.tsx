@@ -3,7 +3,7 @@ import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getBusUsage } from "~/features/inventory/queries.server";
 import { resolveReportPeriod } from "~/features/reports/period";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.bus-usage";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -11,7 +11,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const range = resolveReportPeriod(url.searchParams, getEnv().APP_TIME_ZONE);
   const bus = url.searchParams.get("bus") || undefined;
   return {
-    ...(await getBusUsage(await requireUser(request), {
+    ...(await getBusUsage(await requirePermission(request, "reports.read"), {
       start: range.start,
       end: range.end,
       bus,

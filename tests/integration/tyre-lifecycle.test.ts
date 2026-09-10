@@ -623,4 +623,409 @@ describe.runIf(hasDb)("tyre lifecycle", () => {
       );
     expect(sends).toHaveLength(1);
   }, 360_000);
+
+  async function servicedLives(label: string, count: number) {
+    const { db } = await import("../../app/db/client.server");
+    const { buses, parts, stockDocuments, stores, suppliers, tyres, users } =
+      await import("../../app/db/schema");
+    const { approvePendingIssue } =
+      await import("../../app/features/inventory/posting.server");
+    const { approveJobCard, openJobCard } =
+      await import("../../app/features/workshop/job-cards.server");
+    const { fitOrReplaceTyre, importOrgTyres } =
+      await import("../../app/features/workshop/tyres.server");
+
+    const [admin] = await db
+      .select()
+      .from(users)
+      .where(eq(users.role, "ADMIN"))
+      .limit(1);
+    const [store] = await db.select().from(stores).limit(1);
+    const [supplier] = await db
+      .select()
+      .from(suppliers)
+      .where(eq(suppliers.active, true))
+      .limit(1);
+    const [orgPart] = await db
+      .select()
+      .from(parts)
+      .where(eq(parts.sku, "TR-ORG-295"))
+      .limit(1);
+    expect(admin && store && supplier && orgPart).toBeTruthy();
+
+    const tag = crypto.randomUUID().slice(0, 8);
+    const serials = Array.from(
+      { length: count + 1 },
+      (_, index) => `it-${label}-${tag}-${index}`,
+    );
+    await importOrgTyres(admin!, {
+      storeId: store!.id,
+      supplierId: supplier!.id,
+      businessDate: "2026-09-08",
+      partId: orgPart!.id,
+      quantity: count + 1,
+      unitCost: "1.00",
+      serials: serials.join("\n"),
+      idempotencyKey: `import-${label}-${tag}-aaaaaaaa`,
+    });
+    const tyreRows = [];
+    for (const serial of serials) {
+      const [row] = await db
+        .select()
+        .from(tyres)
+        .where(eq(tyres.serialNumber, serial));
+      tyreRows.push(row!);
+    }
+    const lives = tyreRows.slice(0, count);
+    const mule = tyreRows[count]!;
+    const [bus] = await db
+      .insert(buses)
+      .values({ fleetNumber: `IT-${label}-${tag}` })
+      .returning();
+    let card = await openJobCard(admin!, {
+      storeId: store!.id,
+      busId: bus!.id,
+      businessDate: "2026-09-08",
+      complaint: `Batch ${label}`,
+    });
+    card = { ...card, ...(await approveJobCard(admin!, card.id)) };
+    for (const [index, life] of lives.entries()) {
+      const pendingFit = await fitOrReplaceTyre(admin!, {
+        jobCardId: card.id,
+        tyreId: life.id,
+        position: "FL",
+        idempotencyKey: `fit-${label}-${tag}-${index}-a`.padEnd(16, "a"),
+      });
+      await approvePendingIssue(admin!, pendingFit.documentId);
+      const pendingSwap = await fitOrReplaceTyre(admin!, {
+        jobCardId: card.id,
+        tyreId: mule.id,
+        position: "FL",
+        idempotencyKey: `fit-${label}-${tag}-${index}-b`.padEnd(16, "a"),
+      });
+      await approvePendingIssue(admin!, pendingSwap.documentId);
+    }
+    return {
+      admin: admin!,
+      supplier: supplier!,
+      lives,
+      mule,
+      db,
+      tyres,
+      stockDocuments,
+      tag,
+    };
+  }
+
+  it("posts no DAG OUT documents when any serial in the batch is invalid", async () => {
+    const { sendTyresToDag } =
+      await import("../../app/features/workshop/tyres.server");
+    const { WorkshopError } =
+      await import("../../app/features/workshop/errors");
+    const { dagDocumentIdempotencyKey } =
+      await import("../../app/features/workshop/dag-batch");
+    const { admin, supplier, lives, db, tyres, stockDocuments } =
+      await servicedLives("batchout", 1);
+    const batchKey = crypto.randomUUID();
+    const missing = crypto.randomUUID();
+
+    await expect(
+      sendTyresToDag(admin, {
+        tyreIds: [lives[0]!.id, missing],
+        supplierId: supplier.id,
+        businessDate: "2026-09-08",
+        batchKey,
+      }),
+    ).rejects.toBeInstanceOf(WorkshopError);
+
+    try {
+      await sendTyresToDag(admin, {
+        tyreIds: [lives[0]!.id, missing],
+        supplierId: supplier.id,
+        businessDate: "2026-09-08",
+        batchKey,
+      });
+    } catch (error) {
+      expect((error as Error).message).toContain("Cannot send DAG batch.");
+      expect((error as Error).message).toContain(missing);
+    }
+
+    const docs = await db
+      .select({ id: stockDocuments.id })
+      .from(stockDocuments)
+      .where(
+        eq(
+          stockDocuments.idempotencyKey,
+          dagDocumentIdempotencyKey("DAG_OUT", batchKey, lives[0]!.id),
+        ),
+      );
+    expect(docs).toHaveLength(0);
+    const [after] = await db
+      .select()
+      .from(tyres)
+      .where(eq(tyres.id, lives[0]!.id));
+    expect(after?.status).toBe("IN_STORE");
+  }, 360_000);
+
+  it("lists every invalid serial and posts zero documents for a five-tyre DAG batch", async () => {
+    const { sendTyresToDag } =
+      await import("../../app/features/workshop/tyres.server");
+    const { WorkshopError } =
+      await import("../../app/features/workshop/errors");
+    const { admin, supplier, lives, db, stockDocuments } =
+      await servicedLives("batch5", 3);
+    const batchKey = crypto.randomUUID();
+    const invalidA = crypto.randomUUID();
+    const invalidB = crypto.randomUUID();
+
+    await expect(
+      sendTyresToDag(admin, {
+        tyreIds: [...lives.map((row) => row.id), invalidA, invalidB],
+        supplierId: supplier.id,
+        businessDate: "2026-09-08",
+        batchKey,
+      }),
+    ).rejects.toBeInstanceOf(WorkshopError);
+
+    try {
+      await sendTyresToDag(admin, {
+        tyreIds: [...lives.map((row) => row.id), invalidA, invalidB],
+        supplierId: supplier.id,
+        businessDate: "2026-09-08",
+        batchKey,
+      });
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain("Cannot send DAG batch.");
+      expect(message).toContain(invalidA);
+      expect(message).toContain(invalidB);
+    }
+
+    const posted = await db
+      .select({
+        id: stockDocuments.id,
+        idempotencyKey: stockDocuments.idempotencyKey,
+      })
+      .from(stockDocuments);
+    expect(
+      posted.filter((row) => row.idempotencyKey?.includes(batchKey)),
+    ).toHaveLength(0);
+  }, 360_000);
+
+  it("replays the same DAG OUT batch without duplicating documents", async () => {
+    const { sendTyresToDag } =
+      await import("../../app/features/workshop/tyres.server");
+    const { dagDocumentIdempotencyKey } =
+      await import("../../app/features/workshop/dag-batch");
+    const { admin, supplier, lives, db, tyres, stockDocuments } =
+      await servicedLives("batchid", 1);
+    const batchKey = crypto.randomUUID();
+    const payload = {
+      tyreIds: [lives[0]!.id],
+      supplierId: supplier.id,
+      businessDate: "2026-09-08",
+      batchKey,
+    };
+
+    await sendTyresToDag(admin, payload);
+    await sendTyresToDag(admin, payload);
+
+    const docs = await db
+      .select({ id: stockDocuments.id })
+      .from(stockDocuments)
+      .where(
+        eq(
+          stockDocuments.idempotencyKey,
+          dagDocumentIdempotencyKey("DAG_OUT", batchKey, lives[0]!.id),
+        ),
+      );
+    expect(docs).toHaveLength(1);
+    const [after] = await db
+      .select()
+      .from(tyres)
+      .where(eq(tyres.id, lives[0]!.id));
+    expect(after?.status).toBe("AT_DAG");
+  }, 360_000);
+
+  it("lets only one of two users send the same tyre to DAG", async () => {
+    const { sendTyreToDag } =
+      await import("../../app/features/workshop/tyres.server");
+    const { admin, supplier, lives, db, tyres, tag } =
+      await servicedLives("twouser", 1);
+    const { users } = await import("../../app/db/schema");
+    const [other] = await db
+      .insert(users)
+      .values({
+        email: `dag-user-${tag}@test.local`,
+        displayName: "Other DAG admin",
+        role: "ADMIN",
+        passwordHash: admin.passwordHash,
+        mustChangePassword: false,
+      })
+      .returning();
+
+    try {
+      const raced = await Promise.allSettled([
+        sendTyreToDag(admin, {
+          tyreId: lives[0]!.id,
+          supplierId: supplier.id,
+          businessDate: "2026-09-08",
+          idempotencyKey: `two-a-${tag}-aaaaaaaa`,
+        }),
+        sendTyreToDag(other!, {
+          tyreId: lives[0]!.id,
+          supplierId: supplier.id,
+          businessDate: "2026-09-08",
+          idempotencyKey: `two-b-${tag}-aaaaaaaa`,
+        }),
+      ]);
+      expect(raced.filter((row) => row.status === "fulfilled")).toHaveLength(1);
+      expect(raced.filter((row) => row.status === "rejected")).toHaveLength(1);
+      const [after] = await db
+        .select()
+        .from(tyres)
+        .where(eq(tyres.id, lives[0]!.id));
+      expect(after?.status).toBe("AT_DAG");
+    } finally {
+      try {
+        await db.delete(users).where(eq(users.id, other!.id));
+      } catch {
+        await db
+          .update(users)
+          .set({ status: "DISABLED" })
+          .where(eq(users.id, other!.id));
+      }
+    }
+  }, 360_000);
+
+  it("posts no DAG IN documents when a serial cannot be received", async () => {
+    const { receiveTyresFromDag, sendTyresToDag } =
+      await import("../../app/features/workshop/tyres.server");
+    const { WorkshopError } =
+      await import("../../app/features/workshop/errors");
+    const { dagDocumentIdempotencyKey } =
+      await import("../../app/features/workshop/dag-batch");
+    const { admin, supplier, lives, db, tyres, stockDocuments } =
+      await servicedLives("batchin", 2);
+    const outKey = crypto.randomUUID();
+    await sendTyresToDag(admin, {
+      tyreIds: lives.map((row) => row.id),
+      supplierId: supplier.id,
+      businessDate: "2026-09-08",
+      batchKey: outKey,
+    });
+
+    const inKey = crypto.randomUUID();
+    await receiveTyresFromDag(admin, {
+      tyreIds: [lives[0]!.id],
+      businessDate: "2026-09-08",
+      batchKey: inKey,
+    });
+
+    const secondKey = crypto.randomUUID();
+    await expect(
+      receiveTyresFromDag(admin, {
+        tyreIds: lives.map((row) => row.id),
+        businessDate: "2026-09-08",
+        batchKey: secondKey,
+      }),
+    ).rejects.toBeInstanceOf(WorkshopError);
+
+    try {
+      await receiveTyresFromDag(admin, {
+        tyreIds: lives.map((row) => row.id),
+        businessDate: "2026-09-08",
+        batchKey: secondKey,
+      });
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain("Cannot receive DAG batch.");
+      expect(message).toContain(lives[0]!.serialNumber);
+      expect(message).toMatch(/already received/);
+    }
+
+    const docs = await db
+      .select({
+        id: stockDocuments.id,
+        idempotencyKey: stockDocuments.idempotencyKey,
+      })
+      .from(stockDocuments);
+    expect(
+      docs.filter((row) =>
+        row.idempotencyKey?.includes(
+          dagDocumentIdempotencyKey("DAG_IN", secondKey, lives[1]!.id),
+        ),
+      ),
+    ).toHaveLength(0);
+    const [stillOut] = await db
+      .select()
+      .from(tyres)
+      .where(eq(tyres.id, lives[1]!.id));
+    expect(stillOut?.status).toBe("AT_DAG");
+  }, 360_000);
+
+  it("names every serial when DAG IN return SKUs are ambiguous", async () => {
+    const { receiveTyresFromDag, sendTyresToDag } =
+      await import("../../app/features/workshop/tyres.server");
+    const { WorkshopError } =
+      await import("../../app/features/workshop/errors");
+    const { admin, supplier, lives, db, stockDocuments } =
+      await servicedLives("ambsku", 2);
+    const { parts } = await import("../../app/db/schema");
+    const [dag1] = await db
+      .select()
+      .from(parts)
+      .where(eq(parts.sku, "TR-DAG1-295"))
+      .limit(1);
+    expect(dag1).toBeTruthy();
+
+    const outKey = crypto.randomUUID();
+    await sendTyresToDag(admin, {
+      tyreIds: lives.map((row) => row.id),
+      supplierId: supplier.id,
+      businessDate: "2026-09-08",
+      batchKey: outKey,
+    });
+
+    const [extra] = await db
+      .insert(parts)
+      .values({
+        sku: `TR-DAG1-AMB-${crypto.randomUUID().slice(0, 8)}`,
+        name: "Ambiguous DAG1 return",
+        categoryId: dag1!.categoryId,
+      })
+      .returning({ id: parts.id });
+
+    const inKey = crypto.randomUUID();
+    try {
+      await expect(
+        receiveTyresFromDag(admin, {
+          tyreIds: lives.map((row) => row.id),
+          businessDate: "2026-09-08",
+          batchKey: inKey,
+        }),
+      ).rejects.toBeInstanceOf(WorkshopError);
+      try {
+        await receiveTyresFromDag(admin, {
+          tyreIds: lives.map((row) => row.id),
+          businessDate: "2026-09-08",
+          batchKey: inKey,
+        });
+      } catch (error) {
+        const message = (error as Error).message;
+        expect(message).toContain("Cannot receive DAG batch.");
+        expect(message).toContain(lives[0]!.serialNumber);
+        expect(message).toContain(lives[1]!.serialNumber);
+        expect(message).toMatch(/more than one DAG return SKU/);
+      }
+      const posted = await db
+        .select({ idempotencyKey: stockDocuments.idempotencyKey })
+        .from(stockDocuments);
+      expect(
+        posted.filter((row) => row.idempotencyKey?.includes(inKey)),
+      ).toHaveLength(0);
+    } finally {
+      if (extra) await db.delete(parts).where(eq(parts.id, extra.id));
+    }
+  }, 360_000);
 });

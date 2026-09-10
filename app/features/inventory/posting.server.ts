@@ -1,7 +1,6 @@
 import Decimal from "decimal.js";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { data } from "react-router";
 
 import { db } from "~/db/client.server";
 import * as schema from "~/db/schema";
@@ -17,7 +16,11 @@ import {
   stores,
 } from "~/db/schema";
 import type { Actor } from "~/lib/auth/authorization.server";
-import { requireStoreAccess } from "~/lib/auth/authorization.server";
+import {
+  assertPermission,
+  requireStoreAccess,
+} from "~/lib/auth/authorization.server";
+import type { Permission } from "~/lib/auth/permissions";
 import { invalidatePendingApprovalCountCache } from "./approval-count-cache.server";
 import {
   InsufficientStockError,
@@ -38,6 +41,17 @@ export type { StockType } from "./command";
 export type Transaction = Parameters<
   Parameters<NodePgDatabase<typeof schema>["transaction"]>[0]
 >[0];
+
+const STOCK_PERMISSION: Partial<Record<StockType, Permission>> = {
+  STOCK_RECEIPT: "stockIn.create",
+  BUS_RETURN: "returns.create",
+  ADJUSTMENT: "adjustments.create",
+  TRANSFER_OUT: "transfers.create",
+  TRANSFER_IN: "transfers.create",
+  TYRE_DAG_SEND: "dag.send",
+  TYRE_DAG_RECEIVE: "dag.receive",
+  TYRE_DISPOSAL: "tyres.manage",
+};
 
 type PreparedCommand = ReturnType<typeof prepareStockCommand>;
 
@@ -406,13 +420,9 @@ export async function postStock(actor: Actor, type: StockType, input: unknown) {
     );
   }
   const command = prepareStockCommand(type, input);
+  const permission = STOCK_PERMISSION[type];
+  if (permission) assertPermission(actor, permission);
   await requireStoreAccess(actor, command.storeId);
-  if (type === "ADJUSTMENT" && actor.role !== "ADMIN") {
-    throw data(
-      { message: "Only administrators can post adjustments." },
-      { status: 403 },
-    );
-  }
   const result = await db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
     return postStockInTransaction(tx, actor, type, command);
@@ -591,12 +601,7 @@ export async function postReversal(
     idempotencyKey: string;
   },
 ) {
-  if (actor.role !== "ADMIN") {
-    throw data(
-      { message: "Only administrators can reverse stock documents." },
-      { status: 403 },
-    );
-  }
+  assertPermission(actor, "reversals.manage");
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
     return postReversalInTransaction(tx, actor, input);
@@ -753,6 +758,7 @@ export function notifyIssueSubmitted(result: {
 }
 
 export async function submitIssueForApproval(actor: Actor, input: unknown) {
+  assertPermission(actor, "issues.create");
   const result = await db.transaction(async (tx) => {
     await tx.execute(sql`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`);
     return submitIssueForApprovalInTransaction(tx, actor, input);
@@ -762,12 +768,7 @@ export async function submitIssueForApproval(actor: Actor, input: unknown) {
 }
 
 export async function approvePendingIssue(actor: Actor, documentId: string) {
-  if (actor.role !== "ADMIN") {
-    throw data(
-      { message: "Only administrators can approve bus issues." },
-      { status: 403 },
-    );
-  }
+  assertPermission(actor, "approvals.manage");
 
   try {
     const result = await db.transaction(async (tx) => {
@@ -894,12 +895,7 @@ export async function rejectPendingIssue(
   documentId: string,
   reason: string,
 ) {
-  if (actor.role !== "ADMIN") {
-    throw data(
-      { message: "Only administrators can reject bus issues." },
-      { status: 403 },
-    );
-  }
+  assertPermission(actor, "approvals.manage");
   const trimmed = reason.trim();
   if (trimmed.length < 3) {
     throw new Error("A rejection reason of at least 3 characters is required");

@@ -98,6 +98,29 @@ export const receiveTyreFromDagSchema = z.object({
   idempotencyKey: z.string().min(16).max(100),
 });
 
+const tyreIdListSchema = z.preprocess((value) => {
+  if (Array.isArray(value)) {
+    return value.map(String).filter((item) => item.length > 0);
+  }
+  if (typeof value === "string" && value.length > 0) return [value];
+  return [];
+}, z.array(z.string().uuid()).min(1, "Select at least one tyre"));
+
+export const sendTyresToDagSchema = z.object({
+  tyreIds: tyreIdListSchema,
+  supplierId: z.string().uuid(),
+  businessDate: z.string().date(),
+  notes: z.string().trim().max(1000).optional(),
+  batchKey: z.string().uuid(),
+});
+
+export const receiveTyresFromDagSchema = z.object({
+  tyreIds: tyreIdListSchema,
+  businessDate: z.string().date(),
+  notes: z.string().trim().max(1000).optional(),
+  batchKey: z.string().uuid(),
+});
+
 export const rejectTyreAtDagSchema = z.object({
   tyreId: z.string().uuid(),
   reason: z.string().trim().min(3).max(1000),

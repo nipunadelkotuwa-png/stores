@@ -9,6 +9,11 @@ import { countPendingApprovals } from "~/features/inventory/queries.server";
 import { requireUserWithSession } from "~/lib/auth/authorization.server";
 import { appLayoutShouldRevalidate } from "~/lib/app-layout-revalidation";
 import { readDashboardMode } from "~/lib/dashboard-mode.server";
+import { can, roleLabel } from "~/lib/auth/permissions";
+import {
+  persistSidebarCollapsed,
+  readSidebarCollapsed,
+} from "~/lib/sidebar-preference";
 import type { Route } from "./+types/app";
 
 export type AppOutletContext = {
@@ -17,8 +22,9 @@ export type AppOutletContext = {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { user, csrf } = await requireUserWithSession(request);
-  const pendingApprovals =
-    user.role === "ADMIN" ? await countPendingApprovals(user) : 0;
+  const pendingApprovals = can(user.role, "approvals.manage")
+    ? await countPendingApprovals(user)
+    : 0;
   const dashboardMode = await readDashboardMode(request, user.role);
   return {
     user: { displayName: user.displayName, role: user.role },
@@ -51,6 +57,8 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   const location = useLocation();
   const navigation = useNavigation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isDesktopNav, setIsDesktopNav] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState(
     loaderData.pendingApprovals,
   );
@@ -63,8 +71,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
-  const roleLabel =
-    loaderData.user.role === "ADMIN" ? "Admin" : "Operator";
+  const userRoleLabel = roleLabel(loaderData.user.role);
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -73,6 +80,34 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     setPendingApprovals(loaderData.pendingApprovals);
   }, [loaderData.pendingApprovals]);
+
+  useEffect(() => {
+    setSidebarCollapsed(readSidebarCollapsed());
+    const media = window.matchMedia("(min-width: 821px)");
+    const update = () => setIsDesktopNav(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  const menuExpanded = isDesktopNav ? !sidebarCollapsed : sidebarOpen;
+  const menuLabel = isDesktopNav
+    ? sidebarCollapsed
+      ? "Expand sidebar"
+      : "Collapse sidebar"
+    : sidebarOpen
+      ? "Close navigation menu"
+      : "Open navigation menu";
+
+  function onMenuClick() {
+    if (!isDesktopNav) {
+      setSidebarOpen((open) => !open);
+      return;
+    }
+    const next = !sidebarCollapsed;
+    persistSidebarCollapsed(next);
+    setSidebarCollapsed(next);
+  }
 
   return (
     <div className="app-frame">
@@ -85,14 +120,16 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         csrf={loaderData.csrf}
         pendingApprovals={pendingApprovals}
         mobileOpen={sidebarOpen}
+        collapsed={isDesktopNav && sidebarCollapsed}
         onMobileClose={() => setSidebarOpen(false)}
       />
       <div className="page-shell">
         <header className="topbar">
           <div className="topbar-leading">
             <SidebarMenuButton
-              onClick={() => setSidebarOpen((open) => !open)}
-              expanded={sidebarOpen}
+              onClick={onMenuClick}
+              expanded={menuExpanded}
+              label={menuLabel}
             />
             <TopbarSearch mode={loaderData.dashboardMode} />
           </div>
@@ -134,7 +171,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
               <span className="topbar-avatar">{initials || "U"}</span>
               <div className="topbar-user-copy">
                 <strong>{loaderData.user.displayName}</strong>
-                <span>{roleLabel}</span>
+                <span>{userRoleLabel}</span>
               </div>
             </div>
           </div>

@@ -6,11 +6,11 @@ import {
   listAuthorizedStores,
   listSuppliers,
 } from "~/features/master-data/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.tyre-stock";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "reports.read");
   const url = new URL(request.url);
   const [report, suppliers, stores] = await Promise.all([
     getTyreStockReport(actor, {

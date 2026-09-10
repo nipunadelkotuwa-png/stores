@@ -1,17 +1,18 @@
 import { data, Link } from "react-router";
 import { getDocumentForReceipt } from "~/features/inventory/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import type { Route } from "./+types/app.receipts.$id";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "reports.read");
   const doc = await getDocumentForReceipt(actor, params.id);
   if (!doc) {
     throw data("Receipt not found or you don't have permission to view it.", {
       status: 404,
     });
   }
-  return { doc, isAdmin: actor.role === "ADMIN" };
+  return { doc, isAdmin: can(actor.role, "approvals.manage") };
 }
 
 export default function ReceiptPage({ loaderData }: Route.ComponentProps) {

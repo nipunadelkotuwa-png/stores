@@ -1,11 +1,16 @@
 import { Link } from "react-router";
 import { getLocalPurchases } from "~/features/inventory/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import type { Route } from "./+types/app.purchases._index";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const result = await getLocalPurchases(await requireUser(request));
-  return result;
+  const actor = await requirePermission(request, "reports.read");
+  const result = await getLocalPurchases(actor);
+  return {
+    ...result,
+    canCreate: can(actor.role, "purchases.create"),
+  };
 }
 
 export default function PurchasesIndexPage({
@@ -21,9 +26,11 @@ export default function PurchasesIndexPage({
             Posted local purchases linked to stock receipts.
           </p>
         </div>
-        <Link className="button button-primary" to="/purchases/new">
-          New purchase
-        </Link>
+        {loaderData.canCreate ? (
+          <Link className="button button-primary" to="/purchases/new">
+            New purchase
+          </Link>
+        ) : null}
       </div>
       {loaderData.truncated ? (
         <p className="muted">

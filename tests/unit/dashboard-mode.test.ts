@@ -15,6 +15,9 @@ describe("dashboard mode", () => {
   it("defaults operators to POS and admins to classic", () => {
     expect(resolveDashboardMode(null, "OPERATOR")).toBe("pos");
     expect(resolveDashboardMode(undefined, "ADMIN")).toBe("classic");
+    expect(resolveDashboardMode(null, "STORE_KEEPER")).toBe("pos");
+    expect(resolveDashboardMode(null, "WORKSHOP")).toBe("pos");
+    expect(resolveDashboardMode(null, "VIEWER")).toBe("classic");
     expect(resolveDashboardMode("classic", "OPERATOR")).toBe("classic");
     expect(resolveDashboardMode("pos", "ADMIN")).toBe("pos");
   });

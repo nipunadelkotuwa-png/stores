@@ -4,6 +4,12 @@ import { data, redirect } from "react-router";
 
 import { db } from "~/db/client.server";
 import { userStoreAssignments } from "~/db/schema";
+import {
+  can,
+  FORBIDDEN_MESSAGE,
+  type Permission,
+  type Role,
+} from "./permissions";
 import { getSessionRecord } from "./session.server";
 
 export type Actor = NonNullable<
@@ -43,6 +49,27 @@ export async function requireAdmin(request: Request) {
   }
   return actor;
 }
+
+export async function requirePermission(
+  request: Request,
+  permission: Permission,
+) {
+  const actor = await requireUser(request);
+  assertPermission(actor, permission);
+  return actor;
+}
+
+export function assertPermission(
+  actor: { role: Role },
+  permission: Permission,
+  message = FORBIDDEN_MESSAGE,
+) {
+  if (!can(actor.role, permission)) {
+    throw data({ message }, { status: 403 });
+  }
+}
+
+export { rethrowAuthorizationError } from "./http-error";
 
 /** `null` = Admin (all stores). `[]` = Operator with no assignments. */
 export async function getAuthorizedStoreIds(actor: Actor) {

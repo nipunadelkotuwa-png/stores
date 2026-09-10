@@ -3,14 +3,14 @@ import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getLocalPurchases } from "~/features/inventory/queries.server";
 import { resolveReportPeriod } from "~/features/reports/period";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.purchases";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const range = resolveReportPeriod(url.searchParams, getEnv().APP_TIME_ZONE);
   const supplier = url.searchParams.get("supplier") || undefined;
-  const result = await getLocalPurchases(await requireUser(request), {
+  const result = await getLocalPurchases(await requirePermission(request, "reports.read"), {
     start: range.start,
     end: range.end,
     supplier,

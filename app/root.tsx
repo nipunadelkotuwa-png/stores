@@ -28,6 +28,8 @@ export const meta: Route.MetaFunction = () => [
   { name: "description", content: "Bus spare-parts inventory management" },
 ];
 
+const SIDEBAR_PREPAINT_SCRIPT = `(function(){try{if(localStorage.getItem("storeops.sidebar.collapsed")==="true"){document.documentElement.classList.add("sidebar-collapsed");}}catch(e){}})();`;
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-theme="cobalt">
@@ -36,6 +38,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        <script dangerouslySetInnerHTML={{ __html: SIDEBAR_PREPAINT_SCRIPT }} />
       </head>
       <body>
         {children}

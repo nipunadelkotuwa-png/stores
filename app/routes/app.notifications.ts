@@ -5,24 +5,28 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "~/lib/notifications.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.notifications";
 
-async function inboxPayload(actor: Awaited<ReturnType<typeof requireUser>>) {
+async function inboxPayload(
+  actor: Awaited<ReturnType<typeof requirePermission>>,
+) {
   const inbox = await listInbox(actor.id);
-  const pendingApprovals =
-    actor.role === "ADMIN" ? await countPendingApprovals(actor) : 0;
+  const pendingApprovals = can(actor.role, "approvals.manage")
+    ? await countPendingApprovals(actor)
+    : 0;
   return { ...inbox, pendingApprovals };
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "dashboard.read");
   return inboxPayload(actor);
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "dashboard.read");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "");

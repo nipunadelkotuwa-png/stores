@@ -1,3 +1,5 @@
+import { defaultDashboardMode, type Role } from "~/lib/auth/permissions";
+
 export type DashboardMode = "pos" | "classic";
 
 export const DASHBOARD_MODE_COOKIE = "ds_dashboard_mode";
@@ -9,11 +11,9 @@ export function parseDashboardMode(value: unknown): DashboardMode | null {
 
 export function resolveDashboardMode(
   cookieValue: unknown,
-  role: "ADMIN" | "OPERATOR",
+  role: Role,
 ): DashboardMode {
-  return (
-    parseDashboardMode(cookieValue) ?? (role === "OPERATOR" ? "pos" : "classic")
-  );
+  return parseDashboardMode(cookieValue) ?? defaultDashboardMode(role);
 }
 
 export function toggleDashboardMode(current: DashboardMode): DashboardMode {

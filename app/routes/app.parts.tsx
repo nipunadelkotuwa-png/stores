@@ -4,27 +4,29 @@ import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
 import { db } from "~/db/client.server";
 import { parts } from "~/db/schema";
+import { normalizeBarcode } from "~/features/master-data/barcode";
 import { masterDataActionError } from "~/features/master-data/errors";
 import {
   listParts,
   listPartCategories,
 } from "~/features/master-data/queries.server";
-import { requireAdmin, requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
+import { can } from "~/lib/auth/permissions";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import { eq } from "drizzle-orm";
 import type { Route } from "./+types/app.parts";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+  const user = await requirePermission(request, "masterData.read");
   return {
     parts: await listParts(),
     categories: await listPartCategories(),
-    canManage: user.role === "ADMIN",
+    canManage: can(user.role, "masterData.write"),
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireAdmin(request);
+  await requirePermission(request, "masterData.write");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const intent = String(formData.get("intent") ?? "create");
@@ -48,8 +50,8 @@ export async function action({ request }: Route.ActionArgs) {
       z.string().optional(),
     ),
     barcode: z.preprocess(
-      (value) => (value === "" ? undefined : value),
-      z.string().optional(),
+      (value) => normalizeBarcode(typeof value === "string" ? value : null),
+      z.string().nullable().optional(),
     ),
     categoryId: z.preprocess(
       (value) => (value === "" ? undefined : value),
@@ -70,7 +72,7 @@ export async function action({ request }: Route.ActionArgs) {
           name: parsed.data.name,
           unit: parsed.data.unit,
           brand: parsed.data.brand ?? null,
-          barcode: parsed.data.barcode ?? null,
+          barcode: normalizeBarcode(parsed.data.barcode),
           categoryId: parsed.data.categoryId ?? null,
         })
         .where(eq(parts.id, parsed.data.id));
@@ -91,7 +93,11 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     await db
       .insert(parts)
-      .values({ ...parsed.data, sku: parsed.data.sku.toUpperCase() });
+      .values({
+        ...parsed.data,
+        sku: parsed.data.sku.toUpperCase(),
+        barcode: normalizeBarcode(parsed.data.barcode),
+      });
     return { ok: true };
   } catch (error) {
     return {
@@ -350,12 +356,12 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
                 </select>
               </label>
               <label>
-                Barcode
+                Barcode (optional)
                 <input
                   name="barcode"
                   value={scannedBarcode}
                   onChange={(event) => setScannedBarcode(event.target.value)}
-                  placeholder="Scan or type..."
+                  placeholder="Scan or type…"
                 />
               </label>
               <button

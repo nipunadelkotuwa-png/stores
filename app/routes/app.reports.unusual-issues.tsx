@@ -3,12 +3,12 @@ import {
   UNUSUAL_ISSUE_THRESHOLD,
   UNUSUAL_ISSUE_WINDOW_DAYS,
 } from "~/features/workshop/constants";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.reports.unusual-issues";
 
 export async function loader({ request }: Route.LoaderArgs) {
   return {
-    rows: await getUnusualIssues(await requireUser(request)),
+    rows: await getUnusualIssues(await requirePermission(request, "reports.read")),
     threshold: UNUSUAL_ISSUE_THRESHOLD,
     windowDays: UNUSUAL_ISSUE_WINDOW_DAYS,
   };

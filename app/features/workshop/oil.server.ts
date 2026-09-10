@@ -3,7 +3,10 @@ import { sql } from "drizzle-orm";
 import { db } from "~/db/client.server";
 import { auditEvents, oilChanges } from "~/db/schema";
 import type { Actor } from "~/lib/auth/authorization.server";
-import { requireStoreAccess } from "~/lib/auth/authorization.server";
+import {
+  assertPermission,
+  requireStoreAccess,
+} from "~/lib/auth/authorization.server";
 import {
   notifyIssueSubmitted,
   submitIssueForApprovalInTransaction,
@@ -14,6 +17,7 @@ import { encodeWorkshopNotes } from "./pending-notes";
 import { recordOilChangeSchema } from "./schemas";
 
 export async function recordOilChange(actor: Actor, input: unknown) {
+  assertPermission(actor, "jobCards.update");
   const command = recordOilChangeSchema.parse(input);
 
   const result = await db.transaction(async (tx) => {

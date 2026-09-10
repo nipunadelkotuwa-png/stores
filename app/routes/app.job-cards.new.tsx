@@ -3,12 +3,12 @@ import { CsrfField } from "~/components/csrf-field";
 import { workshopActionError } from "~/features/workshop/errors";
 import { openJobCard } from "~/features/workshop/job-cards.server";
 import { getJobCardFormOptions } from "~/features/workshop/queries.server";
-import { requireUser } from "~/lib/auth/authorization.server";
+import { requirePermission } from "~/lib/auth/authorization.server";
 import { requireValidCsrf } from "~/lib/csrf.server";
 import type { Route } from "./+types/app.job-cards.new";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "jobCards.create");
   const url = new URL(request.url);
   const options = await getJobCardFormOptions(actor);
   const requestedBusId = url.searchParams.get("bus") || "";
@@ -24,7 +24,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const actor = await requireUser(request);
+  const actor = await requirePermission(request, "jobCards.create");
   const formData = await request.formData();
   await requireValidCsrf(request, formData);
   const partId = String(formData.get("partId") || "");
