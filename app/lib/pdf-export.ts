@@ -60,7 +60,7 @@ export async function generatePdfFromElement(
     onclone: (clonedDoc: Document) => {
       // Force all print containers inside clone to be visible
       const clonedEls = clonedDoc.querySelectorAll(
-        ".print-doc-container, .job-card-sheet, .receipt-print-wrapper, .receipt-panel, .print-panel",
+        ".print-doc-container, .job-card-sheet, .receipt-print-wrapper, .report-sheet, .receipt-panel, .print-panel",
       );
       clonedEls.forEach((el) => {
         const h = el as HTMLElement;

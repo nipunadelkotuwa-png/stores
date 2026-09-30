@@ -28,7 +28,7 @@ export function ReportPrintHeader({
 
   return (
     <div
-      className="print-header-bar print-only"
+      className="print-header-bar"
       style={{
         borderBottom: "2.5px solid #111111",
         paddingBottom: "10px",
@@ -144,7 +144,7 @@ export function ReportPrintFooter({
 
   return (
     <div
-      className="print-footer-bar print-only"
+      className="print-footer-bar"
       style={{
         borderTop: "1px solid #777777",
         marginTop: "16px",

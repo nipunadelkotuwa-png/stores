@@ -1,6 +1,16 @@
 import { Form, Link, useSearchParams } from "react-router";
-import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { ReportActions } from "~/components/report-actions";
+import {
+  ReportEmptyState,
+  ReportFooter,
+  ReportHeader,
+  ReportInfoGrid,
+  ReportLayout,
+  ReportSignatures,
+  ReportStatusBadge,
+  ReportSummary,
+  ReportTable,
+} from "~/components/report-primitives";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getLocalPurchases } from "~/features/inventory/queries.server";
@@ -27,45 +37,28 @@ export default function PurchasesReportPage({
   loaderData,
 }: Route.ComponentProps) {
   const [params] = useSearchParams();
+  const supplierFilter = params.get("supplier");
+
   const totalAmount = loaderData.rows.reduce(
     (sum, r) => sum + (Number(r.total) || 0),
     0,
   );
+  const dateLabel = `${loaderData.range.start || "All"} to ${loaderData.range.end || "Present"}`;
 
   return (
     <>
-      <ReportPrintHeader
-        title="Local Purchases Report"
-        subtitle="Central Workshop & Fleet Inventory Management"
-        metadata={[
-          ...(params.get("supplier")
-            ? [{ label: "Supplier", value: params.get("supplier") }]
-            : []),
-          { label: "Period", value: loaderData.range.period },
-          {
-            label: "Date Range",
-            value: `${loaderData.range.start || "—"} to ${loaderData.range.end || "—"}`,
-          },
-          { label: "Total Purchases", value: loaderData.rows.length },
-          {
-            label: "Total Value",
-            value: `${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LKR`,
-          },
-        ]}
-      />
-
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Procurement report</p>
-          <h1>Local purchases</h1>
+          <h1>Local Purchases</h1>
           <p className="muted">
-            Report of all local purchases, filterable by date and supplier.
+            Report of direct local purchases and supplier invoices.
           </p>
         </div>
         <ReportActions
-          filename={`local-purchases-${loaderData.range.period || "report"}`}
-          documentTitle="Local Purchases Report"
-          targetSelector=".panel:has(table)"
+          filename={`local-purchases-${supplierFilter ? supplierFilter + "-" : ""}${loaderData.range.period || "report"}`}
+          documentTitle={`Local Purchases Report • ${dateLabel}`}
+          targetSelector="#printable-report"
         />
       </div>
 
@@ -84,72 +77,153 @@ export default function PurchasesReportPage({
               type="text"
               name="supplier"
               placeholder="e.g. NTN Trading"
-              defaultValue={params.get("supplier") || ""}
+              defaultValue={supplierFilter || ""}
             />
           </label>
         </ReportPeriodFilter>
       </Form>
 
-      {loaderData.truncated ? (
-        <p className="muted no-print">
-          Showing the latest {loaderData.rows.length} purchases. Older rows are
-          omitted. Please use filters to narrow down results.
-        </p>
-      ) : null}
+      {/* Official A4 Printable Report Sheet */}
+      <div id="printable-report" className="print-doc-container report-sheet">
+        <ReportLayout mode="report">
+          <ReportHeader
+            title="Local Purchases Report"
+            department="Procurement & Accounts Department"
+            date={loaderData.range.end || new Date().toISOString().slice(0, 10)}
+            subtitle={`Period: ${loaderData.range.period.toUpperCase()} (${dateLabel})${supplierFilter ? ` • Supplier: ${supplierFilter}` : ""}`}
+          />
 
-      <section className="panel">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Purchase</th>
-                <th>Store</th>
-                <th>Supplier</th>
-                <th>Total (LKR)</th>
-                <th>Status</th>
-                <th>Receipt</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loaderData.rows.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <div className="empty-state">
-                      <strong>No purchases found</strong>
-                      <p>Try adjusting your filters.</p>
-                    </div>
+          <div style={{ marginBottom: "14px" }}>
+            <ReportInfoGrid
+              columns={4}
+              items={[
+                ...(supplierFilter ? [{ label: "Supplier Filter", value: supplierFilter, highlight: true }] : []),
+                { label: "Date Range", value: dateLabel },
+                { label: "Period Filter", value: loaderData.range.period.toUpperCase() },
+                { label: "Purchase Records", value: loaderData.rows.length },
+                {
+                  label: "Total Value (LKR)",
+                  value: `${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LKR`,
+                  highlight: true,
+                },
+              ]}
+            />
+          </div>
+
+          {loaderData.truncated ? (
+            <div
+              style={{
+                fontSize: "8.5pt",
+                color: "#92400e",
+                backgroundColor: "#fef3c7",
+                padding: "4px 8px",
+                borderRadius: "3px",
+                marginBottom: "10px",
+              }}
+            >
+              Note: Showing latest {loaderData.rows.length} purchases. Use filters above to focus on specific dates/suppliers.
+            </div>
+          ) : null}
+
+          {loaderData.rows.length === 0 ? (
+            <ReportEmptyState message="No local purchases recorded for the selected criteria." />
+          ) : (
+            <ReportTable
+              headers={[
+                { label: "Date", width: "11%" },
+                { label: "Purchase No", width: "19%" },
+                { label: "Store", width: "14%" },
+                { label: "Supplier", width: "26%" },
+                { label: "Status", width: "12%" },
+                { label: "Total (LKR)", align: "right", width: "18%" },
+              ]}
+            >
+              {loaderData.rows.map((row) => (
+                <tr
+                  key={row.id}
+                  style={{
+                    borderBottom: "1px solid #e5e7eb",
+                  }}
+                >
+                  <td style={{ padding: "6px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                    {row.date}
+                  </td>
+                  <td style={{ padding: "6px 8px", verticalAlign: "top" }}>
+                    <span className="mono" style={{ fontWeight: "700", color: "#111827" }}>
+                      {row.number}
+                    </span>
+                    {row.receiptDocumentId ? (
+                      <div style={{ fontSize: "8pt", marginTop: "1px" }}>
+                        <Link
+                          to={`/receipts/${row.receiptDocumentId}`}
+                          style={{ color: "#2563eb", textDecoration: "none" }}
+                        >
+                          GRN Receipt
+                        </Link>
+                      </div>
+                    ) : null}
+                  </td>
+                  <td style={{ padding: "6px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                    {row.store}
+                  </td>
+                  <td style={{ padding: "6px 8px", verticalAlign: "top" }}>
+                    <strong style={{ fontSize: "8.5pt", color: "#111827" }}>
+                      {row.supplier}
+                    </strong>
+                  </td>
+                  <td style={{ padding: "6px 8px", verticalAlign: "top" }}>
+                    <ReportStatusBadge status={row.status} />
+                  </td>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      verticalAlign: "top",
+                      textAlign: "right",
+                      fontFamily: "var(--font-mono, monospace)",
+                      fontWeight: "700",
+                      fontSize: "9pt",
+                      color: "#111827",
+                    }}
+                  >
+                    {Number(row.total || 0).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
                   </td>
                 </tr>
-              ) : (
-                loaderData.rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.date}</td>
-                    <td className="mono">{row.number}</td>
-                    <td>{row.store}</td>
-                    <td>{row.supplier}</td>
-                    <td className="quantity">{row.total}</td>
-                    <td>
-                      <span className="badge success">{row.status}</span>
-                    </td>
-                    <td>
-                      {row.receiptDocumentId ? (
-                        <Link to={`/receipts/${row.receiptDocumentId}`}>
-                          View receipt
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              ))}
+            </ReportTable>
+          )}
 
-      <ReportPrintFooter reportName="Local Purchases Report" />
+          <div style={{ marginTop: "12px" }}>
+            <ReportSummary
+              items={[
+                { label: "Total Invoices", value: loaderData.rows.length },
+                {
+                  label: "Gross Expenditure",
+                  value: `${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LKR`,
+                  highlight: true,
+                },
+              ]}
+            />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <ReportSignatures
+              signatures={[
+                { role: "Procurement Officer", description: "Purchased" },
+                { role: "Storekeeper", description: "Goods Verified" },
+                { role: "Accounts Executive", description: "Payment Authorized" },
+              ]}
+            />
+          </div>
+
+          <ReportFooter
+            reportName="Local Purchases Report"
+            documentId={`LP-${loaderData.range.period || "PERIOD"}`}
+          />
+        </ReportLayout>
+      </div>
     </>
   );
 }

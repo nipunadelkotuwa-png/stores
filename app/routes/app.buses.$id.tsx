@@ -1,8 +1,15 @@
 import { data, Link } from "react-router";
+import { ReportActions } from "~/components/report-actions";
 import {
-  ReportPrintFooter,
-  ReportPrintHeader,
-} from "~/components/report-print-header";
+  ReportEmptyState,
+  ReportFooter,
+  ReportHeader,
+  ReportInfoGrid,
+  ReportLayout,
+  ReportSection,
+  ReportSignatures,
+  ReportTable,
+} from "~/components/report-primitives";
 import { TyreMap } from "~/components/tyre-map";
 import { busStatusLabel } from "~/features/master-data/bus-lifecycle";
 import { getBusHistory } from "~/features/workshop/history.server";
@@ -20,20 +27,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 export default function BusHistoryPage({ loaderData }: Route.ComponentProps) {
   const { bus, fitted, lastOil, lastOdometer, timeline } = loaderData;
+  const currentDate = new Date().toISOString().slice(0, 10);
+
   return (
     <>
-      <ReportPrintHeader
-        title={`Bus Maintenance Ledger • ${bus.fleetNumber}`}
-        subtitle="Workshop & Fleet Asset Lifecycle Register"
-        metadata={[
-          { label: "Fleet Number", value: bus.fleetNumber },
-          { label: "Registration No", value: bus.registrationNumber || "—" },
-          { label: "Make / Model", value: [bus.make, bus.model].filter(Boolean).join(" ") || "—" },
-          { label: "Status", value: busStatusLabel(bus.status) },
-          { label: "Odometer", value: lastOdometer ? `${lastOdometer} km` : "—" },
-        ]}
-      />
-
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Fleet history</p>
@@ -56,13 +53,11 @@ export default function BusHistoryPage({ loaderData }: Route.ComponentProps) {
           <Link className="button button-secondary" to="/buses">
             All buses
           </Link>
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={() => window.print()}
-          >
-            Print / Save as PDF
-          </button>
+          <ReportActions
+            filename={`bus-ledger-${bus.fleetNumber}`}
+            documentTitle={`Bus Ledger • ${bus.fleetNumber}`}
+            targetSelector="#printable-bus-report"
+          />
           {bus.status === "ACTIVE" ? (
             <Link
               className="button button-primary"
@@ -74,7 +69,7 @@ export default function BusHistoryPage({ loaderData }: Route.ComponentProps) {
         </div>
       </div>
 
-      <section className="metric-grid" style={{ marginBottom: "1.5rem" }}>
+      <section className="metric-grid no-print" style={{ marginBottom: "1.5rem" }}>
         <article className="card metric-card">
           <span className="metric-label">Last odometer</span>
           <strong className="metric-value">
@@ -97,79 +92,150 @@ export default function BusHistoryPage({ loaderData }: Route.ComponentProps) {
         </article>
       </section>
 
-      <section className="panel" style={{ marginBottom: "1.5rem" }}>
-        <h2>Current tyres</h2>
-        <TyreMap slots={fitted} />
-      </section>
+      {/* Official A4 Printable Report Sheet */}
+      <div id="printable-bus-report" className="print-doc-container report-sheet">
+        <ReportLayout mode="report">
+          <ReportHeader
+            title="Bus Maintenance Ledger"
+            department="Workshop & Fleet Maintenance Department"
+            documentNumber={bus.fleetNumber}
+            date={currentDate}
+            status={bus.status}
+            subtitle="Vehicle Asset Maintenance & Inspection Record"
+          />
 
-      <section className="panel">
-        <h2>Timeline</h2>
-        {timeline.length === 0 ? (
-          <div className="empty-state">
-            <strong>No workshop history yet</strong>
-            <p>Job cards, issues, tyre work, and oil changes appear here.</p>
+          <div style={{ marginBottom: "16px" }}>
+            <ReportInfoGrid
+              columns={4}
+              items={[
+                { label: "Fleet Number", value: bus.fleetNumber, highlight: true },
+                { label: "Registration No", value: bus.registrationNumber || "—", highlight: true },
+                { label: "Make / Model", value: [bus.make, bus.model].filter(Boolean).join(" ") || "—" },
+                { label: "Vehicle Status", value: busStatusLabel(bus.status) },
+                { label: "Odometer Reading", value: lastOdometer ? `${lastOdometer} km` : "—" },
+                {
+                  label: "Last Oil Service",
+                  value: lastOil ? `${lastOil.businessDate} (${lastOil.litres}L)` : "None",
+                },
+                { label: "Current Tyres Fitted", value: `${fitted.length} Positions Active` },
+                { label: "Audit Ledger Date", value: currentDate },
+              ]}
+            />
           </div>
-        ) : (
-          <ol className="history-timeline">
-            {timeline.map((entry, index) => (
-              <li key={`${entry.kind}-${index}`}>
-                {entry.kind === "job_card" ? (
-                  <>
-                    <span className="badge warning">Job card</span>{" "}
-                    <Link to={`/job-cards/${entry.card.id}`}>
-                      {entry.card.jobNumber}
-                    </Link>{" "}
-                    <span className="muted">
-                      {entry.card.businessDate} · {entry.card.status} ·{" "}
-                      {entry.card.store}
-                    </span>
-                    <div>{entry.card.complaint}</div>
-                  </>
-                ) : null}
-                {entry.kind === "oil" ? (
-                  <>
-                    <span className="badge">Oil</span> {entry.oil.part} —{" "}
-                    {entry.oil.litres} L
-                    <span className="muted">
-                      {" "}
-                      · {entry.oil.businessDate}
-                      {entry.oil.odometerKm
-                        ? ` @ ${entry.oil.odometerKm} km`
-                        : ""}
-                    </span>
-                  </>
-                ) : null}
-                {entry.kind === "tyre" ? (
-                  <>
-                    <span className="badge">Tyre</span> {entry.tyre.type}{" "}
-                    {entry.tyre.serialNumber}
-                    {entry.tyre.toPosition ? ` → ${entry.tyre.toPosition}` : ""}
-                    {entry.tyre.toStage ? ` (${entry.tyre.toStage})` : ""}
-                  </>
-                ) : null}
-                {entry.kind === "stock" ? (
-                  <>
-                    <span className="badge">Stock</span>{" "}
-                    <Link to={`/receipts/${entry.stock.id}`}>
-                      {entry.stock.number}
-                    </Link>{" "}
-                    {entry.stock.sku} × {entry.stock.quantity}
-                    <span className="muted">
-                      {" "}
-                      · {entry.stock.type.replaceAll("_", " ")}
-                    </span>
-                  </>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
 
-      <ReportPrintFooter
-        reportName={`Bus Maintenance Ledger • ${bus.fleetNumber}`}
-        documentId={bus.registrationNumber || bus.fleetNumber}
-      />
+          <div style={{ marginBottom: "18px" }}>
+            <ReportSection title="Current Wheel & Tyre Positions">
+              <div style={{ padding: "8px 0" }}>
+                <TyreMap slots={fitted} />
+              </div>
+            </ReportSection>
+          </div>
+
+          <div style={{ marginBottom: "18px" }}>
+            <ReportSection title={`Maintenance & Service History (${timeline.length} Events)`}>
+              {timeline.length === 0 ? (
+                <ReportEmptyState message="No maintenance events or service records logged for this vehicle yet." />
+              ) : (
+                <ReportTable
+                  headers={[
+                    { label: "Type", width: "14%" },
+                    { label: "Date", width: "12%" },
+                    { label: "Document / Ref", width: "22%" },
+                    { label: "Description / Action Details", width: "52%" },
+                  ]}
+                >
+                  {timeline.map((entry, index) => {
+                    let typeLabel = "Event";
+                    let dateStr = "—";
+                    let docRef: React.ReactNode = "—";
+                    let desc = "";
+
+                    if (entry.kind === "job_card") {
+                      typeLabel = "JOB CARD";
+                      dateStr = entry.card.businessDate;
+                      docRef = (
+                        <Link
+                          to={`/job-cards/${entry.card.id}`}
+                          className="mono"
+                          style={{ fontWeight: "700", color: "#111827", textDecoration: "none" }}
+                        >
+                          {entry.card.jobNumber}
+                        </Link>
+                      );
+                      desc = `${entry.card.complaint} (${entry.card.status} · ${entry.card.store})`;
+                    } else if (entry.kind === "oil") {
+                      typeLabel = "OIL SERVICE";
+                      dateStr = entry.oil.businessDate;
+                      docRef = <span className="mono">{entry.oil.part}</span>;
+                      desc = `${entry.oil.litres} L ${entry.oil.odometerKm ? `@ ${entry.oil.odometerKm} km` : ""}`;
+                    } else if (entry.kind === "tyre") {
+                      typeLabel = "TYRE FIT";
+                      dateStr = "—";
+                      docRef = <span className="mono">{entry.tyre.serialNumber}</span>;
+                      desc = `${entry.tyre.type} ${entry.tyre.toPosition ? `→ ${entry.tyre.toPosition}` : ""} ${entry.tyre.toStage ? `(${entry.tyre.toStage})` : ""}`;
+                    } else if (entry.kind === "stock") {
+                      typeLabel = "PARTS ISSUE";
+                      dateStr = entry.stock.date || "—";
+                      docRef = (
+                        <Link
+                          to={`/receipts/${entry.stock.id}`}
+                          className="mono"
+                          style={{ fontWeight: "700", color: "#111827", textDecoration: "none" }}
+                        >
+                          {entry.stock.number}
+                        </Link>
+                      );
+                      desc = `${entry.stock.sku} × ${entry.stock.quantity} (${entry.stock.type.replaceAll("_", " ")})`;
+                    }
+
+                    return (
+                      <tr key={`${entry.kind}-${index}`} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top" }}>
+                          <span
+                            style={{
+                              fontSize: "7.5pt",
+                              fontWeight: "700",
+                              padding: "1px 5px",
+                              borderRadius: "2px",
+                              backgroundColor: entry.kind === "job_card" ? "#fef3c7" : "#f3f4f6",
+                              color: entry.kind === "job_card" ? "#92400e" : "#1f2937",
+                            }}
+                          >
+                            {typeLabel}
+                          </span>
+                        </td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                          {dateStr}
+                        </td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                          {docRef}
+                        </td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top", fontSize: "8.5pt", color: "#374151" }}>
+                          {desc}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </ReportTable>
+              )}
+            </ReportSection>
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <ReportSignatures
+              signatures={[
+                { role: "Workshop Foreman", description: "Maintenance Inspected" },
+                { role: "Fleet Operations Manager", description: "Fleet Verification Approved" },
+              ]}
+            />
+          </div>
+
+          <ReportFooter
+            reportName={`Bus Maintenance Ledger • ${bus.fleetNumber}`}
+            documentId={bus.registrationNumber || bus.fleetNumber}
+          />
+        </ReportLayout>
+      </div>
     </>
   );
 }

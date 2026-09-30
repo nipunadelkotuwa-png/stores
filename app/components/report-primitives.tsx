@@ -254,6 +254,7 @@ interface ReportSectionProps {
   children: ReactNode;
   className?: string;
   noMargin?: boolean;
+  headerRight?: ReactNode;
 }
 
 export function ReportSection({
@@ -261,6 +262,7 @@ export function ReportSection({
   children,
   className = "",
   noMargin = false,
+  headerRight,
 }: ReportSectionProps) {
   return (
     <div
@@ -285,9 +287,13 @@ export function ReportSection({
             textTransform: "uppercase",
             letterSpacing: "0.04em",
             color: "#111111",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
         >
-          {title}
+          <span>{title}</span>
+          {headerRight ? <div>{headerRight}</div> : null}
         </div>
       ) : null}
       <div
@@ -484,17 +490,40 @@ export function ReportSummary({ items }: ReportSummaryProps) {
 // 8. COMPACT EMPTY STATE (Other Activity)
 // ==========================================
 interface ReportEmptyStateProps {
-  items: Array<{
+  items?: Array<{
     label: string;
     message?: string;
   }>;
+  message?: string;
   title?: string;
 }
 
 export function ReportEmptyState({
   items,
+  message,
   title = "Other Workshop Activity",
 }: ReportEmptyStateProps) {
+  if (message) {
+    return (
+      <div
+        style={{
+          padding: "16px 12px",
+          textAlign: "center",
+          color: "#4b5563",
+          fontSize: "9pt",
+          fontStyle: "italic",
+          backgroundColor: "#f9fafb",
+          border: "1px dashed #d1d5db",
+          borderRadius: "4px",
+          marginBottom: "12px",
+        }}
+      >
+        {message}
+      </div>
+    );
+  }
+
+  const list = items || [];
   return (
     <div
       className="print-section-box"
@@ -529,7 +558,7 @@ export function ReportEmptyState({
           color: "#555555",
         }}
       >
-        {items.map((it, idx) => (
+        {list.map((it, idx) => (
           <div key={idx}>
             <strong style={{ color: "#333333" }}>{it.label}: </strong>
             <span style={{ fontStyle: "italic" }}>
@@ -599,20 +628,24 @@ export function ReportNotes({
 // 10. REPORT SIGNATURES (2 or 3 columns)
 // ==========================================
 interface SignerItem {
-  title: string;
+  title?: string;
+  role?: string;
   name?: string | null;
   date?: string;
   caption?: string;
+  description?: string;
 }
 
 interface ReportSignaturesProps {
   signers?: Array<SignerItem>;
+  signatures?: Array<SignerItem>;
   variant?: "two-column" | "three-column";
   title?: string;
 }
 
 export function ReportSignatures({
   signers,
+  signatures,
   variant = "two-column",
   title = "Verification & Authorization",
 }: ReportSignaturesProps) {
@@ -628,7 +661,7 @@ export function ReportSignatures({
   ];
 
   const list =
-    signers || (variant === "three-column" ? defaultThree : defaultTwo);
+    signatures || signers || (variant === "three-column" ? defaultThree : defaultTwo);
   const colCount = list.length;
 
   return (
@@ -675,7 +708,7 @@ export function ReportSignatures({
                 marginBottom: "28px",
               }}
             >
-              {s.title}
+              {s.title || s.role || "Officer"}
             </div>
             <div
               style={{
@@ -689,7 +722,7 @@ export function ReportSignatures({
               <div style={{ fontSize: "8.5pt", color: "#333333", marginTop: "2px" }}>
                 Date: {s.date || "____________________"}
               </div>
-              {s.caption ? (
+              {s.caption || s.description ? (
                 <div
                   style={{
                     fontSize: "7.5pt",
@@ -699,7 +732,7 @@ export function ReportSignatures({
                     letterSpacing: "0.04em",
                   }}
                 >
-                  {s.caption}
+                  {s.caption || s.description}
                 </div>
               ) : null}
             </div>

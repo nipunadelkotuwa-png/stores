@@ -1,5 +1,15 @@
 import { Form, useSearchParams } from "react-router";
-import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
+import { ReportActions } from "~/components/report-actions";
+import {
+  ReportEmptyState,
+  ReportFooter,
+  ReportHeader,
+  ReportInfoGrid,
+  ReportLayout,
+  ReportSignatures,
+  ReportSummary,
+  ReportTable,
+} from "~/components/report-primitives";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getItemUsage } from "~/features/inventory/queries.server";
@@ -75,55 +85,25 @@ export default function ItemUsagePage({ loaderData }: Route.ComponentProps) {
     (sum, row) => sum + Number(row.issued),
     0,
   );
+  const dateLabel = `${loaderData.range.start || "All"} to ${loaderData.range.end || "Present"}`;
 
   return (
     <>
-      <ReportPrintHeader
-        title="Item-Wise Usage Report"
-        subtitle="Workshop Stock Consumption Ledger"
-        metadata={[
-          ...(loaderData.selectedPart
-            ? [
-                {
-                  label: "Filtered Item",
-                  value: `${loaderData.selectedPart.sku} — ${loaderData.selectedPart.name}`,
-                },
-              ]
-            : []),
-          { label: "Period", value: loaderData.range.period },
-          {
-            label: "Date Range",
-            value: `${loaderData.range.start || "—"} to ${loaderData.range.end || "—"}`,
-          },
-          { label: "Total Usage Rows", value: loaderData.rows.length },
-          ...(loaderData.selectedPart
-            ? [{ label: "Total Quantity Issued", value: totalIssued.toFixed(2) }]
-            : []),
-        ]}
-      />
-
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Reports</p>
-          <h1>Item-wise usage</h1>
+          <h1>Item-Wise Usage</h1>
           <p className="muted">
-            Posted bus issues by part and store.
-            {loaderData.selectedPart
-              ? ` Item: ${loaderData.selectedPart.sku} — ${loaderData.selectedPart.name}.`
-              : ""}
-            {loaderData.range.start
-              ? ` Period: ${loaderData.range.start} → ${loaderData.range.end ?? "…"}`
-              : ""}
+            Aggregated parts and consumables consumption by store location.
           </p>
         </div>
-        <button
-          className="button button-secondary"
-          type="button"
-          onClick={() => window.print()}
-        >
-          Print / Save as PDF
-        </button>
+        <ReportActions
+          filename={`item-usage-${loaderData.selectedPart?.sku || loaderData.range.period || "report"}`}
+          documentTitle={`Item-Wise Usage Report • ${dateLabel}`}
+          targetSelector="#printable-report"
+        />
       </div>
+
       <Form
         className="form-panel panel no-print"
         style={{ marginBottom: "1.5rem" }}
@@ -163,46 +143,126 @@ export default function ItemUsagePage({ loaderData }: Route.ComponentProps) {
           />
         </label>
       </Form>
-      <section className="panel">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>SKU</th>
-                <th>Part</th>
-                <th>Store</th>
-                <th>Qty issued</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loaderData.rows.length === 0 ? (
-                <tr>
-                  <td colSpan={4}>No posted issues in this range.</td>
-                </tr>
-              ) : (
-                loaderData.rows.map((row) => (
-                  <tr key={`${row.partId}-${row.store}`}>
-                    <td className="mono">{row.sku}</td>
-                    <td>{row.part}</td>
-                    <td>{row.store}</td>
-                    <td>
-                      {row.issued} {row.unit}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        {loaderData.selectedPart ? (
-          <p className="muted">Total issued: {totalIssued.toFixed(3)}</p>
-        ) : null}
-        {loaderData.truncated ? (
-          <p className="muted">Showing the first 250 rows.</p>
-        ) : null}
-      </section>
 
-      <ReportPrintFooter reportName="Item-Wise Usage Report" />
+      {/* Official A4 Printable Report Sheet */}
+      <div id="printable-report" className="print-doc-container report-sheet">
+        <ReportLayout mode="report">
+          <ReportHeader
+            title="Item-Wise Usage Report"
+            department="Workshop Stock Consumption Ledger"
+            date={loaderData.range.end || new Date().toISOString().slice(0, 10)}
+            subtitle={`Period: ${loaderData.range.period.toUpperCase()} (${dateLabel})${loaderData.selectedPart ? ` • Item: ${loaderData.selectedPart.sku} - ${loaderData.selectedPart.name}` : ""}`}
+          />
+
+          <div style={{ marginBottom: "14px" }}>
+            <ReportInfoGrid
+              columns={4}
+              items={[
+                ...(loaderData.selectedPart
+                  ? [
+                      {
+                        label: "Filtered Item",
+                        value: `${loaderData.selectedPart.sku} — ${loaderData.selectedPart.name}`,
+                        highlight: true,
+                      },
+                    ]
+                  : []),
+                { label: "Date Range", value: dateLabel },
+                { label: "Period Filter", value: loaderData.range.period.toUpperCase() },
+                { label: "Report Rows", value: loaderData.rows.length },
+                { label: "Total Units Dispatched", value: totalIssued.toFixed(2), highlight: true },
+              ]}
+            />
+          </div>
+
+          {loaderData.truncated ? (
+            <div
+              style={{
+                fontSize: "8.5pt",
+                color: "#92400e",
+                backgroundColor: "#fef3c7",
+                padding: "4px 8px",
+                borderRadius: "3px",
+                marginBottom: "10px",
+              }}
+            >
+              Note: Showing first 250 items. Use search or filter above to narrow down results.
+            </div>
+          ) : null}
+
+          {loaderData.rows.length === 0 ? (
+            <ReportEmptyState message="No posted issues recorded for this item in this date range." />
+          ) : (
+            <ReportTable
+              headers={[
+                { label: "SKU / Code", width: "20%" },
+                { label: "Part Description", width: "40%" },
+                { label: "Store Location", width: "22%" },
+                { label: "Qty Issued", align: "right", width: "18%" },
+              ]}
+            >
+              {loaderData.rows.map((row) => (
+                <tr
+                  key={`${row.partId}-${row.store}`}
+                  style={{
+                    borderBottom: "1px solid #e5e7eb",
+                  }}
+                >
+                  <td style={{ padding: "6px 8px", verticalAlign: "top" }}>
+                    <span className="mono" style={{ fontWeight: "700", color: "#111827" }}>
+                      {row.sku}
+                    </span>
+                  </td>
+                  <td style={{ padding: "6px 8px", verticalAlign: "top" }}>
+                    <div style={{ fontSize: "9pt", fontWeight: "600", color: "#111827" }}>
+                      {row.part}
+                    </div>
+                  </td>
+                  <td style={{ padding: "6px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                    {row.store}
+                  </td>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      verticalAlign: "top",
+                      textAlign: "right",
+                      fontFamily: "var(--font-mono, monospace)",
+                      fontWeight: "700",
+                      fontSize: "9pt",
+                      color: "#111827",
+                    }}
+                  >
+                    {row.issued} <span style={{ fontSize: "8pt", color: "#6b7280" }}>{row.unit}</span>
+                  </td>
+                </tr>
+              ))}
+            </ReportTable>
+          )}
+
+          <div style={{ marginTop: "12px" }}>
+            <ReportSummary
+              items={[
+                { label: "Total Distinct Stores / Rows", value: loaderData.rows.length },
+                { label: "Total Quantity Issued", value: totalIssued.toFixed(2), highlight: true },
+              ]}
+            />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <ReportSignatures
+              signatures={[
+                { role: "Storekeeper", description: "Usage Verified" },
+                { role: "Workshop Manager", description: "Stock Control Review" },
+              ]}
+            />
+          </div>
+
+          <ReportFooter
+            reportName="Item-Wise Usage Report"
+            documentId={`USAGE-${loaderData.selectedPart?.sku || loaderData.range.period || "ALL"}`}
+          />
+        </ReportLayout>
+      </div>
     </>
   );
 }

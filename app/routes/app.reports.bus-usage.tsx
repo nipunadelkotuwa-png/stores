@@ -1,5 +1,15 @@
 import { Form, Link, useSearchParams } from "react-router";
-import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
+import { ReportActions } from "~/components/report-actions";
+import {
+  ReportEmptyState,
+  ReportFooter,
+  ReportHeader,
+  ReportInfoGrid,
+  ReportLayout,
+  ReportSignatures,
+  ReportSummary,
+  ReportTable,
+} from "~/components/report-primitives";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getBusUsage } from "~/features/inventory/queries.server";
@@ -23,42 +33,29 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
   const [params] = useSearchParams();
+  const busFilter = params.get("bus");
+
+  const totalQty = loaderData.rows.reduce(
+    (sum, r) => sum + (Number(r.quantity) || 0),
+    0,
+  );
+  const dateLabel = `${loaderData.range.start || "All"} to ${loaderData.range.end || "Present"}`;
 
   return (
     <>
-      <ReportPrintHeader
-        title="Bus-Wise Stock Issues"
-        subtitle="Workshop & Fleet Maintenance Department"
-        metadata={[
-          ...(params.get("bus")
-            ? [{ label: "Bus Filter", value: params.get("bus") }]
-            : []),
-          { label: "Period", value: loaderData.range.period },
-          {
-            label: "Date Range",
-            value: `${loaderData.range.start || "—"} to ${loaderData.range.end || "—"}`,
-          },
-          { label: "Total Issue Records", value: loaderData.rows.length },
-        ]}
-      />
-
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Fleet report</p>
-          <h1>Bus-wise stock issues</h1>
+          <h1>Bus-Wise Stock Issues</h1>
           <p className="muted">
-            Spare parts consumed by each bus, store, and date.
+            Spare parts and lubricants consumed by each bus asset.
           </p>
         </div>
-        <div className="heading-actions">
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={() => window.print()}
-          >
-            Print / Save as PDF
-          </button>
-        </div>
+        <ReportActions
+          filename={`bus-usage-${busFilter ? busFilter + "-" : ""}${loaderData.range.period || "report"}`}
+          documentTitle={`Bus-Wise Stock Issues • ${dateLabel}`}
+          targetSelector="#printable-report"
+        />
       </div>
 
       <Form
@@ -76,69 +73,142 @@ export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
               type="text"
               name="bus"
               placeholder="e.g. B-001"
-              defaultValue={params.get("bus") || ""}
+              defaultValue={busFilter || ""}
             />
           </label>
         </ReportPeriodFilter>
       </Form>
 
-      {loaderData.truncated ? (
-        <p className="muted no-print">
-          Showing the latest {loaderData.rows.length} issue lines. Older rows
-          are omitted. Please use filters to narrow down results.
-        </p>
-      ) : null}
+      {/* Official A4 Printable Report Sheet */}
+      <div id="printable-report" className="print-doc-container report-sheet">
+        <ReportLayout mode="report">
+          <ReportHeader
+            title="Bus-Wise Stock Issues"
+            department="Workshop & Fleet Maintenance Department"
+            date={loaderData.range.end || new Date().toISOString().slice(0, 10)}
+            subtitle={`Period: ${loaderData.range.period.toUpperCase()} (${dateLabel})${busFilter ? ` • Filtered: ${busFilter}` : ""}`}
+          />
 
-      <section className="panel">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Bus</th>
-                <th>Store</th>
-                <th>Document</th>
-                <th>Part</th>
-                <th>Quantity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loaderData.rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>
-                    <div className="empty-state">
-                      <strong>No issues found</strong>
-                      <p>Try adjusting your filters.</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : null}
+          <div style={{ marginBottom: "14px" }}>
+            <ReportInfoGrid
+              columns={4}
+              items={[
+                ...(busFilter ? [{ label: "Bus Filter", value: busFilter, highlight: true }] : []),
+                { label: "Date Range", value: dateLabel },
+                { label: "Period Filter", value: loaderData.range.period.toUpperCase() },
+                { label: "Issue Records", value: loaderData.rows.length },
+                { label: "Total Units Consumed", value: totalQty.toFixed(2), highlight: true },
+              ]}
+            />
+          </div>
+
+          {loaderData.truncated ? (
+            <div
+              style={{
+                fontSize: "8.5pt",
+                color: "#92400e",
+                backgroundColor: "#fef3c7",
+                padding: "4px 8px",
+                borderRadius: "3px",
+                marginBottom: "10px",
+              }}
+            >
+              Note: Showing latest {loaderData.rows.length} lines. Use filters above to focus on specific buses.
+            </div>
+          ) : null}
+
+          {loaderData.rows.length === 0 ? (
+            <ReportEmptyState message="No spare parts issued to buses for the selected criteria." />
+          ) : (
+            <ReportTable
+              headers={[
+                { label: "Date", width: "11%" },
+                { label: "Bus / Fleet", width: "16%" },
+                { label: "Store", width: "15%" },
+                { label: "Document", width: "18%" },
+                { label: "Part Details", width: "28%" },
+                { label: "Qty", align: "right", width: "12%" },
+              ]}
+            >
               {loaderData.rows.map((row, index) => (
-                <tr key={`${row.number}-${index}`}>
-                  <td>{row.date}</td>
-                  <td>
-                    <strong>{row.fleetNumber}</strong>
-                    <small>{row.registration ?? ""}</small>
+                <tr
+                  key={`${row.number}-${index}`}
+                  style={{
+                    borderBottom: "1px solid #e5e7eb",
+                    backgroundColor: index % 2 === 1 ? "#fafbfc" : "#ffffff",
+                  }}
+                >
+                  <td style={{ padding: "6px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                    {row.date}
                   </td>
-                  <td>{row.store}</td>
-                  <td>
-                    <Link to={`/receipts/${row.id}`} className="mono">
+                  <td style={{ padding: "6px 8px", verticalAlign: "top" }}>
+                    <strong style={{ fontSize: "9pt", color: "#111827" }}>
+                      {row.fleetNumber}
+                    </strong>
+                    {row.registration ? (
+                      <div style={{ fontSize: "8pt", color: "#6b7280" }}>
+                        {row.registration}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td style={{ padding: "6px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                    {row.store}
+                  </td>
+                  <td style={{ padding: "6px 8px", verticalAlign: "top" }}>
+                    <Link
+                      to={`/receipts/${row.id}`}
+                      className="mono"
+                      style={{ fontWeight: "700", color: "#111827", textDecoration: "none" }}
+                    >
                       {row.number}
                     </Link>
                   </td>
-                  <td>
-                    <strong>{row.sku}</strong>
-                    <small>{row.part}</small>
+                  <td style={{ padding: "6px 8px", verticalAlign: "top" }}>
+                    <strong style={{ fontSize: "8.5pt", color: "#111827" }}>{row.sku}</strong>
+                    <div style={{ fontSize: "8pt", color: "#4b5563" }}>{row.part}</div>
                   </td>
-                  <td className="quantity">{row.quantity}</td>
+                  <td
+                    style={{
+                      padding: "6px 8px",
+                      verticalAlign: "top",
+                      textAlign: "right",
+                      fontFamily: "var(--font-mono, monospace)",
+                      fontWeight: "700",
+                      fontSize: "9pt",
+                      color: "#111827",
+                    }}
+                  >
+                    {row.quantity}
+                  </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </ReportTable>
+          )}
 
-      <ReportPrintFooter reportName="Bus-Wise Stock Issues" />
+          <div style={{ marginTop: "12px" }}>
+            <ReportSummary
+              items={[
+                { label: "Total Issue Records", value: loaderData.rows.length },
+                { label: "Total Quantity Consumed", value: totalQty.toFixed(2), highlight: true },
+              ]}
+            />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <ReportSignatures
+              signatures={[
+                { role: "Storekeeper / Issuing Officer", description: "Dispatched" },
+                { role: "Fleet Maintenance Supervisor", description: "Verified by Fleet" },
+              ]}
+            />
+          </div>
+
+          <ReportFooter
+            reportName="Bus-Wise Stock Issues"
+            documentId={`BUS-USAGE-${loaderData.range.period || "PERIOD"}`}
+          />
+        </ReportLayout>
+      </div>
     </>
   );
 }

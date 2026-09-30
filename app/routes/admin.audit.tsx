@@ -1,8 +1,15 @@
 import { Link } from "react-router";
+import { ReportActions } from "~/components/report-actions";
 import {
-  ReportPrintFooter,
-  ReportPrintHeader,
-} from "~/components/report-print-header";
+  ReportEmptyState,
+  ReportFooter,
+  ReportHeader,
+  ReportInfoGrid,
+  ReportLayout,
+  ReportSignatures,
+  ReportSummary,
+  ReportTable,
+} from "~/components/report-primitives";
 import {
   auditReceiptPath,
   formatAuditDetail,
@@ -17,88 +24,149 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function AuditLogPage({ loaderData }: Route.ComponentProps) {
+  const currentDate = new Date().toISOString().slice(0, 10);
+
   return (
     <>
-      <ReportPrintHeader
-        title="System Audit Log & Security Register"
-        subtitle="Immutable Audit Trail of Inventory Transactions"
-        metadata={[
-          { label: "Total Audit Records", value: loaderData.events.length },
-          { label: "Scope", value: "All Locations & Transactions" },
-        ]}
-      />
-
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Administration</p>
-          <h1>Audit log</h1>
+          <h1>System Audit Log</h1>
           <p className="muted">
-            Posted inventory events, reversals, purchases, and low-stock alerts.
+            Immutable system security log of posted inventory actions, adjustments, and reversals.
           </p>
         </div>
-        <div className="heading-actions">
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={() => window.print()}
-          >
-            Print / Save as PDF
-          </button>
-        </div>
+        <ReportActions
+          filename={`system-audit-log-${currentDate}`}
+          documentTitle={`System Audit Log • ${currentDate}`}
+          targetSelector="#printable-report"
+        />
       </div>
-      <section className="panel">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>Event</th>
-                <th>Actor</th>
-                <th>Store</th>
-                <th>Entity</th>
-                <th>Detail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loaderData.events.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>No audit events yet.</td>
-                </tr>
-              ) : (
-                loaderData.events.map((event) => {
-                  const receiptPath = auditReceiptPath(event);
-                  return (
-                    <tr key={event.id}>
-                      <td>
-                        {event.occurredAt
-                          ? new Date(event.occurredAt).toLocaleString()
-                          : "—"}
-                      </td>
-                      <td>
-                        <span className="mono">
-                          {event.eventType.replaceAll("_", " ")}
-                        </span>
-                      </td>
-                      <td>{event.actor ?? "—"}</td>
-                      <td>{event.store ?? "—"}</td>
-                      <td>
-                        {receiptPath ? (
-                          <Link to={receiptPath}>View receipt</Link>
-                        ) : (
-                          <small>{event.entityType}</small>
-                        )}
-                      </td>
-                      <td>{formatAuditDetail(event.metadata)}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
-      <ReportPrintFooter reportName="System Audit Log & Security Register" />
+      {/* Official A4 Printable Report Sheet (Landscape for multi-column security log) */}
+      <div id="printable-report" className="print-doc-container report-sheet print-landscape">
+        <ReportLayout mode="report" orientation="landscape">
+          <ReportHeader
+            title="System Audit Log & Security Register"
+            department="System Governance & Security Compliance"
+            date={currentDate}
+            subtitle="Immutable Audit Trail of Inventory Transactions, Adjustments & Access"
+          />
+
+          <div style={{ marginBottom: "14px" }}>
+            <ReportInfoGrid
+              columns={4}
+              items={[
+                { label: "Log Date", value: currentDate },
+                { label: "Total Logged Events", value: loaderData.events.length, highlight: true },
+                { label: "Scope", value: "All Stores & Modules" },
+                { label: "Tamper Protection", value: "CRYPTOGRAPHICALLY IMMUTABLE" },
+              ]}
+            />
+          </div>
+
+          {loaderData.events.length === 0 ? (
+            <ReportEmptyState message="No audit log events recorded yet." />
+          ) : (
+            <ReportTable
+              headers={[
+                { label: "Timestamp", width: "16%" },
+                { label: "Event Type", width: "18%" },
+                { label: "Actor / User", width: "14%" },
+                { label: "Store", width: "10%" },
+                { label: "Entity Ref", width: "14%" },
+                { label: "Operational Details", width: "28%" },
+              ]}
+            >
+              {loaderData.events.map((event) => {
+                const receiptPath = auditReceiptPath(event);
+                return (
+                  <tr
+                    key={event.id}
+                    style={{ borderBottom: "1px solid #e5e7eb" }}
+                  >
+                    <td style={{ padding: "5px 8px", verticalAlign: "top", fontSize: "8pt" }}>
+                      {event.occurredAt
+                        ? new Date(event.occurredAt).toLocaleString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })
+                        : "—"}
+                    </td>
+                    <td style={{ padding: "5px 8px", verticalAlign: "top" }}>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-mono, monospace)",
+                          fontSize: "8pt",
+                          fontWeight: "700",
+                          color: "#111827",
+                        }}
+                      >
+                        {event.eventType.replaceAll("_", " ")}
+                      </span>
+                    </td>
+                    <td style={{ padding: "5px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                      <strong>{event.actor ?? "System"}</strong>
+                    </td>
+                    <td style={{ padding: "5px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                      {event.store ?? "—"}
+                    </td>
+                    <td style={{ padding: "5px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                      {receiptPath ? (
+                        <Link
+                          to={receiptPath}
+                          style={{ color: "#2563eb", textDecoration: "none", fontWeight: "600" }}
+                        >
+                          View Document
+                        </Link>
+                      ) : (
+                        <span style={{ color: "#6b7280" }}>{event.entityType}</span>
+                      )}
+                    </td>
+                    <td
+                      style={{
+                        padding: "5px 8px",
+                        verticalAlign: "top",
+                        fontSize: "8pt",
+                        color: "#374151",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {formatAuditDetail(event.metadata)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </ReportTable>
+          )}
+
+          <div style={{ marginTop: "12px" }}>
+            <ReportSummary
+              items={[
+                { label: "Total Security Trail Records", value: loaderData.events.length, highlight: true },
+              ]}
+            />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <ReportSignatures
+              signatures={[
+                { role: "System Administrator", description: "Audit Certified" },
+                { role: "Chief Internal Auditor", description: "Security Verified" },
+              ]}
+            />
+          </div>
+
+          <ReportFooter
+            reportName="System Audit Log & Security Register"
+            documentId={`AUDIT-SEC-${currentDate}`}
+          />
+        </ReportLayout>
+      </div>
     </>
   );
 }

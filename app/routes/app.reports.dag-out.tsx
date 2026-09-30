@@ -1,5 +1,16 @@
-import { Form, Link, useSearchParams } from "react-router";
-import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
+import { Form, useSearchParams } from "react-router";
+import { ReportActions } from "~/components/report-actions";
+import {
+  ReportEmptyState,
+  ReportFooter,
+  ReportHeader,
+  ReportInfoGrid,
+  ReportLayout,
+  ReportSection,
+  ReportSignatures,
+  ReportSummary,
+  ReportTable,
+} from "~/components/report-primitives";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { resolveReportPeriod } from "~/features/reports/period";
@@ -37,38 +48,26 @@ export default function DagOutReport({ loaderData }: Route.ComponentProps) {
     (s) => s.id === params.get("store"),
   );
 
+  const dateLabel = `${loaderData.range.start || "All"} to ${loaderData.range.end || "Present"}`;
+  const currentDate = new Date().toISOString().slice(0, 10);
+
   return (
     <>
-      <ReportPrintHeader
-        title="DAG Out Summary"
-        subtitle="Tyre Retreading & Supplier Custody Register"
-        metadata={[
-          ...(selectedSupplier
-            ? [{ label: "Supplier", value: selectedSupplier.name }]
-            : []),
-          ...(selectedStore
-            ? [{ label: "Store", value: selectedStore.code }]
-            : []),
-          { label: "Total Tyres at DAG", value: loaderData.summary.total },
-        ]}
-      />
-
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Tyres</p>
-          <h1>DAG out summary</h1>
+          <h1>DAG Out Summary</h1>
           <p className="muted">
-            Tyres currently at each retread supplier, with serial counts.
+            Tyres currently sent out to retread suppliers (DAG).
           </p>
         </div>
-        <button
-          className="button button-secondary"
-          type="button"
-          onClick={() => window.print()}
-        >
-          Print / Save as PDF
-        </button>
+        <ReportActions
+          filename={`dag-out-${selectedSupplier?.name || "all"}-${currentDate}`}
+          documentTitle={`DAG Out Summary • ${dateLabel}`}
+          targetSelector="#printable-report"
+        />
       </div>
+
       <Form
         className="form-panel panel no-print"
         style={{ marginBottom: "1.5rem" }}
@@ -81,7 +80,7 @@ export default function DagOutReport({ loaderData }: Route.ComponentProps) {
           <label>
             Supplier
             <select name="supplier" defaultValue={params.get("supplier") || ""}>
-              <option value="">All</option>
+              <option value="">All suppliers</option>
               {loaderData.suppliers.map((supplier) => (
                 <option key={supplier.id} value={supplier.id}>
                   {supplier.name}
@@ -92,7 +91,7 @@ export default function DagOutReport({ loaderData }: Route.ComponentProps) {
           <label>
             Store
             <select name="store" defaultValue={params.get("store") || ""}>
-              <option value="">All</option>
+              <option value="">All stores</option>
               {loaderData.stores.map((store) => (
                 <option key={store.id} value={store.id}>
                   {store.code}
@@ -102,56 +101,129 @@ export default function DagOutReport({ loaderData }: Route.ComponentProps) {
           </label>
         </ReportPeriodFilter>
       </Form>
-      <p className="muted">Total at DAG: {loaderData.summary.total}</p>
-      {loaderData.summary.groups.map((group) => (
-        <section
-          className="panel"
-          key={group.supplierId ?? "none"}
-          style={{ marginBottom: "1rem" }}
-        >
-          <h2>
-            {group.supplier} <span className="badge">{group.count} tyres</span>
-          </h2>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Serial</th>
-                  <th>Stage</th>
-                  <th>SKU</th>
-                  <th>Store</th>
-                  <th>Sent</th>
-                </tr>
-              </thead>
-              <tbody>
-                {group.tyres.map((tyre) => (
-                  <tr key={tyre.tyreId}>
-                    <td className="mono">{tyre.serialNumber}</td>
-                    <td>{tyre.stage}</td>
-                    <td className="mono">{tyre.sku}</td>
-                    <td>{tyre.store}</td>
-                    <td>
-                      {tyre.sentAt
-                        ? new Date(tyre.sentAt).toISOString().slice(0, 10)
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ))}
-      {loaderData.summary.groups.length === 0 ? (
-        <div className="empty-state">
-          <strong>No tyres at DAG</strong>
-          <p>
-            Send serials from <Link to="/tyres/dag">DAG send / return</Link>.
-          </p>
-        </div>
-      ) : null}
 
-      <ReportPrintFooter reportName="DAG Out Summary" />
+      {/* Official A4 Printable Report Sheet */}
+      <div id="printable-report" className="print-doc-container report-sheet">
+        <ReportLayout mode="report">
+          <ReportHeader
+            title="DAG Out Summary"
+            department="Tyre Retreading & Supplier Custody Register"
+            date={loaderData.range.end || currentDate}
+            subtitle={`Period: ${loaderData.range.period.toUpperCase()} (${dateLabel})${selectedSupplier ? ` • Supplier: ${selectedSupplier.name}` : ""}`}
+          />
+
+          <div style={{ marginBottom: "14px" }}>
+            <ReportInfoGrid
+              columns={4}
+              items={[
+                ...(selectedSupplier ? [{ label: "Supplier", value: selectedSupplier.name, highlight: true }] : []),
+                ...(selectedStore ? [{ label: "Store", value: selectedStore.code }] : []),
+                { label: "Date Range", value: dateLabel },
+                { label: "Suppliers with Tyres", value: loaderData.summary.groups.length },
+                { label: "Total Tyres at DAG", value: loaderData.summary.total, highlight: true },
+              ]}
+            />
+          </div>
+
+          {loaderData.summary.groups.length === 0 ? (
+            <ReportEmptyState message="No tyres currently at external retread (DAG) suppliers." />
+          ) : (
+            loaderData.summary.groups.map((group) => (
+              <div key={group.supplierId ?? "none"} style={{ marginBottom: "16px" }}>
+                <ReportSection
+                  title={`${group.supplier} (${group.count} Tyres in Custody)`}
+                  headerRight={
+                    <span
+                      style={{
+                        fontSize: "8pt",
+                        fontWeight: "700",
+                        padding: "2px 6px",
+                        backgroundColor: "#fef3c7",
+                        color: "#92400e",
+                        borderRadius: "3px",
+                      }}
+                    >
+                      {group.count} Units Sent
+                    </span>
+                  }
+                >
+                  <ReportTable
+                    headers={[
+                      { label: "Serial Number", width: "24%" },
+                      { label: "Current Stage", width: "18%" },
+                      { label: "SKU / Pattern", width: "24%" },
+                      { label: "Origin Store", width: "18%" },
+                      { label: "Date Dispatched", width: "16%" },
+                    ]}
+                  >
+                    {group.tyres.map((tyre) => (
+                      <tr
+                        key={tyre.tyreId}
+                        style={{ borderBottom: "1px solid #e5e7eb" }}
+                      >
+                        <td style={{ padding: "5px 8px", verticalAlign: "top" }}>
+                          <span className="mono" style={{ fontWeight: "700", color: "#111827" }}>
+                            {tyre.serialNumber}
+                          </span>
+                        </td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                          <span
+                            style={{
+                              padding: "1px 5px",
+                              backgroundColor: "#f3f4f6",
+                              borderRadius: "2px",
+                              fontWeight: "600",
+                            }}
+                          >
+                            {tyre.stage}
+                          </span>
+                        </td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top" }}>
+                          <strong style={{ fontSize: "8.5pt", color: "#111827" }}>
+                            {tyre.sku}
+                          </strong>
+                        </td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                          {tyre.store}
+                        </td>
+                        <td style={{ padding: "5px 8px", verticalAlign: "top", fontSize: "8.5pt" }}>
+                          {tyre.sentAt
+                            ? new Date(tyre.sentAt).toISOString().slice(0, 10)
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </ReportTable>
+                </ReportSection>
+              </div>
+            ))
+          )}
+
+          <div style={{ marginTop: "12px" }}>
+            <ReportSummary
+              items={[
+                { label: "Contractor Facilities", value: loaderData.summary.groups.length },
+                { label: "Total Tyres Sent for Retread", value: loaderData.summary.total, highlight: true },
+              ]}
+            />
+          </div>
+
+          <div style={{ marginTop: "24px" }}>
+            <ReportSignatures
+              signatures={[
+                { role: "Tyre Storekeeper", description: "Dispatched & Logged" },
+                { role: "Workshop Supervisor", description: "Batch Approval" },
+                { role: "Contractor / Driver Acknowledgement", description: "Physical Custody Accepted" },
+              ]}
+            />
+          </div>
+
+          <ReportFooter
+            reportName="DAG Out Summary"
+            documentId={`DAG-OUT-${currentDate}`}
+          />
+        </ReportLayout>
+      </div>
     </>
   );
 }

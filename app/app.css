@@ -1223,8 +1223,9 @@ td small {
 }
 
 .job-card-sheet,
-.receipt-print-wrapper {
-  max-width: 880px;
+.receipt-print-wrapper,
+.report-sheet {
+  max-width: 920px;
   margin: 1.5rem auto 3rem auto;
   padding: 24px 28px;
   background: #ffffff;
@@ -1233,9 +1234,14 @@ td small {
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
 }
 
+.report-sheet.print-landscape {
+  max-width: 1100px;
+}
+
 @media print {
   .job-card-sheet,
-  .receipt-print-wrapper {
+  .receipt-print-wrapper,
+  .report-sheet {
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
