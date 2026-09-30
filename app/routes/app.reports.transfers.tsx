@@ -1,4 +1,5 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getTransfers } from "~/features/inventory/queries.server";
@@ -24,6 +25,19 @@ export default function TransferReportPage({
   const [params] = useSearchParams();
   return (
     <>
+      <ReportPrintHeader
+        title="Location Transfers Ledger"
+        subtitle="Inter-Store Movement & Fleet Inventory"
+        metadata={[
+          { label: "Period", value: loaderData.range.period },
+          {
+            label: "Date Range",
+            value: `${loaderData.range.start || "—"} to ${loaderData.range.end || "—"}`,
+          },
+          { label: "Total Transfer Records", value: loaderData.rows.length },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Reports</p>
@@ -37,7 +51,7 @@ export default function TransferReportPage({
           type="button"
           onClick={() => window.print()}
         >
-          Print
+          Print / Save as PDF
         </button>
       </div>
       <Form
@@ -90,6 +104,8 @@ export default function TransferReportPage({
           </table>
         </div>
       </section>
+
+      <ReportPrintFooter reportName="Location Transfers Ledger" />
     </>
   );
 }

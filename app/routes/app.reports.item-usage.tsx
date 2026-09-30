@@ -1,4 +1,5 @@
 import { Form, useSearchParams } from "react-router";
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getItemUsage } from "~/features/inventory/queries.server";
@@ -77,6 +78,30 @@ export default function ItemUsagePage({ loaderData }: Route.ComponentProps) {
 
   return (
     <>
+      <ReportPrintHeader
+        title="Item-Wise Usage Report"
+        subtitle="Workshop Stock Consumption Ledger"
+        metadata={[
+          ...(loaderData.selectedPart
+            ? [
+                {
+                  label: "Filtered Item",
+                  value: `${loaderData.selectedPart.sku} — ${loaderData.selectedPart.name}`,
+                },
+              ]
+            : []),
+          { label: "Period", value: loaderData.range.period },
+          {
+            label: "Date Range",
+            value: `${loaderData.range.start || "—"} to ${loaderData.range.end || "—"}`,
+          },
+          { label: "Total Usage Rows", value: loaderData.rows.length },
+          ...(loaderData.selectedPart
+            ? [{ label: "Total Quantity Issued", value: totalIssued.toFixed(2) }]
+            : []),
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Reports</p>
@@ -96,7 +121,7 @@ export default function ItemUsagePage({ loaderData }: Route.ComponentProps) {
           type="button"
           onClick={() => window.print()}
         >
-          Print
+          Print / Save as PDF
         </button>
       </div>
       <Form
@@ -176,6 +201,8 @@ export default function ItemUsagePage({ loaderData }: Route.ComponentProps) {
           <p className="muted">Showing the first 250 rows.</p>
         ) : null}
       </section>
+
+      <ReportPrintFooter reportName="Item-Wise Usage Report" />
     </>
   );
 }

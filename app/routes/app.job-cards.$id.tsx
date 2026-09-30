@@ -618,394 +618,306 @@ export default function JobCardDetailPage({
         ) : null}
       </div>
 
-      {/* DEDICATED COMPLETE MULTI-PAGE PRINT LAYOUT */}
-      <div
-        className="print-only"
-        style={{
-          display: "none",
-          color: "#000000",
-          backgroundColor: "#ffffff",
-          fontFamily: "var(--font-sans, system-ui, sans-serif)",
-          fontSize: "12px",
-          lineHeight: "1.4",
-        }}
-      >
+      {/* DEDICATED COMPLETE MULTI-PAGE PRINT LAYOUT (A4 WORKSHOP STANDARD) */}
+      <div className="print-only print-doc-container">
         {/* Printable Header */}
-        <div
-          style={{
-            borderBottom: "2px solid #000000",
-            paddingBottom: "10px",
-            marginBottom: "16px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-          }}
-        >
+        <div className="print-header-bar">
           <div>
-            <h1
+            <div
               style={{
-                fontSize: "18px",
-                fontWeight: "bold",
-                margin: "0 0 4px 0",
+                fontSize: "14pt",
+                fontWeight: "900",
                 textTransform: "uppercase",
-                letterSpacing: "0.05em",
+                letterSpacing: "0.04em",
+                color: "#111",
               }}
             >
-              DS Gunasekara Group
-            </h1>
-            <p style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>
-              WORKSHOP JOB CARD — {card.type}
-            </p>
-            <p style={{ margin: "2px 0 0 0", color: "#555" }}>
-              Store: {card.storeCode} — {card.store}
-            </p>
+              DS GUNASEKARA GROUP
+            </div>
+            <div
+              style={{
+                fontSize: "10pt",
+                fontWeight: "700",
+                color: "#333",
+                letterSpacing: "0.02em",
+                marginTop: "2px",
+              }}
+            >
+              WORKSHOP & FLEET MAINTENANCE
+            </div>
+            <div style={{ fontSize: "9pt", color: "#555", marginTop: "2px" }}>
+              Store: <strong>{card.storeCode}</strong> — {card.store}
+            </div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div
               style={{
-                fontSize: "16px",
-                fontWeight: "bold",
-                fontFamily: "monospace",
-                border: "1px solid #000",
-                padding: "4px 8px",
-                display: "inline-block",
-                marginBottom: "4px",
+                fontSize: "13pt",
+                fontWeight: "800",
+                textTransform: "uppercase",
+                color: "#111",
+                letterSpacing: "0.05em",
+              }}
+            >
+              JOB CARD ({card.type})
+            </div>
+            <div
+              style={{
+                fontSize: "11pt",
+                fontWeight: "700",
+                fontFamily: "var(--font-mono, monospace)",
+                marginTop: "3px",
               }}
             >
               {card.jobNumber}
             </div>
-            <p style={{ margin: "0", fontSize: "11px" }}>
-              Date: <strong>{card.businessDate}</strong>
-            </p>
-            <p style={{ margin: "0", fontSize: "11px" }}>
-              Status: <strong>{card.status}</strong>
-            </p>
+            <div style={{ fontSize: "9pt", color: "#555", marginTop: "2px" }}>
+              {card.businessDate} • <strong>{card.status}</strong>
+            </div>
           </div>
         </div>
 
-        {/* Vehicle & Inspector Details */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "12px",
-            marginBottom: "16px",
-            border: "1px solid #000",
-            padding: "8px 12px",
-          }}
-        >
-          <div>
-            <p style={{ margin: "0 0 4px 0" }}>
-              <strong>Fleet Number:</strong> {card.fleetNumber}
-            </p>
-            <p style={{ margin: "0 0 4px 0" }}>
-              <strong>Registration:</strong> {card.registrationNumber || "N/A"}
-            </p>
-            <p style={{ margin: "0" }}>
-              <strong>Make / Model:</strong>{" "}
-              {[card.make, card.model].filter(Boolean).join(" ") || "N/A"}
-            </p>
-          </div>
-          <div>
-            <p style={{ margin: "0 0 4px 0" }}>
-              <strong>Odometer:</strong>{" "}
-              {card.odometerKm ? `${card.odometerKm} km` : "N/A"}
-            </p>
-            <p style={{ margin: "0 0 4px 0" }}>
-              <strong>Assigned Mechanic:</strong>{" "}
-              {card.mechanicName || "Unassigned"}
-            </p>
-            <p style={{ margin: "0" }}>
-              <strong>Opened By:</strong> {card.openedBy} ({card.businessDate})
-            </p>
-          </div>
-        </div>
-
-        {/* Defect / Complaint */}
-        <div
-          style={{
-            border: "1px solid #000",
-            padding: "8px 12px",
-            marginBottom: "16px",
-            pageBreakInside: "avoid",
-          }}
-        >
-          <div
-            style={{
-              fontWeight: "bold",
-              textTransform: "uppercase",
-              fontSize: "11px",
-              borderBottom: "1px solid #ccc",
-              paddingBottom: "2px",
-              marginBottom: "4px",
-            }}
-          >
-            Driver / Inspector Complaint & Defect Description:
-          </div>
-          <p style={{ margin: "0", whiteSpace: "pre-wrap" }}>
-            {card.complaint}
-          </p>
-        </div>
-
-        {/* Work Done / Action Taken */}
-        <div
-          style={{
-            border: "1px solid #000",
-            padding: "8px 12px",
-            marginBottom: "16px",
-            pageBreakInside: "avoid",
-          }}
-        >
-          <div
-            style={{
-              fontWeight: "bold",
-              textTransform: "uppercase",
-              fontSize: "11px",
-              borderBottom: "1px solid #ccc",
-              paddingBottom: "2px",
-              marginBottom: "4px",
-            }}
-          >
-            Work Done & Action Taken:
-          </div>
-          <p style={{ margin: "0", whiteSpace: "pre-wrap" }}>
-            {card.workDone || "Pending completion..."}
-          </p>
-          {card.notes ? (
-            <p style={{ margin: "4px 0 0 0", color: "#444", fontSize: "11px" }}>
-              <strong>Notes:</strong> {card.notes}
-            </p>
-          ) : null}
-        </div>
-
-        {/* Parts Issued & Returned Table */}
-        <div style={{ marginBottom: "16px", pageBreakInside: "auto" }}>
-          <div
-            style={{
-              fontWeight: "bold",
-              fontSize: "13px",
-              textTransform: "uppercase",
-              marginBottom: "6px",
-              borderBottom: "1px solid #000",
-              paddingBottom: "2px",
-            }}
-          >
-            Spare Parts Issued & Returned:
-          </div>
-          {card.documents.length === 0 ? (
-            <p style={{ margin: "0", fontStyle: "italic", color: "#666" }}>
-              No spare parts issued on this job card.
-            </p>
-          ) : (
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "11px",
-              }}
-            >
-              <thead>
-                <tr style={{ borderBottom: "1.5px solid #000" }}>
-                  <th style={{ textAlign: "left", padding: "4px" }}>Doc #</th>
-                  <th style={{ textAlign: "left", padding: "4px" }}>Type</th>
-                  <th style={{ textAlign: "left", padding: "4px" }}>SKU</th>
-                  <th style={{ textAlign: "left", padding: "4px" }}>
-                    Description
-                  </th>
-                  <th style={{ textAlign: "right", padding: "4px" }}>
-                    Quantity
-                  </th>
-                </tr>
-              </thead>
+        {/* Section 1: Vehicle & Job Information */}
+        <div className="print-section-box">
+          <div className="print-section-title">Vehicle & Job Information</div>
+          <div className="print-section-body" style={{ padding: "8px 12px" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10pt" }}>
               <tbody>
-                {card.documents.map((row, idx) => (
-                  <tr
-                    key={`print-${row.id}-${row.sku}-${idx}`}
-                    style={{
-                      borderBottom: "1px solid #ddd",
-                      pageBreakInside: "avoid",
-                    }}
-                  >
-                    <td style={{ padding: "4px", fontFamily: "monospace" }}>
-                      {row.number}
-                    </td>
-                    <td style={{ padding: "4px" }}>
-                      {row.type.replaceAll("_", " ")}
-                    </td>
-                    <td style={{ padding: "4px", fontFamily: "monospace" }}>
-                      {row.sku}
-                    </td>
-                    <td style={{ padding: "4px" }}>{row.part}</td>
-                    <td
-                      style={{
-                        padding: "4px",
-                        textAlign: "right",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      {row.quantity}
-                    </td>
-                  </tr>
-                ))}
+                <tr>
+                  <td style={{ width: "18%", color: "#555", padding: "4px 0" }}>Fleet No.</td>
+                  <td style={{ width: "32%", fontWeight: "700", padding: "4px 0" }}>
+                    {card.fleetNumber || "—"}
+                  </td>
+                  <td style={{ width: "18%", color: "#555", padding: "4px 0" }}>Registration</td>
+                  <td style={{ width: "32%", fontWeight: "700", padding: "4px 0" }}>
+                    {card.registrationNumber || "—"}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ color: "#555", padding: "4px 0" }}>Make / Model</td>
+                  <td style={{ padding: "4px 0" }}>
+                    {[card.make, card.model].filter(Boolean).join(" ") || "—"}
+                  </td>
+                  <td style={{ color: "#555", padding: "4px 0" }}>Odometer</td>
+                  <td style={{ padding: "4px 0" }}>
+                    {card.odometerKm ? `${Number(card.odometerKm).toLocaleString()} km` : "—"}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ color: "#555", padding: "4px 0" }}>Mechanic</td>
+                  <td style={{ padding: "4px 0", fontWeight: "600" }}>
+                    {card.mechanicName || "—"}
+                  </td>
+                  <td style={{ color: "#555", padding: "4px 0" }}>Opened By</td>
+                  <td style={{ padding: "4px 0" }}>
+                    {card.openedBy || "—"}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ color: "#555", padding: "4px 0" }}>Opened Date</td>
+                  <td style={{ padding: "4px 0" }}>{card.businessDate}</td>
+                  <td style={{ color: "#555", padding: "4px 0" }}>Job Status</td>
+                  <td style={{ padding: "4px 0", fontWeight: "700" }}>{card.status}</td>
+                </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* Section 2: Driver / Inspector Complaint */}
+        <div className="print-section-box">
+          <div className="print-section-title">Driver / Inspector Complaint</div>
+          <div
+            className="print-section-body"
+            style={{ minHeight: "44px", whiteSpace: "pre-wrap", fontWeight: "500" }}
+          >
+            {card.complaint || "—"}
+          </div>
+        </div>
+
+        {/* Section 3: Work Done / Action Taken */}
+        <div className="print-section-box">
+          <div className="print-section-title">Work Done / Action Taken</div>
+          <div className="print-section-body" style={{ minHeight: "48px" }}>
+            <div style={{ whiteSpace: "pre-wrap" }}>
+              {card.workDone || "Pending completion..."}
+            </div>
+            {card.notes ? (
+              <div style={{ marginTop: "6px", fontSize: "9.5pt", color: "#444" }}>
+                <strong>Notes:</strong> {card.notes}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Section 4: Spare Parts Issued / Returned Table */}
+        <div className="print-section-box" style={{ pageBreakInside: "auto" }}>
+          <div className="print-section-title">Spare Parts Issued / Returned</div>
+          {card.documents.length === 0 ? (
+            <div className="print-section-body" style={{ fontStyle: "italic", color: "#666" }}>
+              No spare parts issued on this job card.
+            </div>
+          ) : (
+            <div>
+              <table className="print-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: "25%" }}>Document No.</th>
+                    <th style={{ width: "14%" }}>Type</th>
+                    <th style={{ width: "22%" }}>SKU</th>
+                    <th>Description</th>
+                    <th style={{ width: "12%", textAlign: "right" }}>Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {card.documents.map((row, idx) => {
+                    const isReturn = row.type.includes("RETURN");
+                    return (
+                      <tr key={`print-part-${row.id}-${row.sku}-${idx}`}>
+                        <td style={{ fontFamily: "var(--font-mono, monospace)", fontSize: "9pt" }}>
+                          {row.number}
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              fontWeight: "700",
+                              fontSize: "8.5pt",
+                              padding: "1px 5px",
+                              border: "1px solid #111",
+                              backgroundColor: isReturn ? "#fff" : "#f1f3f5",
+                              display: "inline-block",
+                            }}
+                          >
+                            {isReturn ? "RETURN" : "ISSUE"}
+                          </span>
+                        </td>
+                        <td style={{ fontFamily: "var(--font-mono, monospace)", fontSize: "9pt" }}>
+                          {row.sku}
+                        </td>
+                        <td>{row.part}</td>
+                        <td style={{ textAlign: "right", fontWeight: "700" }}>
+                          {Number(row.quantity).toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div
+                style={{
+                  padding: "6px 10px",
+                  backgroundColor: "#fafafa",
+                  borderTop: "1px solid #ccc",
+                  textAlign: "right",
+                  fontSize: "9.5pt",
+                  fontWeight: "600",
+                }}
+              >
+                Total Document Lines: {card.documents.length} item(s) • Total Quantity:{" "}
+                {card.documents
+                  .reduce((sum, d) => sum + Number(d.quantity), 0)
+                  .toFixed(2)}{" "}
+                units
+              </div>
+            </div>
           )}
         </div>
 
-        {/* Tyres Section */}
-        {card.tyreEvents.length > 0 || card.fitted.length > 0 ? (
-          <div
-            style={{
-              marginBottom: "16px",
-              pageBreakInside: "avoid",
-              border: "1px solid #000",
-              padding: "8px 12px",
-            }}
-          >
-            <div
-              style={{
-                fontWeight: "bold",
-                fontSize: "11px",
-                textTransform: "uppercase",
-                borderBottom: "1px solid #ccc",
-                paddingBottom: "2px",
-                marginBottom: "6px",
-              }}
-            >
-              Tyre Activity on This Card:
-            </div>
-            {card.tyreEvents.length > 0 ? (
-              <ul style={{ margin: "0 0 6px 16px", padding: "0" }}>
+        {/* Section 5: Tyre Activity */}
+        <div className="print-section-box">
+          <div className="print-section-title">Tyre Activity</div>
+          <div className="print-section-body">
+            {card.tyreEvents.length === 0 ? (
+              <span style={{ color: "#666" }}>No tyre movements recorded.</span>
+            ) : (
+              <ul style={{ margin: "0", paddingLeft: "18px" }}>
                 {card.tyreEvents.map((t) => (
-                  <li key={`print-tyre-${t.id}`}>
-                    <strong>{t.type}</strong> — Serial: {t.serialNumber}
+                  <li key={`print-tyre-act-${t.id}`} style={{ marginBottom: "2px" }}>
+                    <strong>{t.type}</strong> — Serial:{" "}
+                    <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
+                      {t.serialNumber}
+                    </span>
                     {t.toPosition ? ` → Position ${t.toPosition}` : ""}
                     {t.fromPosition ? ` (from ${t.fromPosition})` : ""}
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p style={{ margin: "0", color: "#666" }}>
-                No tyre movements logged.
-              </p>
             )}
           </div>
+        </div>
+
+        {/* Section 6: Oil Changes (if any) */}
+        {card.oilChanges.length > 0 ? (
+          <div className="print-section-box">
+            <div className="print-section-title">Lubricant / Oil Changes</div>
+            <div className="print-section-body">
+              <ul style={{ margin: "0", paddingLeft: "18px" }}>
+                {card.oilChanges.map((o) => (
+                  <li key={`print-oil-act-${o.id}`} style={{ marginBottom: "2px" }}>
+                    <strong>{o.part}</strong> ({o.sku}) — <strong>{o.litres} Litres</strong>
+                    {o.odometerKm ? ` @ ${Number(o.odometerKm).toLocaleString()} km` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
         ) : null}
 
-        {/* Oil Changes Section */}
-        {card.oilChanges.length > 0 ? (
-          <div
-            style={{
-              marginBottom: "16px",
-              pageBreakInside: "avoid",
-              border: "1px solid #000",
-              padding: "8px 12px",
-            }}
-          >
+        {/* Section 7: Completion & Verification Signatures */}
+        <div className="print-section-box" style={{ marginTop: "16px", pageBreakInside: "avoid" }}>
+          <div className="print-section-title">Completion / Verification Signatures</div>
+          <div className="print-section-body" style={{ padding: "14px 12px 8px 12px" }}>
             <div
               style={{
-                fontWeight: "bold",
-                fontSize: "11px",
-                textTransform: "uppercase",
-                borderBottom: "1px solid #ccc",
-                paddingBottom: "2px",
-                marginBottom: "6px",
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: "24px",
+                textAlign: "left",
               }}
             >
-              Lubricant / Oil Changes:
-            </div>
-            <ul style={{ margin: "0 0 0 16px", padding: "0" }}>
-              {card.oilChanges.map((o) => (
-                <li key={`print-oil-${o.id}`}>
-                  <strong>{o.part}</strong> ({o.sku}) — {o.litres} Litres
-                  {o.odometerKm ? ` @ ${o.odometerKm} km` : ""}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "9.5pt", marginBottom: "32px" }}>
+                  Mechanic / Technician
+                </div>
+                <div style={{ borderTop: "1.5px solid #111", paddingTop: "4px" }}>
+                  <div style={{ fontSize: "9pt" }}>
+                    Name: <strong>{card.mechanicName || "____________________"}</strong>
+                  </div>
+                  <div style={{ fontSize: "9pt", marginTop: "3px" }}>Date: ____________________</div>
+                  <div style={{ fontSize: "8pt", color: "#555", marginTop: "4px" }}>Work Completed</div>
+                </div>
+              </div>
 
-        {/* Physical Signatures Block */}
-        <div
-          className="page-break-inside-avoid"
-          style={{
-            marginTop: "24px",
-            border: "1px solid #000",
-            padding: "12px",
-            pageBreakInside: "avoid",
-          }}
-        >
-          <div
-            style={{
-              fontWeight: "bold",
-              fontSize: "11px",
-              textTransform: "uppercase",
-              marginBottom: "24px",
-              textAlign: "center",
-            }}
-          >
-            Verification & Authorization Signatures
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: "20px",
-              textAlign: "center",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  borderTop: "1px dashed #000",
-                  paddingTop: "4px",
-                  fontWeight: "bold",
-                }}
-              >
-                Mechanic / Technician
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "9.5pt", marginBottom: "32px" }}>
+                  Storekeeper
+                </div>
+                <div style={{ borderTop: "1.5px solid #111", paddingTop: "4px" }}>
+                  <div style={{ fontSize: "9pt" }}>Name: ____________________</div>
+                  <div style={{ fontSize: "9pt", marginTop: "3px" }}>Date: ____________________</div>
+                  <div style={{ fontSize: "8pt", color: "#555", marginTop: "4px" }}>Parts Verified</div>
+                </div>
               </div>
-              <div style={{ fontSize: "10px", color: "#555" }}>
-                Name: {card.mechanicName || "........................"}
-              </div>
-              <div style={{ fontSize: "10px", color: "#555" }}>
-                Date: ........................
-              </div>
-            </div>
-            <div>
-              <div
-                style={{
-                  borderTop: "1px dashed #000",
-                  paddingTop: "4px",
-                  fontWeight: "bold",
-                }}
-              >
-                Storekeeper
-              </div>
-              <div style={{ fontSize: "10px", color: "#555" }}>
-                Parts Issued Verified
-              </div>
-              <div style={{ fontSize: "10px", color: "#555" }}>
-                Date: ........................
-              </div>
-            </div>
-            <div>
-              <div
-                style={{
-                  borderTop: "1px dashed #000",
-                  paddingTop: "4px",
-                  fontWeight: "bold",
-                }}
-              >
-                Workshop Supervisor / Manager
-              </div>
-              <div style={{ fontSize: "10px", color: "#555" }}>
-                Job Completed & Approved
-              </div>
-              <div style={{ fontSize: "10px", color: "#555" }}>
-                Date: ........................
+
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "9.5pt", marginBottom: "32px" }}>
+                  Workshop Supervisor
+                </div>
+                <div style={{ borderTop: "1.5px solid #111", paddingTop: "4px" }}>
+                  <div style={{ fontSize: "9pt" }}>Name: ____________________</div>
+                  <div style={{ fontSize: "9pt", marginTop: "3px" }}>Date: ____________________</div>
+                  <div style={{ fontSize: "8pt", color: "#555", marginTop: "4px" }}>Final Approval</div>
+                </div>
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Standard StoreOPS Print Footer */}
+        <div className="print-footer-bar">
+          <div>StoreOPS • DS Gunasekara Group</div>
+          <div>{card.jobNumber}</div>
+          <div>Printed: {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
         </div>
       </div>
     </>

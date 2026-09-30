@@ -1,3 +1,4 @@
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { getUnusualIssues } from "~/features/inventory/queries.server";
 import {
   UNUSUAL_ISSUE_THRESHOLD,
@@ -21,6 +22,16 @@ export default function UnusualIssuesPage({
 }: Route.ComponentProps) {
   return (
     <>
+      <ReportPrintHeader
+        title="Unusual / Repetitive Issues Audit"
+        subtitle="Maintenance Quality Control & Fraud Prevention"
+        metadata={[
+          { label: "Threshold", value: `${loaderData.threshold}+ issues` },
+          { label: "Time Window", value: `Last ${loaderData.windowDays} days` },
+          { label: "Flagged Items", value: loaderData.rows.length },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Reports</p>
@@ -35,7 +46,7 @@ export default function UnusualIssuesPage({
           type="button"
           onClick={() => window.print()}
         >
-          Print
+          Print / Save as PDF
         </button>
       </div>
       <section className="panel">
@@ -72,6 +83,8 @@ export default function UnusualIssuesPage({
           </table>
         </div>
       </section>
+
+      <ReportPrintFooter reportName="Unusual / Repetitive Issues Audit" />
     </>
   );
 }

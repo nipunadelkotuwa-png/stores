@@ -1,4 +1,5 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { movementFiltersFromSearch } from "~/features/inventory/movement-filters";
@@ -28,6 +29,20 @@ export default function MovementsPage({ loaderData }: Route.ComponentProps) {
   const [params] = useSearchParams();
   return (
     <>
+      <ReportPrintHeader
+        title="Stock Movement Ledger"
+        subtitle="Central Workshop & Fleet Inventory Management"
+        metadata={[
+          ...(loaderData.focus ? [{ label: "Focus", value: loaderData.focus }] : []),
+          { label: "Period", value: loaderData.range.period },
+          {
+            label: "Date Range",
+            value: `${loaderData.range.start || "—"} to ${loaderData.range.end || "—"}`,
+          },
+          { label: "Total Rows", value: loaderData.rows.length },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Audit report</p>
@@ -141,6 +156,8 @@ export default function MovementsPage({ loaderData }: Route.ComponentProps) {
           </table>
         </div>
       </section>
+
+      <ReportPrintFooter reportName="Stock Movement Ledger" />
     </>
   );
 }

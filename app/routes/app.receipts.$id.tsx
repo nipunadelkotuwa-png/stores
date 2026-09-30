@@ -41,10 +41,24 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
         className="panel receipt-panel"
         style={{ maxWidth: "800px", margin: "0 auto", padding: "2rem" }}
       >
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <h2>Store Management System</h2>
-          <p>
-            {doc.storeCode} - {doc.store}
+        <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+          <h2 style={{ letterSpacing: "0.04em", margin: 0, fontSize: "1.35rem", fontWeight: 800 }}>
+            DS GUNASEKARA GROUP
+          </h2>
+          <p
+            style={{
+              margin: "3px 0 0 0",
+              fontWeight: 700,
+              color: "#555",
+              textTransform: "uppercase",
+              fontSize: "0.85rem",
+              letterSpacing: "0.05em",
+            }}
+          >
+            Central Stores & Fleet Inventory Management
+          </p>
+          <p style={{ margin: "3px 0 0 0", color: "#444", fontSize: "0.85rem" }}>
+            Store: <strong>{doc.storeCode} — {doc.store}</strong>
           </p>
         </div>
 
@@ -52,26 +66,29 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
           style={{
             display: "flex",
             justifyContent: "space-between",
-            marginBottom: "2rem",
+            marginBottom: "1.5rem",
             flexWrap: "wrap",
             gap: "1rem",
+            borderTop: "1.5px solid #111",
+            borderBottom: "1.5px solid #111",
+            padding: "8px 0",
           }}
         >
           <div>
-            <p>
-              <strong>Document Number:</strong> {doc.number}
+            <p style={{ margin: "2px 0" }}>
+              <strong>Document Number:</strong> <span className="mono">{doc.number}</span>
             </p>
-            <p>
+            <p style={{ margin: "2px 0" }}>
               <strong>Type:</strong> {doc.type.replaceAll("_", " ")}
             </p>
-            <p>
+            <p style={{ margin: "2px 0" }}>
               <strong>Status:</strong> {doc.status.replaceAll("_", " ")}
             </p>
-            <p>
+            <p style={{ margin: "2px 0" }}>
               <strong>Date:</strong> {doc.date}
             </p>
             {doc.destinationStore ? (
-              <p>
+              <p style={{ margin: "2px 0" }}>
                 <strong>Transfer Note:</strong> {doc.storeCode} ({doc.store}) ➔{" "}
                 {doc.destinationStoreCode} ({doc.destinationStore})
               </p>
@@ -79,7 +96,7 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
           </div>
           <div style={{ textAlign: "right" }}>
             {doc.jobNumber ? (
-              <p>
+              <p style={{ margin: "2px 0" }}>
                 <strong>Job Card:</strong>{" "}
                 <Link
                   to={`/job-cards/${doc.jobCardId}`}
@@ -91,24 +108,24 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
               </p>
             ) : null}
             {doc.bus ? (
-              <p>
+              <p style={{ margin: "2px 0" }}>
                 <strong>Fleet Number:</strong> {doc.bus}
                 {doc.busRegistration ? ` (${doc.busRegistration})` : ""}
               </p>
             ) : null}
             {doc.createdByName ? (
-              <p>
-                <strong>Created By:</strong> {doc.createdByName}
+              <p style={{ margin: "2px 0" }}>
+                <strong>Prepared By:</strong> {doc.createdByName}
               </p>
             ) : null}
             {doc.postedByName ? (
-              <p>
+              <p style={{ margin: "2px 0" }}>
                 <strong>Posted By:</strong> {doc.postedByName}
               </p>
             ) : null}
-            <p>
+            <p style={{ margin: "2px 0" }}>
               <strong>Posted At:</strong>{" "}
-              {doc.postedAt ? new Date(doc.postedAt).toLocaleString() : "N/A"}
+              {doc.postedAt ? new Date(doc.postedAt).toLocaleString("en-GB") : "—"}
             </p>
           </div>
         </div>
@@ -189,8 +206,8 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
         {doc.reason && (
           <div
             style={{
-              marginTop: "2rem",
-              paddingTop: "1rem",
+              marginTop: "1.5rem",
+              paddingTop: "0.75rem",
               borderTop: "1px solid #eee",
             }}
           >
@@ -201,23 +218,44 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
         )}
 
         <div
+          className="print-section"
           style={{
-            marginTop: "4rem",
-            display: "flex",
-            justifyContent: "space-between",
+            marginTop: "3rem",
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "2rem",
+            textAlign: "center",
           }}
         >
-          <div style={{ textAlign: "center", width: "200px" }}>
+          <div>
             <div
-              style={{ borderBottom: "1px solid #000", height: "40px" }}
+              style={{ borderBottom: "1.5px solid #000", height: "35px" }}
             ></div>
-            <p style={{ marginTop: "0.5rem" }}>Issued / Received By</p>
+            <p style={{ marginTop: "0.4rem", fontWeight: "600", fontSize: "9pt" }}>
+              Issued / Prepared By: {doc.createdByName || "____________________"}
+            </p>
           </div>
-          <div style={{ textAlign: "center", width: "200px" }}>
+          <div>
             <div
-              style={{ borderBottom: "1px solid #000", height: "40px" }}
+              style={{ borderBottom: "1.5px solid #000", height: "35px" }}
             ></div>
-            <p style={{ marginTop: "0.5rem" }}>Authorized Signatory</p>
+            <p style={{ marginTop: "0.4rem", fontWeight: "600", fontSize: "9pt" }}>
+              Authorized / Received By
+            </p>
+          </div>
+        </div>
+
+        {/* Standard StoreOPS Print Footer */}
+        <div className="print-footer-bar print-only">
+          <div>StoreOPS • DS Gunasekara Group</div>
+          <div>{doc.number}</div>
+          <div>
+            Printed:{" "}
+            {new Date().toLocaleDateString("en-GB", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })}
           </div>
         </div>
       </section>
@@ -227,8 +265,15 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
           __html: `
         @media print {
           .no-print { display: none !important; }
-          body { background: white; padding: 0; }
-          .panel { box-shadow: none; border: none; }
+          body { background: white !important; padding: 0 !important; }
+          .panel, .receipt-panel {
+            box-shadow: none !important;
+            border: 1.5px solid #111 !important;
+            border-radius: 0 !important;
+            padding: 12px 16px !important;
+            margin: 0 auto !important;
+            max-width: 100% !important;
+          }
         }
       `,
         }}

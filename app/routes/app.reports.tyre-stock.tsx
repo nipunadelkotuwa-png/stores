@@ -1,4 +1,5 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { BUSINESS_DAG_STAGES } from "~/features/workshop/constants";
 import { getTyreStockReport } from "~/features/workshop/queries.server";
 import { statusLabel } from "~/features/workshop/tyre-lifecycle";
@@ -31,9 +32,32 @@ export default function TyreStockReportPage({
 }: Route.ComponentProps) {
   const [params] = useSearchParams();
   const { report } = loaderData;
+  const selectedStore = loaderData.stores.find(
+    (s) => s.id === params.get("store"),
+  );
 
   return (
     <>
+      <ReportPrintHeader
+        title="Total Tyre Stock Register"
+        subtitle="Workshop Tyre Asset Management System"
+        metadata={[
+          ...(selectedStore
+            ? [{ label: "Store", value: selectedStore.code }]
+            : []),
+          ...(params.get("stage")
+            ? [{ label: "Stage", value: params.get("stage") }]
+            : []),
+          ...(params.get("status")
+            ? [{ label: "Status", value: params.get("status") }]
+            : []),
+          { label: "Active Tyres", value: report.kpis.active },
+          { label: "In Warehouse", value: report.kpis.warehouse },
+          { label: "On Buses", value: report.kpis.onBuses },
+          { label: "At DAG", value: report.kpis.atDag },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Reports</p>
@@ -48,7 +72,7 @@ export default function TyreStockReportPage({
           type="button"
           onClick={() => window.print()}
         >
-          Print
+          Print / Save as PDF
         </button>
       </div>
 
@@ -220,6 +244,8 @@ export default function TyreStockReportPage({
           </table>
         </div>
       </section>
+
+      <ReportPrintFooter reportName="Total Tyre Stock Register" />
     </>
   );
 }

@@ -1216,10 +1216,16 @@ td small {
     transition: none;
   }
 }
+
+.print-only,
+.only-print {
+  display: none !important;
+}
+
 @media print {
   @page {
     size: A4 portrait;
-    margin: 12mm;
+    margin: 10mm 12mm 12mm 12mm;
   }
   html,
   body {
@@ -1229,10 +1235,13 @@ td small {
     height: auto !important;
     min-height: 0 !important;
     background: #ffffff !important;
-    color: #000000 !important;
+    color: #111111 !important;
+    font-size: 11pt !important;
+    line-height: 1.35 !important;
   }
   .sidebar,
   .topbar,
+  .app-footer,
   .no-print {
     display: none !important;
   }
@@ -1250,15 +1259,106 @@ td small {
     margin: 0 !important;
     max-width: none !important;
   }
-  .print-only {
+  .panel {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin-bottom: 0 !important;
+    background: transparent !important;
+  }
+  .print-only,
+  .only-print {
     display: block !important;
   }
   .screen-only {
     display: none !important;
   }
+  .print-section,
   .page-break-inside-avoid {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+  }
+  .table-wrap {
+    overflow: visible !important;
+  }
+  thead {
+    display: table-header-group !important;
+  }
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .print-doc-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #111111 !important;
+    background: #ffffff !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+  }
+  .print-header-bar {
+    border-bottom: 2.5px solid #111111;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .print-section-box {
+    border: 1.5px solid #111111;
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .print-section-title {
+    background-color: #f1f3f5;
+    border-bottom: 1.5px solid #111111;
+    padding: 4px 8px;
+    font-weight: 700;
+    font-size: 9.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #111111;
+  }
+  .print-section-body {
+    padding: 8px 10px;
+    font-size: 10.5pt;
+  }
+  table,
+  .print-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 9.5pt !important;
+  }
+  table th,
+  .print-table th {
+    background-color: #f1f3f5 !important;
+    border-top: 1.5px solid #111111 !important;
+    border-bottom: 1.5px solid #111111 !important;
+    padding: 6px 8px !important;
+    text-align: left;
+    font-weight: 700 !important;
+    font-size: 9pt !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+    color: #111111 !important;
+  }
+  table td,
+  .print-table td {
+    padding: 6px 8px !important;
+    border-bottom: 1px solid #d9d9d9 !important;
+    vertical-align: middle !important;
+  }
+  .print-footer-bar {
+    border-top: 1px solid #777777;
+    margin-top: 20px;
+    padding-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8.5pt;
+    color: #555555;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   }
 }
 

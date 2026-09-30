@@ -1,4 +1,5 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getDailyMovements } from "~/features/inventory/queries.server";
@@ -27,6 +28,16 @@ export default function DailyMovementReport({
   const [params] = useSearchParams();
   return (
     <>
+      <ReportPrintHeader
+        title="Daily Movement Report"
+        subtitle="Central Workshop & Fleet Inventory Management"
+        metadata={[
+          { label: "Date", value: loaderData.date },
+          { label: "Period Filter", value: loaderData.range.period },
+          { label: "Total Movements", value: loaderData.rows.length },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Reports</p>
@@ -57,22 +68,15 @@ export default function DailyMovementReport({
       </section>
 
       <section className="panel print-panel">
-        <h2 className="only-print">Daily Movement Report: {loaderData.date}</h2>
         <div className="table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr style={{ borderBottom: "2px solid #000" }}>
-                <th style={{ textAlign: "left", padding: "0.5rem" }}>
-                  Document
-                </th>
-                <th style={{ textAlign: "left", padding: "0.5rem" }}>Store</th>
-                <th style={{ textAlign: "left", padding: "0.5rem" }}>Part</th>
-                <th style={{ textAlign: "right", padding: "0.5rem" }}>
-                  Movement
-                </th>
-                <th style={{ textAlign: "right", padding: "0.5rem" }}>
-                  Balance
-                </th>
+              <tr>
+                <th style={{ textAlign: "left" }}>Document</th>
+                <th style={{ textAlign: "left" }}>Store</th>
+                <th style={{ textAlign: "left" }}>Part</th>
+                <th style={{ textAlign: "right" }}>Movement</th>
+                <th style={{ textAlign: "right" }}>Balance</th>
               </tr>
             </thead>
             <tbody>
@@ -87,26 +91,22 @@ export default function DailyMovementReport({
                 </tr>
               ) : (
                 loaderData.rows.map((row, index) => (
-                  <tr
-                    key={`${row.id}-${index}`}
-                    style={{ borderBottom: "1px solid #ccc" }}
-                  >
-                    <td style={{ padding: "0.5rem" }}>
+                  <tr key={`${row.id}-${index}`}>
+                    <td>
                       <Link to={`/receipts/${row.id}`} className="mono">
                         {row.number}
                       </Link>
                       <br />
                       <small>{row.type.replace("_", " ")}</small>
                     </td>
-                    <td style={{ padding: "0.5rem" }}>{row.store}</td>
-                    <td style={{ padding: "0.5rem" }}>
+                    <td>{row.store}</td>
+                    <td>
                       <strong>{row.sku}</strong>
                       <br />
                       <small>{row.part}</small>
                     </td>
                     <td
                       style={{
-                        padding: "0.5rem",
                         textAlign: "right",
                         color:
                           Number(row.delta) < 0
@@ -117,9 +117,7 @@ export default function DailyMovementReport({
                       {Number(row.delta) > 0 ? "+" : ""}
                       {row.delta}
                     </td>
-                    <td style={{ padding: "0.5rem", textAlign: "right" }}>
-                      {row.balance}
-                    </td>
+                    <td style={{ textAlign: "right" }}>{row.balance}</td>
                   </tr>
                 ))
               )}
@@ -128,21 +126,7 @@ export default function DailyMovementReport({
         </div>
       </section>
 
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-        .only-print { display: none; }
-        @media print {
-          .no-print { display: none !important; }
-          .only-print { display: block; margin-bottom: 1rem; }
-          body { background: white; padding: 0; }
-          .panel { box-shadow: none; border: none; padding: 0; }
-          table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #ddd; padding: 8px; }
-        }
-      `,
-        }}
-      />
+      <ReportPrintFooter reportName="Daily Movement Report" />
     </>
   );
 }

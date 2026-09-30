@@ -1,4 +1,5 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getDailyIssues } from "~/features/inventory/queries.server";
@@ -31,6 +32,19 @@ export default function DailyIssuesPage({ loaderData }: Route.ComponentProps) {
   const [params] = useSearchParams();
   return (
     <>
+      <ReportPrintHeader
+        title="Daily Issues Report"
+        subtitle="Workshop Stock Consumption Ledger"
+        metadata={[
+          { label: "Period", value: loaderData.range.period },
+          {
+            label: "Date Range",
+            value: `${loaderData.start}${loaderData.start !== loaderData.end ? ` to ${loaderData.end}` : ""}`,
+          },
+          { label: "Total Issue Records", value: loaderData.rows.length },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Reports</p>
@@ -42,7 +56,7 @@ export default function DailyIssuesPage({ loaderData }: Route.ComponentProps) {
           type="button"
           onClick={() => window.print()}
         >
-          Print
+          Print / Save as PDF
         </button>
       </div>
       <section className="panel no-print" style={{ marginBottom: "1.5rem" }}>
@@ -96,6 +110,8 @@ export default function DailyIssuesPage({ loaderData }: Route.ComponentProps) {
           </table>
         </div>
       </section>
+
+      <ReportPrintFooter reportName="Daily Issues Report" />
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { resolveReportPeriod } from "~/features/reports/period";
@@ -29,8 +30,29 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function DagOutReport({ loaderData }: Route.ComponentProps) {
   const [params] = useSearchParams();
+  const selectedSupplier = loaderData.suppliers.find(
+    (s) => s.id === params.get("supplier"),
+  );
+  const selectedStore = loaderData.stores.find(
+    (s) => s.id === params.get("store"),
+  );
+
   return (
     <>
+      <ReportPrintHeader
+        title="DAG Out Summary"
+        subtitle="Tyre Retreading & Supplier Custody Register"
+        metadata={[
+          ...(selectedSupplier
+            ? [{ label: "Supplier", value: selectedSupplier.name }]
+            : []),
+          ...(selectedStore
+            ? [{ label: "Store", value: selectedStore.code }]
+            : []),
+          { label: "Total Tyres at DAG", value: loaderData.summary.total },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Tyres</p>
@@ -44,7 +66,7 @@ export default function DagOutReport({ loaderData }: Route.ComponentProps) {
           type="button"
           onClick={() => window.print()}
         >
-          Print
+          Print / Save as PDF
         </button>
       </div>
       <Form
@@ -128,6 +150,8 @@ export default function DagOutReport({ loaderData }: Route.ComponentProps) {
           </p>
         </div>
       ) : null}
+
+      <ReportPrintFooter reportName="DAG Out Summary" />
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getBusUsage } from "~/features/inventory/queries.server";
@@ -25,6 +26,22 @@ export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
 
   return (
     <>
+      <ReportPrintHeader
+        title="Bus-Wise Stock Issues"
+        subtitle="Workshop & Fleet Maintenance Department"
+        metadata={[
+          ...(params.get("bus")
+            ? [{ label: "Bus Filter", value: params.get("bus") }]
+            : []),
+          { label: "Period", value: loaderData.range.period },
+          {
+            label: "Date Range",
+            value: `${loaderData.range.start || "—"} to ${loaderData.range.end || "—"}`,
+          },
+          { label: "Total Issue Records", value: loaderData.rows.length },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Fleet report</p>
@@ -120,6 +137,8 @@ export default function BusUsagePage({ loaderData }: Route.ComponentProps) {
           </table>
         </div>
       </section>
+
+      <ReportPrintFooter reportName="Bus-Wise Stock Issues" />
     </>
   );
 }

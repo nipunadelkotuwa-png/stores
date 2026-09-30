@@ -1,4 +1,5 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getFastMovingParts } from "~/features/inventory/queries.server";
@@ -24,6 +25,19 @@ export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
   const [params] = useSearchParams();
   return (
     <>
+      <ReportPrintHeader
+        title="Fast Moving Items Summary"
+        subtitle="Inventory Velocity & Consumption Analytics"
+        metadata={[
+          { label: "Period", value: loaderData.range.period },
+          {
+            label: "Date Range",
+            value: `${loaderData.range.start || "—"} to ${loaderData.range.end || "—"}`,
+          },
+          { label: "Total Ranked Items", value: loaderData.rows.length },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Reports</p>
@@ -51,24 +65,14 @@ export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
       </section>
 
       <section className="panel print-panel">
-        <h2 className="only-print">
-          Fast Moving Items Report ({loaderData.range.start} to{" "}
-          {loaderData.range.end})
-        </h2>
         <div className="table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr style={{ borderBottom: "2px solid #000" }}>
-                <th style={{ textAlign: "left", padding: "0.5rem" }}>SKU</th>
-                <th style={{ textAlign: "left", padding: "0.5rem" }}>
-                  Part Name
-                </th>
-                <th style={{ textAlign: "right", padding: "0.5rem" }}>
-                  Documents
-                </th>
-                <th style={{ textAlign: "right", padding: "0.5rem" }}>
-                  Total Issued
-                </th>
+              <tr>
+                <th style={{ textAlign: "left" }}>SKU</th>
+                <th style={{ textAlign: "left" }}>Part Name</th>
+                <th style={{ textAlign: "right" }}>Documents</th>
+                <th style={{ textAlign: "right" }}>Total Issued</th>
                 <th className="no-print" />
               </tr>
             </thead>
@@ -84,21 +88,12 @@ export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
                 </tr>
               ) : (
                 loaderData.rows.map((row, index) => (
-                  <tr
-                    key={`${row.sku}-${index}`}
-                    style={{ borderBottom: "1px solid #ccc" }}
-                  >
-                    <td style={{ padding: "0.5rem" }} className="mono">
-                      {row.sku}
-                    </td>
-                    <td style={{ padding: "0.5rem" }}>{row.part}</td>
-                    <td style={{ padding: "0.5rem", textAlign: "right" }}>
-                      {row.issueCount}
-                    </td>
-                    <td style={{ padding: "0.5rem", textAlign: "right" }}>
-                      {row.totalIssued}
-                    </td>
-                    <td className="no-print" style={{ padding: "0.5rem" }}>
+                  <tr key={`${row.sku}-${index}`}>
+                    <td className="mono">{row.sku}</td>
+                    <td>{row.part}</td>
+                    <td style={{ textAlign: "right" }}>{row.issueCount}</td>
+                    <td style={{ textAlign: "right" }}>{row.totalIssued}</td>
+                    <td className="no-print">
                       <Link to={`/issues/new?part=${row.partId}`}>Issue</Link>
                     </td>
                   </tr>
@@ -109,21 +104,7 @@ export default function FastMovingReport({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
 
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-        .only-print { display: none; }
-        @media print {
-          .no-print { display: none !important; }
-          .only-print { display: block; margin-bottom: 1rem; }
-          body { background: white; padding: 0; }
-          .panel { box-shadow: none; border: none; padding: 0; }
-          table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #ddd; padding: 8px; }
-        }
-      `,
-        }}
-      />
+      <ReportPrintFooter reportName="Fast Moving Items Summary" />
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { Form, Link, useSearchParams } from "react-router";
+import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getLocalPurchases } from "~/features/inventory/queries.server";
@@ -25,9 +26,33 @@ export default function PurchasesReportPage({
   loaderData,
 }: Route.ComponentProps) {
   const [params] = useSearchParams();
+  const totalAmount = loaderData.rows.reduce(
+    (sum, r) => sum + (Number(r.total) || 0),
+    0,
+  );
 
   return (
     <>
+      <ReportPrintHeader
+        title="Local Purchases Report"
+        subtitle="Central Workshop & Fleet Inventory Management"
+        metadata={[
+          ...(params.get("supplier")
+            ? [{ label: "Supplier", value: params.get("supplier") }]
+            : []),
+          { label: "Period", value: loaderData.range.period },
+          {
+            label: "Date Range",
+            value: `${loaderData.range.start || "—"} to ${loaderData.range.end || "—"}`,
+          },
+          { label: "Total Purchases", value: loaderData.rows.length },
+          {
+            label: "Total Value",
+            value: `${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LKR`,
+          },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Procurement report</p>
@@ -126,6 +151,8 @@ export default function PurchasesReportPage({
           </table>
         </div>
       </section>
+
+      <ReportPrintFooter reportName="Local Purchases Report" />
     </>
   );
 }
