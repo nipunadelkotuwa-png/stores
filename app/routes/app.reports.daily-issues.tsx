@@ -20,7 +20,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     start,
     end,
     range,
-    rows: await getDailyIssues(await requirePermission(request, "reports.read"), { start, end }),
+    rows: await getDailyIssues(
+      await requirePermission(request, "reports.read"),
+      { start, end },
+    ),
   };
 }
 
@@ -51,9 +54,7 @@ export default function DailyIssuesPage({ loaderData }: Route.ComponentProps) {
           />
           <p className="muted" style={{ marginTop: "0.75rem" }}>
             Showing {loaderData.start}
-            {loaderData.start !== loaderData.end
-              ? ` to ${loaderData.end}`
-              : ""}
+            {loaderData.start !== loaderData.end ? ` to ${loaderData.end}` : ""}
           </p>
         </Form>
       </section>

@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { Form, Link, useActionData, useNavigation, useSearchParams } from "react-router";
+import {
+  Form,
+  Link,
+  useActionData,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 import { z } from "zod";
 import { CsrfField } from "~/components/csrf-field";
 import { db } from "~/db/client.server";
@@ -91,13 +97,11 @@ export async function action({ request }: Route.ActionArgs) {
   const parsed = partFields.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "SKU, name, and unit are required." };
   try {
-    await db
-      .insert(parts)
-      .values({
-        ...parsed.data,
-        sku: parsed.data.sku.toUpperCase(),
-        barcode: normalizeBarcode(parsed.data.barcode),
-      });
+    await db.insert(parts).values({
+      ...parsed.data,
+      sku: parsed.data.sku.toUpperCase(),
+      barcode: normalizeBarcode(parsed.data.barcode),
+    });
     return { ok: true };
   } catch (error) {
     return {
@@ -327,7 +331,11 @@ export default function PartsPage({ loaderData }: Route.ComponentProps) {
               </label>
               <label>
                 Part name
-                <input name="name" required defaultValue={editing?.name ?? ""} />
+                <input
+                  name="name"
+                  required
+                  defaultValue={editing?.name ?? ""}
+                />
               </label>
               <label>
                 Unit

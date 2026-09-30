@@ -25,6 +25,8 @@ export const jobCardStatus = pgEnum("job_card_status", [
   "CANCELLED",
 ]);
 
+export const jobCardType = pgEnum("job_card_type", ["TRANSPORT", "TOURISM"]);
+
 export const tyreLifecycleStage = pgEnum("tyre_lifecycle_stage", [
   "ORG",
   "DAG1",
@@ -74,12 +76,14 @@ export const jobCardSequences = pgTable(
       .references(() => stores.id)
       .notNull(),
     year: integer("year").notNull(),
+    type: jobCardType("type").default("TRANSPORT").notNull(),
     nextValue: integer("next_value").default(1).notNull(),
   },
   (table) => [
-    uniqueIndex("job_card_sequences_store_year_unique").on(
+    uniqueIndex("job_card_sequences_store_year_type_unique").on(
       table.storeId,
       table.year,
+      table.type,
     ),
   ],
 );
@@ -89,6 +93,7 @@ export const jobCards = pgTable(
   {
     id: idColumn(),
     jobNumber: text("job_number").notNull(),
+    type: jobCardType("type").default("TRANSPORT").notNull(),
     storeId: uuid("store_id")
       .references(() => stores.id)
       .notNull(),

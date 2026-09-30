@@ -21,6 +21,12 @@ describe("resolveSearchNavigation", () => {
     expect(resolveSearchNavigation("pos", "JOB-2026-001")).toBe(
       "/job-cards?q=JOB-2026-001",
     );
+    expect(resolveSearchNavigation("classic", "JC-TR-MAIN-2026-001")).toBe(
+      "/job-cards?q=JC-TR-MAIN-2026-001",
+    );
+    expect(resolveSearchNavigation("pos", "JC-TO-MAIN-2026-001")).toBe(
+      "/job-cards?q=JC-TO-MAIN-2026-001",
+    );
   });
 
   it("routes document numbers to movements report", () => {

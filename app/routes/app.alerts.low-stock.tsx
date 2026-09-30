@@ -3,7 +3,11 @@ import { getLowStock } from "~/features/inventory/queries.server";
 import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.alerts.low-stock";
 export async function loader({ request }: Route.LoaderArgs) {
-  return { alerts: await getLowStock(await requirePermission(request, "balances.read")) };
+  return {
+    alerts: await getLowStock(
+      await requirePermission(request, "balances.read"),
+    ),
+  };
 }
 export default function LowStockPage({ loaderData }: Route.ComponentProps) {
   return (

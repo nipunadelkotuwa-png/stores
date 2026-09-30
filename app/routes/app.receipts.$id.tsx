@@ -53,6 +53,8 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
             display: "flex",
             justifyContent: "space-between",
             marginBottom: "2rem",
+            flexWrap: "wrap",
+            gap: "1rem",
           }}
         >
           <div>
@@ -68,11 +70,40 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
             <p>
               <strong>Date:</strong> {doc.date}
             </p>
+            {doc.destinationStore ? (
+              <p>
+                <strong>Transfer Note:</strong> {doc.storeCode} ({doc.store}) ➔{" "}
+                {doc.destinationStoreCode} ({doc.destinationStore})
+              </p>
+            ) : null}
           </div>
           <div style={{ textAlign: "right" }}>
+            {doc.jobNumber ? (
+              <p>
+                <strong>Job Card:</strong>{" "}
+                <Link
+                  to={`/job-cards/${doc.jobCardId}`}
+                  style={{ textDecoration: "underline", fontWeight: 700 }}
+                >
+                  {doc.jobNumber}
+                </Link>
+                {doc.jobCardType ? ` (${doc.jobCardType})` : ""}
+              </p>
+            ) : null}
             {doc.bus ? (
               <p>
-                <strong>Bus:</strong> {doc.bus}
+                <strong>Fleet Number:</strong> {doc.bus}
+                {doc.busRegistration ? ` (${doc.busRegistration})` : ""}
+              </p>
+            ) : null}
+            {doc.createdByName ? (
+              <p>
+                <strong>Created By:</strong> {doc.createdByName}
+              </p>
+            ) : null}
+            {doc.postedByName ? (
+              <p>
+                <strong>Posted By:</strong> {doc.postedByName}
               </p>
             ) : null}
             <p>

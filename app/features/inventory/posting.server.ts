@@ -22,10 +22,7 @@ import {
 } from "~/lib/auth/authorization.server";
 import type { Permission } from "~/lib/auth/permissions";
 import { invalidatePendingApprovalCountCache } from "./approval-count-cache.server";
-import {
-  InsufficientStockError,
-  inventoryActionError,
-} from "./errors";
+import { InsufficientStockError, inventoryActionError } from "./errors";
 import { validateReturnableQuantities } from "./returnable";
 import {
   isStockDecrease,
@@ -118,7 +115,10 @@ export async function getReturnableQuantitiesByPart(
     )
     .groupBy(stockDocumentLines.partId);
 
-  const map = new Map<string, { issued: Decimal; returned: Decimal; available: Decimal }>();
+  const map = new Map<
+    string,
+    { issued: Decimal; returned: Decimal; available: Decimal }
+  >();
   for (const row of rows) {
     const issued = new Decimal(row.issued);
     const returned = new Decimal(row.returned);
@@ -449,147 +449,147 @@ export async function postReversalInTransaction(
     idempotencyKey: string;
   },
 ) {
-    const existing = await tx
-      .select({ id: stockDocuments.id, number: stockDocuments.documentNumber })
-      .from(stockDocuments)
-      .where(
-        and(
-          eq(stockDocuments.createdBy, actor.id),
-          eq(stockDocuments.idempotencyKey, input.idempotencyKey),
-        ),
-      )
-      .limit(1);
-    if (existing[0]) return existing[0];
+  const existing = await tx
+    .select({ id: stockDocuments.id, number: stockDocuments.documentNumber })
+    .from(stockDocuments)
+    .where(
+      and(
+        eq(stockDocuments.createdBy, actor.id),
+        eq(stockDocuments.idempotencyKey, input.idempotencyKey),
+      ),
+    )
+    .limit(1);
+  if (existing[0]) return existing[0];
 
-    const [original] = await tx
-      .select()
-      .from(stockDocuments)
-      .where(eq(stockDocuments.id, input.documentId))
-      .limit(1);
-    if (!original || original.status !== "POSTED") {
-      throw new Error("Posted document not found");
-    }
-    if (original.type === "REVERSAL") {
-      throw new Error("Cannot reverse a reversal document");
-    }
-    const [alreadyReversed] = await tx
-      .select({ id: stockDocuments.id })
-      .from(stockDocuments)
-      .where(eq(stockDocuments.reversesDocumentId, original.id))
-      .limit(1);
-    if (alreadyReversed) {
-      throw new Error("Document has already been reversed");
-    }
+  const [original] = await tx
+    .select()
+    .from(stockDocuments)
+    .where(eq(stockDocuments.id, input.documentId))
+    .limit(1);
+  if (!original || original.status !== "POSTED") {
+    throw new Error("Posted document not found");
+  }
+  if (original.type === "REVERSAL") {
+    throw new Error("Cannot reverse a reversal document");
+  }
+  const [alreadyReversed] = await tx
+    .select({ id: stockDocuments.id })
+    .from(stockDocuments)
+    .where(eq(stockDocuments.reversesDocumentId, original.id))
+    .limit(1);
+  if (alreadyReversed) {
+    throw new Error("Document has already been reversed");
+  }
 
-    const originalLines = await tx
-      .select()
-      .from(stockDocumentLines)
-      .where(eq(stockDocumentLines.documentId, original.id));
-    const originalMovements = await tx
-      .select()
-      .from(stockMovements)
-      .where(eq(stockMovements.documentId, original.id));
-    if (originalMovements.length === 0) {
-      throw new Error("Original document has no movements");
-    }
+  const originalLines = await tx
+    .select()
+    .from(stockDocumentLines)
+    .where(eq(stockDocumentLines.documentId, original.id));
+  const originalMovements = await tx
+    .select()
+    .from(stockMovements)
+    .where(eq(stockMovements.documentId, original.id));
+  if (originalMovements.length === 0) {
+    throw new Error("Original document has no movements");
+  }
 
-    const number = await nextDocumentNumber(
-      tx,
-      original.storeId,
-      "REVERSAL",
-      input.businessDate,
-    );
-    const [document] = await tx
-      .insert(stockDocuments)
+  const number = await nextDocumentNumber(
+    tx,
+    original.storeId,
+    "REVERSAL",
+    input.businessDate,
+  );
+  const [document] = await tx
+    .insert(stockDocuments)
+    .values({
+      documentNumber: number,
+      type: "REVERSAL",
+      status: "DRAFT",
+      storeId: original.storeId,
+      busId: original.busId,
+      supplierId: original.supplierId,
+      jobCardId: original.jobCardId,
+      reversesDocumentId: original.id,
+      businessDate: input.businessDate,
+      reason: input.reason,
+      notes: `Reverses ${original.documentNumber}`,
+      idempotencyKey: input.idempotencyKey,
+      createdBy: actor.id,
+    })
+    .returning();
+
+  const lineById = new Map(originalLines.map((line) => [line.id, line]));
+  let lineNumber = 0;
+  for (const movement of originalMovements) {
+    lineNumber += 1;
+    const sourceLine = lineById.get(movement.documentLineId);
+    if (!sourceLine) {
+      throw new Error("Movement line missing for reversal");
+    }
+    const delta = new Decimal(movement.quantityDelta).negated();
+    await tx
+      .insert(inventoryBalances)
       .values({
-        documentNumber: number,
-        type: "REVERSAL",
-        status: "DRAFT",
-        storeId: original.storeId,
-        busId: original.busId,
-        supplierId: original.supplierId,
-        jobCardId: original.jobCardId,
-        reversesDocumentId: original.id,
-        businessDate: input.businessDate,
-        reason: input.reason,
-        notes: `Reverses ${original.documentNumber}`,
-        idempotencyKey: input.idempotencyKey,
-        createdBy: actor.id,
-      })
-      .returning();
-
-    const lineById = new Map(originalLines.map((line) => [line.id, line]));
-    let lineNumber = 0;
-    for (const movement of originalMovements) {
-      lineNumber += 1;
-      const sourceLine = lineById.get(movement.documentLineId);
-      if (!sourceLine) {
-        throw new Error("Movement line missing for reversal");
-      }
-      const delta = new Decimal(movement.quantityDelta).negated();
-      await tx
-        .insert(inventoryBalances)
-        .values({
-          storeId: movement.storeId,
-          partId: movement.partId,
-          onHand: "0",
-        })
-        .onConflictDoNothing();
-      const [balance] = await tx
-        .update(inventoryBalances)
-        .set({
-          onHand: sql`${inventoryBalances.onHand} + ${delta.toFixed(3)}`,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(inventoryBalances.storeId, movement.storeId),
-            eq(inventoryBalances.partId, movement.partId),
-            sql`${inventoryBalances.onHand} + ${delta.toFixed(3)} >= 0`,
-          ),
-        )
-        .returning({ onHand: inventoryBalances.onHand });
-      if (!balance) throw new InsufficientStockError(movement.partId);
-      const [documentLine] = await tx
-        .insert(stockDocumentLines)
-        .values({
-          documentId: document.id,
-          lineNumber,
-          partId: sourceLine.partId,
-          quantity: sourceLine.quantity,
-          unitCost: sourceLine.unitCost,
-          skuSnapshot: sourceLine.skuSnapshot,
-          nameSnapshot: sourceLine.nameSnapshot,
-          unitSnapshot: sourceLine.unitSnapshot,
-        })
-        .returning();
-      await tx.insert(stockMovements).values({
-        documentId: document.id,
-        documentLineId: documentLine.id,
         storeId: movement.storeId,
         partId: movement.partId,
-        quantityDelta: delta.toFixed(3),
-        balanceAfter: balance.onHand,
-        reversesMovementId: movement.id,
-      });
-    }
-
-    await tx
-      .update(stockDocuments)
-      .set({ status: "POSTED", postedBy: actor.id, postedAt: new Date() })
-      .where(eq(stockDocuments.id, document.id));
-    await tx.insert(auditEvents).values({
-      actorId: actor.id,
-      eventType: "INVENTORY_REVERSED",
-      entityType: "stock_document",
-      entityId: document.id,
-      storeId: original.storeId,
-      metadata: {
-        documentNumber: number,
-        reverses: original.documentNumber,
-      },
+        onHand: "0",
+      })
+      .onConflictDoNothing();
+    const [balance] = await tx
+      .update(inventoryBalances)
+      .set({
+        onHand: sql`${inventoryBalances.onHand} + ${delta.toFixed(3)}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(inventoryBalances.storeId, movement.storeId),
+          eq(inventoryBalances.partId, movement.partId),
+          sql`${inventoryBalances.onHand} + ${delta.toFixed(3)} >= 0`,
+        ),
+      )
+      .returning({ onHand: inventoryBalances.onHand });
+    if (!balance) throw new InsufficientStockError(movement.partId);
+    const [documentLine] = await tx
+      .insert(stockDocumentLines)
+      .values({
+        documentId: document.id,
+        lineNumber,
+        partId: sourceLine.partId,
+        quantity: sourceLine.quantity,
+        unitCost: sourceLine.unitCost,
+        skuSnapshot: sourceLine.skuSnapshot,
+        nameSnapshot: sourceLine.nameSnapshot,
+        unitSnapshot: sourceLine.unitSnapshot,
+      })
+      .returning();
+    await tx.insert(stockMovements).values({
+      documentId: document.id,
+      documentLineId: documentLine.id,
+      storeId: movement.storeId,
+      partId: movement.partId,
+      quantityDelta: delta.toFixed(3),
+      balanceAfter: balance.onHand,
+      reversesMovementId: movement.id,
     });
-    return { id: document.id, number };
+  }
+
+  await tx
+    .update(stockDocuments)
+    .set({ status: "POSTED", postedBy: actor.id, postedAt: new Date() })
+    .where(eq(stockDocuments.id, document.id));
+  await tx.insert(auditEvents).values({
+    actorId: actor.id,
+    eventType: "INVENTORY_REVERSED",
+    entityType: "stock_document",
+    entityId: document.id,
+    storeId: original.storeId,
+    metadata: {
+      documentNumber: number,
+      reverses: original.documentNumber,
+    },
+  });
+  return { id: document.id, number };
 }
 
 export async function postReversal(
@@ -641,101 +641,101 @@ export async function submitIssueForApprovalInTransaction(
 ) {
   const command = prepareStockCommand("BUS_ISSUE", input);
   await requireStoreAccess(actor, command.storeId);
-    const existing = await tx
-      .select({
-        id: stockDocuments.id,
-        number: stockDocuments.documentNumber,
-        status: stockDocuments.status,
-      })
-      .from(stockDocuments)
-      .where(
-        and(
-          eq(stockDocuments.createdBy, actor.id),
-          eq(stockDocuments.idempotencyKey, command.idempotencyKey),
-        ),
-      )
-      .limit(1);
-    if (existing[0]) {
-      if (existing[0].status === "REJECTED") {
-        throw new Error(
-          "This request was already submitted and rejected. Start a new issue.",
-        );
-      }
-      return {
-        id: existing[0].id,
-        number: existing[0].number,
-        created: false,
-      };
+  const existing = await tx
+    .select({
+      id: stockDocuments.id,
+      number: stockDocuments.documentNumber,
+      status: stockDocuments.status,
+    })
+    .from(stockDocuments)
+    .where(
+      and(
+        eq(stockDocuments.createdBy, actor.id),
+        eq(stockDocuments.idempotencyKey, command.idempotencyKey),
+      ),
+    )
+    .limit(1);
+  if (existing[0]) {
+    if (existing[0].status === "REJECTED") {
+      throw new Error(
+        "This request was already submitted and rejected. Start a new issue.",
+      );
     }
+    return {
+      id: existing[0].id,
+      number: existing[0].number,
+      created: false,
+    };
+  }
 
-    const partRows = await tx
-      .select()
-      .from(parts)
-      .where(
-        inArray(
-          parts.id,
-          command.lines.map((line) => line.partId),
-        ),
-      );
-    if (partRows.length !== command.lines.length) {
-      throw new Error("One or more parts are invalid");
-    }
-    await assertJobCardForIssue(tx, "BUS_ISSUE", command);
-    for (const line of command.lines) {
-      await assertAvailableForPendingIssue(
-        tx,
-        command.storeId,
-        line.partId,
-        line.quantity,
-      );
-    }
-    const partById = new Map(partRows.map((part) => [part.id, part]));
-    const number = await nextDocumentNumber(
+  const partRows = await tx
+    .select()
+    .from(parts)
+    .where(
+      inArray(
+        parts.id,
+        command.lines.map((line) => line.partId),
+      ),
+    );
+  if (partRows.length !== command.lines.length) {
+    throw new Error("One or more parts are invalid");
+  }
+  await assertJobCardForIssue(tx, "BUS_ISSUE", command);
+  for (const line of command.lines) {
+    await assertAvailableForPendingIssue(
       tx,
       command.storeId,
-      "BUS_ISSUE",
-      command.businessDate,
+      line.partId,
+      line.quantity,
     );
-    const [document] = await tx
-      .insert(stockDocuments)
-      .values({
-        documentNumber: number,
-        type: "BUS_ISSUE",
-        status: "PENDING_APPROVAL",
-        storeId: command.storeId,
-        busId: command.busId,
-        jobCardId: command.jobCardId,
-        businessDate: command.businessDate,
-        reason: command.reason,
-        notes: command.notes,
-        idempotencyKey: command.idempotencyKey,
-        createdBy: actor.id,
-      })
-      .returning();
-
-    for (const [index, line] of command.lines.entries()) {
-      const part = partById.get(line.partId)!;
-      await tx.insert(stockDocumentLines).values({
-        documentId: document.id,
-        lineNumber: index + 1,
-        partId: part.id,
-        quantity: line.quantity.toFixed(3),
-        unitCost: line.unitCost,
-        skuSnapshot: part.sku,
-        nameSnapshot: part.name,
-        unitSnapshot: part.unit,
-      });
-    }
-
-    await tx.insert(auditEvents).values({
-      actorId: actor.id,
-      eventType: "ISSUE_SUBMITTED",
-      entityType: "stock_document",
-      entityId: document.id,
+  }
+  const partById = new Map(partRows.map((part) => [part.id, part]));
+  const number = await nextDocumentNumber(
+    tx,
+    command.storeId,
+    "BUS_ISSUE",
+    command.businessDate,
+  );
+  const [document] = await tx
+    .insert(stockDocuments)
+    .values({
+      documentNumber: number,
+      type: "BUS_ISSUE",
+      status: "PENDING_APPROVAL",
       storeId: command.storeId,
-      metadata: { documentNumber: number, type: "BUS_ISSUE" },
+      busId: command.busId,
+      jobCardId: command.jobCardId,
+      businessDate: command.businessDate,
+      reason: command.reason,
+      notes: command.notes,
+      idempotencyKey: command.idempotencyKey,
+      createdBy: actor.id,
+    })
+    .returning();
+
+  for (const [index, line] of command.lines.entries()) {
+    const part = partById.get(line.partId)!;
+    await tx.insert(stockDocumentLines).values({
+      documentId: document.id,
+      lineNumber: index + 1,
+      partId: part.id,
+      quantity: line.quantity.toFixed(3),
+      unitCost: line.unitCost,
+      skuSnapshot: part.sku,
+      nameSnapshot: part.name,
+      unitSnapshot: part.unit,
     });
-    return { id: document.id, number, created: true };
+  }
+
+  await tx.insert(auditEvents).values({
+    actorId: actor.id,
+    eventType: "ISSUE_SUBMITTED",
+    entityType: "stock_document",
+    entityId: document.id,
+    storeId: command.storeId,
+    metadata: { documentNumber: number, type: "BUS_ISSUE" },
+  });
+  return { id: document.id, number, created: true };
 }
 
 export function notifyIssueSubmitted(result: {
@@ -857,9 +857,8 @@ export async function approvePendingIssue(actor: Actor, documentId: string) {
         storeId: document.storeId,
         metadata: { documentNumber: document.documentNumber },
       });
-      const { completePendingWorkshopIssue } = await import(
-        "~/features/workshop/pending-completion.server"
-      );
+      const { completePendingWorkshopIssue } =
+        await import("~/features/workshop/pending-completion.server");
       await completePendingWorkshopIssue(tx, actor, document);
       return {
         id: document.id,
@@ -925,9 +924,8 @@ export async function rejectPendingIssue(
     if (!rejected) {
       throw new Error("Pending bus issue not found");
     }
-    const { revertPendingWorkshopIssue } = await import(
-      "~/features/workshop/pending-completion.server"
-    );
+    const { revertPendingWorkshopIssue } =
+      await import("~/features/workshop/pending-completion.server");
     await revertPendingWorkshopIssue(tx, rejected.id);
     return rejected;
   });

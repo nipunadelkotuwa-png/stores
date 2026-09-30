@@ -100,6 +100,7 @@ export async function getPendingJobCards(actor: Actor) {
     .select({
       id: jobCards.id,
       jobNumber: jobCards.jobNumber,
+      type: jobCards.type,
       storeId: jobCards.storeId,
       store: stores.name,
       storeCode: stores.code,
@@ -146,6 +147,7 @@ export async function listJobCards(
   actor: Actor,
   filters?: {
     status?: "PENDING_APPROVAL" | "OPEN" | "REJECTED" | "CLOSED" | "CANCELLED";
+    type?: "TRANSPORT" | "TOURISM";
     bus?: string;
     start?: string;
     end?: string;
@@ -156,6 +158,7 @@ export async function listJobCards(
     .select({
       id: jobCards.id,
       jobNumber: jobCards.jobNumber,
+      type: jobCards.type,
       status: jobCards.status,
       store: stores.name,
       storeCode: stores.code,
@@ -172,6 +175,7 @@ export async function listJobCards(
       and(
         scopedStoreCondition(jobCards.storeId, ids),
         filters?.status ? eq(jobCards.status, filters.status) : undefined,
+        filters?.type ? eq(jobCards.type, filters.type) : undefined,
         filters?.bus ? eq(buses.fleetNumber, filters.bus) : undefined,
         filters?.start
           ? sql`${jobCards.businessDate} >= ${filters.start}`
@@ -192,6 +196,7 @@ export async function getJobCardDetail(actor: Actor, id: string) {
     .select({
       id: jobCards.id,
       jobNumber: jobCards.jobNumber,
+      type: jobCards.type,
       status: jobCards.status,
       storeId: jobCards.storeId,
       store: stores.name,

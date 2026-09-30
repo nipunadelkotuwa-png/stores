@@ -96,7 +96,9 @@ export function PosIssueCart({
 
   useEffect(() => {
     if (!jobCardId) return;
-    unusualFetcher.load(`/unusual-issues?jobCard=${encodeURIComponent(jobCardId)}`);
+    unusualFetcher.load(
+      `/unusual-issues?jobCard=${encodeURIComponent(jobCardId)}`,
+    );
   }, [jobCardId]);
 
   const unusualCounts =

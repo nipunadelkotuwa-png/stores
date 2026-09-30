@@ -63,6 +63,13 @@ export default function NewJobCardPage({ loaderData }: Route.ComponentProps) {
           <input type="hidden" name="partId" value={loaderData.partId} />
         ) : null}
         <label>
+          Job Card Type
+          <select name="type" required defaultValue="TRANSPORT">
+            <option value="TRANSPORT">Transport (Route & Transit Buses)</option>
+            <option value="TOURISM">Tourism (Tour & Luxury Coaches)</option>
+          </select>
+        </label>
+        <label>
           Store
           {loaderData.stores.length === 0 ? (
             <p className="form-error">You are not assigned to any stores.</p>

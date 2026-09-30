@@ -1217,23 +1217,48 @@ td small {
   }
 }
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+  html,
+  body {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
   .sidebar,
   .topbar,
   .no-print {
     display: none !important;
   }
-  .app-frame {
-    display: block;
-    grid-template-columns: none;
-  }
+  .app-frame,
+  .page-shell,
   .content {
-    padding: 0;
-    margin: 0;
-    max-width: none;
+    display: block !important;
+    grid-template-columns: none !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
   }
-  body,
-  html {
-    background: var(--color-paper-2);
+  .print-only {
+    display: block !important;
+  }
+  .screen-only {
+    display: none !important;
+  }
+  .page-break-inside-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }
 

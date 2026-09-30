@@ -8,7 +8,9 @@ import type { Route } from "./+types/app.reports.unusual-issues";
 
 export async function loader({ request }: Route.LoaderArgs) {
   return {
-    rows: await getUnusualIssues(await requirePermission(request, "reports.read")),
+    rows: await getUnusualIssues(
+      await requirePermission(request, "reports.read"),
+    ),
     threshold: UNUSUAL_ISSUE_THRESHOLD,
     windowDays: UNUSUAL_ISSUE_WINDOW_DAYS,
   };

@@ -90,7 +90,9 @@ describe("non-admin store assignment", () => {
   });
 
   it("blocks demoting an admin with no store", () => {
-    expect(() => assertNonAdminHasStore("VIEWER", [])).toThrow(NonAdminStoreError);
+    expect(() => assertNonAdminHasStore("VIEWER", [])).toThrow(
+      NonAdminStoreError,
+    );
     expect(() => assertNonAdminHasStore("VIEWER", [])).toThrow(
       /Assign a store before changing this user away from admin/,
     );
@@ -101,7 +103,11 @@ describe("non-admin store assignment", () => {
       assertNonAdminHasStore("STORE_KEEPER", [{ storeId: "a" }], "a"),
     ).toThrow(/must keep at least one assigned store/);
     expect(() =>
-      assertNonAdminHasStore("STORE_KEEPER", [{ storeId: "a" }, { storeId: "b" }], "a"),
+      assertNonAdminHasStore(
+        "STORE_KEEPER",
+        [{ storeId: "a" }, { storeId: "b" }],
+        "a",
+      ),
     ).not.toThrow();
   });
 });

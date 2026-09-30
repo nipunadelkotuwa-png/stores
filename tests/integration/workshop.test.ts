@@ -11,16 +11,10 @@ describe.runIf(hasDb)("workshop job cards", () => {
     const { db } = await import("../../app/db/client.server");
     const { buses, jobCards, parts, stores, users } =
       await import("../../app/db/schema");
-    const {
-      approvePendingIssue,
-      postStock,
-      submitIssueForApproval,
-    } = await import("../../app/features/inventory/posting.server");
-    const {
-      approveJobCard,
-      closeJobCard,
-      openJobCard,
-    } = await import("../../app/features/workshop/job-cards.server");
+    const { approvePendingIssue, postStock, submitIssueForApproval } =
+      await import("../../app/features/inventory/posting.server");
+    const { approveJobCard, closeJobCard, openJobCard } =
+      await import("../../app/features/workshop/job-cards.server");
 
     const [admin] = await db
       .select()

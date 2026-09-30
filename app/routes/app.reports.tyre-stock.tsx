@@ -101,10 +101,7 @@ export default function TyreStockReportPage({
           </label>
           <label>
             Supplier
-            <select
-              name="supplier"
-              defaultValue={params.get("supplier") || ""}
-            >
+            <select name="supplier" defaultValue={params.get("supplier") || ""}>
               <option value="">All</option>
               {loaderData.suppliers.map((supplier) => (
                 <option key={supplier.id} value={supplier.id}>

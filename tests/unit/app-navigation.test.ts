@@ -9,12 +9,12 @@ import {
 
 describe("isNavItemActive", () => {
   it("matches dashboard only on root path", () => {
-    expect(isNavItemActive("/", { to: "/", label: "Dashboard", end: true })).toBe(
-      true,
-    );
-    expect(isNavItemActive("/parts", { to: "/", label: "Dashboard", end: true })).toBe(
-      false,
-    );
+    expect(
+      isNavItemActive("/", { to: "/", label: "Dashboard", end: true }),
+    ).toBe(true);
+    expect(
+      isNavItemActive("/parts", { to: "/", label: "Dashboard", end: true }),
+    ).toBe(false);
   });
 
   it("does not match /returns when on /returns/bus", () => {
@@ -25,7 +25,9 @@ describe("isNavItemActive", () => {
   });
 
   it("highlights purchases on /purchases/new", () => {
-    const purchases = operationsNavConfig.find((item) => item.to === "/purchases");
+    const purchases = operationsNavConfig.find(
+      (item) => item.to === "/purchases",
+    );
     expect(purchases).toBeDefined();
     expect(isNavItemActive("/purchases/new", purchases!)).toBe(true);
     expect(isNavItemActive("/purchases", purchases!)).toBe(true);
@@ -119,6 +121,8 @@ describe("navItemEnd", () => {
     expect(navItemEnd({ to: "/returns", label: "Returns", exact: true })).toBe(
       true,
     );
-    expect(navItemEnd({ to: "/purchases", label: "Purchases" })).toBeUndefined();
+    expect(
+      navItemEnd({ to: "/purchases", label: "Purchases" }),
+    ).toBeUndefined();
   });
 });

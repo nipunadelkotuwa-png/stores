@@ -144,7 +144,11 @@ export default function TransfersPage({ loaderData }: Route.ComponentProps) {
                         {loaderData.canCreate && row.canReceive ? (
                           <Form method="post">
                             <CsrfField />
-                            <input type="hidden" name="intent" value="receive" />
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="receive"
+                            />
                             <input
                               type="hidden"
                               name="documentId"

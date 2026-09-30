@@ -30,6 +30,7 @@ async function nextJobNumber(
   tx: Transaction,
   storeId: string,
   businessDate: string,
+  type: "TRANSPORT" | "TOURISM" = "TRANSPORT",
 ) {
   const year = Number(businessDate.slice(0, 4));
   const [store] = await tx
@@ -39,7 +40,8 @@ async function nextJobNumber(
     .limit(1);
   if (!store) throw new WorkshopError("Store no longer exists");
 
-  const numberPrefix = `JC-${store.code}-${year}-`;
+  const typeCode = type === "TOURISM" ? "TO" : "TR";
+  const numberPrefix = `JC-${typeCode}-${store.code}-${year}-`;
   const [aggregate] = await tx
     .select({
       maxSeq: sql<number>`coalesce(max(cast(substring(${jobCards.jobNumber} from '[0-9]+$') as integer)), 0)`,
@@ -55,7 +57,7 @@ async function nextJobNumber(
 
   await tx
     .insert(jobCardSequences)
-    .values({ storeId, year, nextValue: startAt })
+    .values({ storeId, year, type, nextValue: startAt })
     .onConflictDoNothing();
 
   const [sequence] = await tx
@@ -67,12 +69,13 @@ async function nextJobNumber(
       and(
         eq(jobCardSequences.storeId, storeId),
         eq(jobCardSequences.year, year),
+        eq(jobCardSequences.type, type),
       ),
     )
     .returning({ value: sql<number>`${jobCardSequences.nextValue} - 1` });
   if (!sequence) throw new WorkshopError("Unable to allocate job card number");
 
-  return `${numberPrefix}${String(sequence.value).padStart(6, "0")}`;
+  return `${numberPrefix}${String(sequence.value).padStart(3, "0")}`;
 }
 
 export async function loadOpenJobCard(tx: Transaction, jobCardId: string) {
@@ -141,11 +144,13 @@ export async function openJobCard(actor: Actor, input: unknown) {
       tx,
       command.storeId,
       command.businessDate,
+      command.type,
     );
     const [card] = await tx
       .insert(jobCards)
       .values({
         jobNumber,
+        type: command.type,
         storeId: command.storeId,
         busId: command.busId,
         status: "PENDING_APPROVAL",

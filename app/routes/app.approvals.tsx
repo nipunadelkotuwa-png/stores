@@ -125,16 +125,24 @@ export default function ApprovalsPage({ loaderData }: Route.ComponentProps) {
       {actionData && "error" in actionData ? (
         <p className="form-error">{actionData.error}</p>
       ) : null}
-      {actionData && "ok" in actionData && actionData.ok === "job-card-approved" ? (
+      {actionData &&
+      "ok" in actionData &&
+      actionData.ok === "job-card-approved" ? (
         <p className="muted">Job card approved for work.</p>
       ) : null}
-      {actionData && "ok" in actionData && actionData.ok === "job-card-rejected" ? (
+      {actionData &&
+      "ok" in actionData &&
+      actionData.ok === "job-card-rejected" ? (
         <p className="muted">Job card rejected.</p>
       ) : null}
-      {actionData && "ok" in actionData && actionData.ok === "issue-verified" ? (
+      {actionData &&
+      "ok" in actionData &&
+      actionData.ok === "issue-verified" ? (
         <p className="muted">Item issue verified and posted.</p>
       ) : null}
-      {actionData && "ok" in actionData && actionData.ok === "issue-rejected" ? (
+      {actionData &&
+      "ok" in actionData &&
+      actionData.ok === "issue-rejected" ? (
         <p className="muted">Item issue rejected.</p>
       ) : null}
 

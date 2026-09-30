@@ -79,7 +79,10 @@ export default function Login() {
         <div>
           <div className="auth-rail-mark">DG</div>
           <h2>Store desk</h2>
-          <p>Issue, receive, and count spare parts for the stores you are assigned.</p>
+          <p>
+            Issue, receive, and count spare parts for the stores you are
+            assigned.
+          </p>
         </div>
         <p className="auth-rail-meta">DS Gunasekara Group</p>
       </aside>

@@ -41,7 +41,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     userName: actor.displayName,
     pos: null,
     classic: await getDashboard(actor, {
-      periodDays: parsePeriodDays(new URL(request.url).searchParams.get("days")),
+      periodDays: parsePeriodDays(
+        new URL(request.url).searchParams.get("days"),
+      ),
     }),
   };
 }
@@ -59,7 +61,9 @@ export function shouldRevalidate({
 function DashboardLoading({ mode }: { mode: "pos" | "classic" }) {
   return (
     <div className="empty-state">
-      <strong>Loading {mode === "pos" ? "POS hub" : "classic dashboard"}…</strong>
+      <strong>
+        Loading {mode === "pos" ? "POS hub" : "classic dashboard"}…
+      </strong>
       <p className="muted">Fetching the latest store data.</p>
     </div>
   );

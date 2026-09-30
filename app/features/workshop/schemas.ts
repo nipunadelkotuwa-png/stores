@@ -35,6 +35,7 @@ const litresSchema = z
   });
 
 export const openJobCardSchema = z.object({
+  type: z.enum(["TRANSPORT", "TOURISM"]).default("TRANSPORT"),
   storeId: z.string().uuid(),
   busId: z.string().uuid(),
   businessDate: z.string().date(),
@@ -98,13 +99,16 @@ export const receiveTyreFromDagSchema = z.object({
   idempotencyKey: z.string().min(16).max(100),
 });
 
-const tyreIdListSchema = z.preprocess((value) => {
-  if (Array.isArray(value)) {
-    return value.map(String).filter((item) => item.length > 0);
-  }
-  if (typeof value === "string" && value.length > 0) return [value];
-  return [];
-}, z.array(z.string().uuid()).min(1, "Select at least one tyre"));
+const tyreIdListSchema = z.preprocess(
+  (value) => {
+    if (Array.isArray(value)) {
+      return value.map(String).filter((item) => item.length > 0);
+    }
+    if (typeof value === "string" && value.length > 0) return [value];
+    return [];
+  },
+  z.array(z.string().uuid()).min(1, "Select at least one tyre"),
+);
 
 export const sendTyresToDagSchema = z.object({
   tyreIds: tyreIdListSchema,

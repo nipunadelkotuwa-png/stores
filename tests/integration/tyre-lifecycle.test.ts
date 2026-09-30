@@ -772,8 +772,10 @@ describe.runIf(hasDb)("tyre lifecycle", () => {
       await import("../../app/features/workshop/tyres.server");
     const { WorkshopError } =
       await import("../../app/features/workshop/errors");
-    const { admin, supplier, lives, db, stockDocuments } =
-      await servicedLives("batch5", 3);
+    const { admin, supplier, lives, db, stockDocuments } = await servicedLives(
+      "batch5",
+      3,
+    );
     const batchKey = crypto.randomUUID();
     const invalidA = crypto.randomUUID();
     const invalidB = crypto.randomUUID();
@@ -850,8 +852,10 @@ describe.runIf(hasDb)("tyre lifecycle", () => {
   it("lets only one of two users send the same tyre to DAG", async () => {
     const { sendTyreToDag } =
       await import("../../app/features/workshop/tyres.server");
-    const { admin, supplier, lives, db, tyres, tag } =
-      await servicedLives("twouser", 1);
+    const { admin, supplier, lives, db, tyres, tag } = await servicedLives(
+      "twouser",
+      1,
+    );
     const { users } = await import("../../app/db/schema");
     const [other] = await db
       .insert(users)
@@ -969,8 +973,10 @@ describe.runIf(hasDb)("tyre lifecycle", () => {
       await import("../../app/features/workshop/tyres.server");
     const { WorkshopError } =
       await import("../../app/features/workshop/errors");
-    const { admin, supplier, lives, db, stockDocuments } =
-      await servicedLives("ambsku", 2);
+    const { admin, supplier, lives, db, stockDocuments } = await servicedLives(
+      "ambsku",
+      2,
+    );
     const { parts } = await import("../../app/db/schema");
     const [dag1] = await db
       .select()

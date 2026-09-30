@@ -209,16 +209,25 @@ export default function JobCardDetailPage({
     <>
       <div className="page-heading no-print">
         <div>
-          <p className="eyebrow">Workshop</p>
+          <p className="eyebrow">Workshop · {card.type}</p>
           <h1>{card.jobNumber}</h1>
           <p className="muted">
             <Link to={`/buses/${card.busId}`}>{card.fleetNumber}</Link>
             {card.registrationNumber
               ? ` — ${card.registrationNumber}`
-              : ""} · {card.storeCode} · {card.businessDate}
+              : ""}{" "}
+            {card.make || card.model
+              ? `(${[card.make, card.model].filter(Boolean).join(" ")})`
+              : ""}{" "}
+            · {card.storeCode} · {card.businessDate}
           </p>
         </div>
         <div className="heading-actions">
+          <span
+            className={`badge ${card.type === "TOURISM" ? "accent" : "subtle"}`}
+          >
+            {card.type}
+          </span>
           <span
             className={`badge ${
               open || pending
@@ -246,225 +255,68 @@ export default function JobCardDetailPage({
         <p className="form-error no-print">{actionData.error}</p>
       ) : null}
 
-      <section
-        className="panel receipt-panel"
-        style={{ marginBottom: "1.5rem" }}
-      >
-        <p>
-          <strong>Complaint:</strong> {card.complaint}
-        </p>
-        {card.mechanicName ? (
+      <div className="screen-only">
+        <section
+          className="panel receipt-panel"
+          style={{ marginBottom: "1.5rem" }}
+        >
           <p>
-            <strong>Mechanic:</strong> {card.mechanicName}
+            <strong>Complaint:</strong> {card.complaint}
           </p>
-        ) : null}
-        {card.odometerKm ? (
-          <p>
-            <strong>Odometer:</strong> {card.odometerKm} km
-          </p>
-        ) : null}
-        {card.workDone ? (
-          <p>
-            <strong>Work done:</strong> {card.workDone}
-          </p>
-        ) : null}
-        {card.notes ? (
-          <p>
-            <strong>Notes:</strong> {card.notes}
-          </p>
-        ) : null}
-        <p className="muted">
-          Opened by {card.openedBy}
-          {card.status === "REJECTED"
-            ? " · Rejected"
-            : card.closedAt
-              ? ` · Closed ${new Date(card.closedAt).toLocaleString()}`
-              : ""}
-        </p>
-      </section>
-
-      <section className="panel" style={{ marginBottom: "1.5rem" }}>
-        <h2>Tyres on this bus</h2>
-        <TyreMap slots={card.fitted} />
-      </section>
-
-      {pending ? (
-        <section className="panel no-print" style={{ marginBottom: "1.5rem" }}>
-          <p>
-            This job card is awaiting administrator approval. Parts, tyres, and
-            oil can be posted after it is approved.
-          </p>
-          {loaderData.canManage ? (
-            <p className="muted">
-              <Link to="/approvals?tab=job-cards">Open Approvals Center</Link>
+          {card.mechanicName ? (
+            <p>
+              <strong>Mechanic:</strong> {card.mechanicName}
             </p>
-          ) : (
-            <p className="muted">Ask an administrator to approve this card.</p>
-          )}
-          {loaderData.canUpdate ? (
-            <Form method="post" style={{ marginTop: "1rem" }}>
-              <CsrfField />
-              <input type="hidden" name="intent" value="cancel" />
-              <button className="text-button" disabled={busy}>
-                Cancel unused card
-              </button>
-            </Form>
           ) : null}
+          {card.odometerKm ? (
+            <p>
+              <strong>Odometer:</strong> {card.odometerKm} km
+            </p>
+          ) : null}
+          {card.workDone ? (
+            <p>
+              <strong>Work done:</strong> {card.workDone}
+            </p>
+          ) : null}
+          {card.notes ? (
+            <p>
+              <strong>Notes:</strong> {card.notes}
+            </p>
+          ) : null}
+          <p className="muted">
+            Opened by {card.openedBy}
+            {card.status === "REJECTED"
+              ? " · Rejected"
+              : card.closedAt
+                ? ` · Closed ${new Date(card.closedAt).toLocaleString()}`
+                : ""}
+          </p>
         </section>
-      ) : null}
 
-      {open && loaderData.canUpdate ? (
-        <>
+        <section className="panel" style={{ marginBottom: "1.5rem" }}>
+          <h2>Tyres on this bus</h2>
+          <TyreMap slots={card.fitted} />
+        </section>
+
+        {pending ? (
           <section
-            className="panel form-panel no-print"
+            className="panel no-print"
             style={{ marginBottom: "1.5rem" }}
           >
-            <h2>Issue parts</h2>
-            <Form method="post" className="stack">
-              <CsrfField />
-              <input type="hidden" name="intent" value="issue" />
-              <input type="hidden" name="idempotencyKey" value={issueKey} />
-              <StockLineItems
-                parts={loaderData.parts}
-                initialPartId={loaderData.initialPartId || undefined}
-                lineErrors={
-                  actionData && "lineErrors" in actionData
-                    ? actionData.lineErrors
-                    : undefined
-                }
-                onLinesChange={(rows) =>
-                  setIssuePartIds(rows.map((row) => row.partId))
-                }
-              />
-              <label>
-                Notes
-                <textarea name="notes" rows={2} />
-              </label>
-              {unusualParts.length > 0 ? (
-                <p className="form-error">
-                  Unusual request:{" "}
-                  {unusualParts
-                    .map(
-                      (row) =>
-                        `${row.label} has been issued to ${card.fleetNumber} ${row.count} times in the last 30 days`,
-                    )
-                    .join("; ")}{" "}
-                  (threshold {unusualThreshold}).
-                </p>
-              ) : null}
-              <button className="button button-primary" disabled={busy}>
-                Submit for verification
-              </button>
-            </Form>
-          </section>
-
-          <div
-            className="two-column no-print"
-            style={{ marginBottom: "1.5rem" }}
-          >
-            <section className="panel form-panel" id="fit-tyre">
-              <h2>Fit / replace tyre</h2>
-              {card.storeTyres.length === 0 ? (
-                <p className="muted">
-                  Register a tyre serial in store stock first.{" "}
-                  <Link to="/tyres/import">Import new tyres</Link>
-                </p>
-              ) : (
-                <Form method="post" className="stack">
-                  <CsrfField />
-                  <input type="hidden" name="intent" value="fit-tyre" />
-                  <input type="hidden" name="idempotencyKey" value={tyreKey} />
-                  <label>
-                    Tyre serial
-                    <select name="tyreId" required>
-                      <option value="">Select tyre</option>
-                      {card.storeTyres.map((tyre) => (
-                        <option key={tyre.id} value={tyre.id}>
-                          {tyre.serialNumber} — {tyre.sku} ({tyre.stage})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Position
-                    <select name="position" required>
-                      <option value="">Select position</option>
-                      {TYRE_POSITIONS.map((position) => (
-                        <option key={position} value={position}>
-                          {position} — {TYRE_POSITION_LABELS[position]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <p className="muted">
-                    Stock deducts after an administrator verifies the issue.
-                  </p>
-                  <button className="button button-primary" disabled={busy}>
-                    Submit tyre fit for verification
-                  </button>
-                </Form>
-              )}
-            </section>
-
-            <section className="panel form-panel">
-              <h2>Oil change</h2>
-              {card.oilParts.length === 0 ? (
-                <p className="muted">
-                  Add an OIL-category part to record a change.
-                </p>
-              ) : (
-                <Form method="post" className="stack">
-                  <CsrfField />
-                  <input type="hidden" name="intent" value="oil" />
-                  <input type="hidden" name="idempotencyKey" value={oilKey} />
-                  <label>
-                    Oil
-                    <select name="partId" required>
-                      <option value="">Select oil</option>
-                      {card.oilParts.map((part) => (
-                        <option key={part.id} value={part.id}>
-                          {part.sku} — {part.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Litres
-                    <input
-                      type="number"
-                      name="litres"
-                      min="0.001"
-                      step="0.001"
-                      required
-                    />
-                  </label>
-                  <label>
-                    Notes
-                    <textarea name="notes" rows={2} />
-                  </label>
-                  <p className="muted">
-                    Litres are reserved now and deducted after verification.
-                  </p>
-                  <button className="button button-primary" disabled={busy}>
-                    Submit oil change for verification
-                  </button>
-                </Form>
-              )}
-            </section>
-
-            <section className="panel form-panel">
-              <h2>Close job card</h2>
-              <Form method="post" className="stack">
-                <CsrfField />
-                <input type="hidden" name="intent" value="close" />
-                <label>
-                  Work done
-                  <textarea name="workDone" rows={4} required minLength={3} />
-                </label>
-                <button className="button button-primary" disabled={busy}>
-                  Close card
-                </button>
-              </Form>
+            <p>
+              This job card is awaiting administrator approval. Parts, tyres,
+              and oil can be posted after it is approved.
+            </p>
+            {loaderData.canManage ? (
+              <p className="muted">
+                <Link to="/approvals?tab=job-cards">Open Approvals Center</Link>
+              </p>
+            ) : (
+              <p className="muted">
+                Ask an administrator to approve this card.
+              </p>
+            )}
+            {loaderData.canUpdate ? (
               <Form method="post" style={{ marginTop: "1rem" }}>
                 <CsrfField />
                 <input type="hidden" name="intent" value="cancel" />
@@ -472,129 +324,690 @@ export default function JobCardDetailPage({
                   Cancel unused card
                 </button>
               </Form>
-            </section>
-          </div>
+            ) : null}
+          </section>
+        ) : null}
 
-          {card.removedWarehouse.length > 0 ? (
+        {open && loaderData.canUpdate ? (
+          <>
             <section
-              className="panel no-print"
+              className="panel form-panel no-print"
               style={{ marginBottom: "1.5rem" }}
             >
-              <h2>Removed tyres in warehouse</h2>
-              <p className="muted">
-                Shown after the replacement issue is verified.
-              </p>
-              <ul className="stack">
-                {card.removedWarehouse.map((tyre) => (
-                  <li key={tyre.id}>
-                    <Link to={`/tyres/${tyre.id}`}>{tyre.serialNumber}</Link>
-                    {" — "}
-                    {tyre.sku} ({tyre.stage})
-                    {tyre.actions.canFit ? (
-                      <>
-                        {" · "}
-                        <a href="#fit-tyre">Fit again</a>
-                      </>
-                    ) : null}
-                    {tyre.actions.canSendToDag ? (
-                      <>
-                        {" · "}
-                        <Link to={`/tyres/dag?send=${tyre.id}`}>
-                          Send to DAG
-                        </Link>
-                      </>
-                    ) : null}
-                    {tyre.actions.canDispose ? (
-                      <span style={{ display: "inline", marginLeft: "0.5rem" }}>
-                        <TyreDisposeForm
-                          tyreId={tyre.id}
-                          businessDate={card.businessDate}
-                          intent="dispose-tyre"
-                        />
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
+              <h2>Issue parts</h2>
+              <Form method="post" className="stack">
+                <CsrfField />
+                <input type="hidden" name="intent" value="issue" />
+                <input type="hidden" name="idempotencyKey" value={issueKey} />
+                <StockLineItems
+                  parts={loaderData.parts}
+                  initialPartId={loaderData.initialPartId || undefined}
+                  lineErrors={
+                    actionData && "lineErrors" in actionData
+                      ? actionData.lineErrors
+                      : undefined
+                  }
+                  onLinesChange={(rows) =>
+                    setIssuePartIds(rows.map((row) => row.partId))
+                  }
+                />
+                <label>
+                  Notes
+                  <textarea name="notes" rows={2} />
+                </label>
+                {unusualParts.length > 0 ? (
+                  <p className="form-error">
+                    Unusual request:{" "}
+                    {unusualParts
+                      .map(
+                        (row) =>
+                          `${row.label} has been issued to ${card.fleetNumber} ${row.count} times in the last 30 days`,
+                      )
+                      .join("; ")}{" "}
+                    (threshold {unusualThreshold}).
+                  </p>
+                ) : null}
+                <button className="button button-primary" disabled={busy}>
+                  Submit for verification
+                </button>
+              </Form>
             </section>
-          ) : null}
-        </>
-      ) : null}
 
-      <section className="panel" style={{ marginBottom: "1.5rem" }}>
-        <h2>Parts issued / returned</h2>
-        {card.documents.length === 0 ? (
-          <p className="muted">No stock documents on this card yet.</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
+            <div
+              className="two-column no-print"
+              style={{ marginBottom: "1.5rem" }}
+            >
+              <section className="panel form-panel" id="fit-tyre">
+                <h2>Fit / replace tyre</h2>
+                {card.storeTyres.length === 0 ? (
+                  <p className="muted">
+                    Register a tyre serial in store stock first.{" "}
+                    <Link to="/tyres/import">Import new tyres</Link>
+                  </p>
+                ) : (
+                  <Form method="post" className="stack">
+                    <CsrfField />
+                    <input type="hidden" name="intent" value="fit-tyre" />
+                    <input
+                      type="hidden"
+                      name="idempotencyKey"
+                      value={tyreKey}
+                    />
+                    <label>
+                      Tyre serial
+                      <select name="tyreId" required>
+                        <option value="">Select tyre</option>
+                        {card.storeTyres.map((tyre) => (
+                          <option key={tyre.id} value={tyre.id}>
+                            {tyre.serialNumber} — {tyre.sku} ({tyre.stage})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Position
+                      <select name="position" required>
+                        <option value="">Select position</option>
+                        {TYRE_POSITIONS.map((position) => (
+                          <option key={position} value={position}>
+                            {position} — {TYRE_POSITION_LABELS[position]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="muted">
+                      Stock deducts after an administrator verifies the issue.
+                    </p>
+                    <button className="button button-primary" disabled={busy}>
+                      Submit tyre fit for verification
+                    </button>
+                  </Form>
+                )}
+              </section>
+
+              <section className="panel form-panel">
+                <h2>Oil change</h2>
+                {card.oilParts.length === 0 ? (
+                  <p className="muted">
+                    Add an OIL-category part to record a change.
+                  </p>
+                ) : (
+                  <Form method="post" className="stack">
+                    <CsrfField />
+                    <input type="hidden" name="intent" value="oil" />
+                    <input type="hidden" name="idempotencyKey" value={oilKey} />
+                    <label>
+                      Oil
+                      <select name="partId" required>
+                        <option value="">Select oil</option>
+                        {card.oilParts.map((part) => (
+                          <option key={part.id} value={part.id}>
+                            {part.sku} — {part.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Litres
+                      <input
+                        type="number"
+                        name="litres"
+                        min="0.001"
+                        step="0.001"
+                        required
+                      />
+                    </label>
+                    <label>
+                      Notes
+                      <textarea name="notes" rows={2} />
+                    </label>
+                    <p className="muted">
+                      Litres are reserved now and deducted after verification.
+                    </p>
+                    <button className="button button-primary" disabled={busy}>
+                      Submit oil change for verification
+                    </button>
+                  </Form>
+                )}
+              </section>
+
+              <section className="panel form-panel">
+                <h2>Close job card</h2>
+                <Form method="post" className="stack">
+                  <CsrfField />
+                  <input type="hidden" name="intent" value="close" />
+                  <label>
+                    Work done
+                    <textarea name="workDone" rows={4} required minLength={3} />
+                  </label>
+                  <button className="button button-primary" disabled={busy}>
+                    Close card
+                  </button>
+                </Form>
+                <Form method="post" style={{ marginTop: "1rem" }}>
+                  <CsrfField />
+                  <input type="hidden" name="intent" value="cancel" />
+                  <button className="text-button" disabled={busy}>
+                    Cancel unused card
+                  </button>
+                </Form>
+              </section>
+            </div>
+
+            {card.removedWarehouse.length > 0 ? (
+              <section
+                className="panel no-print"
+                style={{ marginBottom: "1.5rem" }}
+              >
+                <h2>Removed tyres in warehouse</h2>
+                <p className="muted">
+                  Shown after the replacement issue is verified.
+                </p>
+                <ul className="stack">
+                  {card.removedWarehouse.map((tyre) => (
+                    <li key={tyre.id}>
+                      <Link to={`/tyres/${tyre.id}`}>{tyre.serialNumber}</Link>
+                      {" — "}
+                      {tyre.sku} ({tyre.stage})
+                      {tyre.actions.canFit ? (
+                        <>
+                          {" · "}
+                          <a href="#fit-tyre">Fit again</a>
+                        </>
+                      ) : null}
+                      {tyre.actions.canSendToDag ? (
+                        <>
+                          {" · "}
+                          <Link to={`/tyres/dag?send=${tyre.id}`}>
+                            Send to DAG
+                          </Link>
+                        </>
+                      ) : null}
+                      {tyre.actions.canDispose ? (
+                        <span
+                          style={{ display: "inline", marginLeft: "0.5rem" }}
+                        >
+                          <TyreDisposeForm
+                            tyreId={tyre.id}
+                            businessDate={card.businessDate}
+                            intent="dispose-tyre"
+                          />
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </>
+        ) : null}
+
+        <section className="panel" style={{ marginBottom: "1.5rem" }}>
+          <h2>Parts issued / returned</h2>
+          {card.documents.length === 0 ? (
+            <p className="muted">No stock documents on this card yet.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Document</th>
+                    <th>Type</th>
+                    <th>SKU</th>
+                    <th>Part</th>
+                    <th>Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {card.documents.map((row) => (
+                    <tr key={`${row.id}-${row.sku}`}>
+                      <td className="mono">
+                        <Link to={`/receipts/${row.id}`}>{row.number}</Link>
+                      </td>
+                      <td>
+                        {row.type.replaceAll("_", " ")}
+                        {row.status === "PENDING_APPROVAL"
+                          ? " · pending"
+                          : row.status === "REJECTED"
+                            ? " · rejected"
+                            : ""}
+                      </td>
+                      <td className="mono">{row.sku}</td>
+                      <td>{row.part}</td>
+                      <td className="quantity">{row.quantity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {card.oilChanges.length > 0 ? (
+          <section className="panel" style={{ marginBottom: "1.5rem" }}>
+            <h2>Oil changes</h2>
+            <ul>
+              {card.oilChanges.map((row) => (
+                <li key={row.id}>
+                  {row.part} ({row.sku}) — {row.litres} L
+                  {row.odometerKm ? ` @ ${row.odometerKm} km` : ""}
+                  {row.documentStatus === "PENDING_APPROVAL"
+                    ? " · awaiting verification"
+                    : row.documentStatus === "REJECTED"
+                      ? " · rejected"
+                      : ""}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {card.tyreEvents.length > 0 ? (
+          <section className="panel">
+            <h2>Tyre work</h2>
+            <ul>
+              {card.tyreEvents.map((row) => (
+                <li key={row.id}>
+                  {row.type} {row.serialNumber}
+                  {row.toPosition ? ` → ${row.toPosition}` : ""}
+                  {row.fromPosition ? ` from ${row.fromPosition}` : ""}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+      </div>
+
+      {/* DEDICATED COMPLETE MULTI-PAGE PRINT LAYOUT */}
+      <div
+        className="print-only"
+        style={{
+          display: "none",
+          color: "#000000",
+          backgroundColor: "#ffffff",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
+          fontSize: "12px",
+          lineHeight: "1.4",
+        }}
+      >
+        {/* Printable Header */}
+        <div
+          style={{
+            borderBottom: "2px solid #000000",
+            paddingBottom: "10px",
+            marginBottom: "16px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+          }}
+        >
+          <div>
+            <h1
+              style={{
+                fontSize: "18px",
+                fontWeight: "bold",
+                margin: "0 0 4px 0",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              DS Gunasekara Group
+            </h1>
+            <p style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>
+              WORKSHOP JOB CARD — {card.type}
+            </p>
+            <p style={{ margin: "2px 0 0 0", color: "#555" }}>
+              Store: {card.storeCode} — {card.store}
+            </p>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div
+              style={{
+                fontSize: "16px",
+                fontWeight: "bold",
+                fontFamily: "monospace",
+                border: "1px solid #000",
+                padding: "4px 8px",
+                display: "inline-block",
+                marginBottom: "4px",
+              }}
+            >
+              {card.jobNumber}
+            </div>
+            <p style={{ margin: "0", fontSize: "11px" }}>
+              Date: <strong>{card.businessDate}</strong>
+            </p>
+            <p style={{ margin: "0", fontSize: "11px" }}>
+              Status: <strong>{card.status}</strong>
+            </p>
+          </div>
+        </div>
+
+        {/* Vehicle & Inspector Details */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "12px",
+            marginBottom: "16px",
+            border: "1px solid #000",
+            padding: "8px 12px",
+          }}
+        >
+          <div>
+            <p style={{ margin: "0 0 4px 0" }}>
+              <strong>Fleet Number:</strong> {card.fleetNumber}
+            </p>
+            <p style={{ margin: "0 0 4px 0" }}>
+              <strong>Registration:</strong> {card.registrationNumber || "N/A"}
+            </p>
+            <p style={{ margin: "0" }}>
+              <strong>Make / Model:</strong>{" "}
+              {[card.make, card.model].filter(Boolean).join(" ") || "N/A"}
+            </p>
+          </div>
+          <div>
+            <p style={{ margin: "0 0 4px 0" }}>
+              <strong>Odometer:</strong>{" "}
+              {card.odometerKm ? `${card.odometerKm} km` : "N/A"}
+            </p>
+            <p style={{ margin: "0 0 4px 0" }}>
+              <strong>Assigned Mechanic:</strong>{" "}
+              {card.mechanicName || "Unassigned"}
+            </p>
+            <p style={{ margin: "0" }}>
+              <strong>Opened By:</strong> {card.openedBy} ({card.businessDate})
+            </p>
+          </div>
+        </div>
+
+        {/* Defect / Complaint */}
+        <div
+          style={{
+            border: "1px solid #000",
+            padding: "8px 12px",
+            marginBottom: "16px",
+            pageBreakInside: "avoid",
+          }}
+        >
+          <div
+            style={{
+              fontWeight: "bold",
+              textTransform: "uppercase",
+              fontSize: "11px",
+              borderBottom: "1px solid #ccc",
+              paddingBottom: "2px",
+              marginBottom: "4px",
+            }}
+          >
+            Driver / Inspector Complaint & Defect Description:
+          </div>
+          <p style={{ margin: "0", whiteSpace: "pre-wrap" }}>
+            {card.complaint}
+          </p>
+        </div>
+
+        {/* Work Done / Action Taken */}
+        <div
+          style={{
+            border: "1px solid #000",
+            padding: "8px 12px",
+            marginBottom: "16px",
+            pageBreakInside: "avoid",
+          }}
+        >
+          <div
+            style={{
+              fontWeight: "bold",
+              textTransform: "uppercase",
+              fontSize: "11px",
+              borderBottom: "1px solid #ccc",
+              paddingBottom: "2px",
+              marginBottom: "4px",
+            }}
+          >
+            Work Done & Action Taken:
+          </div>
+          <p style={{ margin: "0", whiteSpace: "pre-wrap" }}>
+            {card.workDone || "Pending completion..."}
+          </p>
+          {card.notes ? (
+            <p style={{ margin: "4px 0 0 0", color: "#444", fontSize: "11px" }}>
+              <strong>Notes:</strong> {card.notes}
+            </p>
+          ) : null}
+        </div>
+
+        {/* Parts Issued & Returned Table */}
+        <div style={{ marginBottom: "16px", pageBreakInside: "auto" }}>
+          <div
+            style={{
+              fontWeight: "bold",
+              fontSize: "13px",
+              textTransform: "uppercase",
+              marginBottom: "6px",
+              borderBottom: "1px solid #000",
+              paddingBottom: "2px",
+            }}
+          >
+            Spare Parts Issued & Returned:
+          </div>
+          {card.documents.length === 0 ? (
+            <p style={{ margin: "0", fontStyle: "italic", color: "#666" }}>
+              No spare parts issued on this job card.
+            </p>
+          ) : (
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: "11px",
+              }}
+            >
               <thead>
-                <tr>
-                  <th>Document</th>
-                  <th>Type</th>
-                  <th>SKU</th>
-                  <th>Part</th>
-                  <th>Qty</th>
+                <tr style={{ borderBottom: "1.5px solid #000" }}>
+                  <th style={{ textAlign: "left", padding: "4px" }}>Doc #</th>
+                  <th style={{ textAlign: "left", padding: "4px" }}>Type</th>
+                  <th style={{ textAlign: "left", padding: "4px" }}>SKU</th>
+                  <th style={{ textAlign: "left", padding: "4px" }}>
+                    Description
+                  </th>
+                  <th style={{ textAlign: "right", padding: "4px" }}>
+                    Quantity
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {card.documents.map((row) => (
-                  <tr key={`${row.id}-${row.sku}`}>
-                    <td className="mono">
-                      <Link to={`/receipts/${row.id}`}>{row.number}</Link>
+                {card.documents.map((row, idx) => (
+                  <tr
+                    key={`print-${row.id}-${row.sku}-${idx}`}
+                    style={{
+                      borderBottom: "1px solid #ddd",
+                      pageBreakInside: "avoid",
+                    }}
+                  >
+                    <td style={{ padding: "4px", fontFamily: "monospace" }}>
+                      {row.number}
                     </td>
-                    <td>
+                    <td style={{ padding: "4px" }}>
                       {row.type.replaceAll("_", " ")}
-                      {row.status === "PENDING_APPROVAL"
-                        ? " · pending"
-                        : row.status === "REJECTED"
-                          ? " · rejected"
-                          : ""}
                     </td>
-                    <td className="mono">{row.sku}</td>
-                    <td>{row.part}</td>
-                    <td className="quantity">{row.quantity}</td>
+                    <td style={{ padding: "4px", fontFamily: "monospace" }}>
+                      {row.sku}
+                    </td>
+                    <td style={{ padding: "4px" }}>{row.part}</td>
+                    <td
+                      style={{
+                        padding: "4px",
+                        textAlign: "right",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {row.quantity}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          )}
+        </div>
+
+        {/* Tyres Section */}
+        {card.tyreEvents.length > 0 || card.fitted.length > 0 ? (
+          <div
+            style={{
+              marginBottom: "16px",
+              pageBreakInside: "avoid",
+              border: "1px solid #000",
+              padding: "8px 12px",
+            }}
+          >
+            <div
+              style={{
+                fontWeight: "bold",
+                fontSize: "11px",
+                textTransform: "uppercase",
+                borderBottom: "1px solid #ccc",
+                paddingBottom: "2px",
+                marginBottom: "6px",
+              }}
+            >
+              Tyre Activity on This Card:
+            </div>
+            {card.tyreEvents.length > 0 ? (
+              <ul style={{ margin: "0 0 6px 16px", padding: "0" }}>
+                {card.tyreEvents.map((t) => (
+                  <li key={`print-tyre-${t.id}`}>
+                    <strong>{t.type}</strong> — Serial: {t.serialNumber}
+                    {t.toPosition ? ` → Position ${t.toPosition}` : ""}
+                    {t.fromPosition ? ` (from ${t.fromPosition})` : ""}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p style={{ margin: "0", color: "#666" }}>
+                No tyre movements logged.
+              </p>
+            )}
           </div>
-        )}
-      </section>
+        ) : null}
 
-      {card.oilChanges.length > 0 ? (
-        <section className="panel" style={{ marginBottom: "1.5rem" }}>
-          <h2>Oil changes</h2>
-          <ul>
-            {card.oilChanges.map((row) => (
-              <li key={row.id}>
-                {row.part} ({row.sku}) — {row.litres} L
-                {row.odometerKm ? ` @ ${row.odometerKm} km` : ""}
-                {row.documentStatus === "PENDING_APPROVAL"
-                  ? " · awaiting verification"
-                  : row.documentStatus === "REJECTED"
-                    ? " · rejected"
-                    : ""}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+        {/* Oil Changes Section */}
+        {card.oilChanges.length > 0 ? (
+          <div
+            style={{
+              marginBottom: "16px",
+              pageBreakInside: "avoid",
+              border: "1px solid #000",
+              padding: "8px 12px",
+            }}
+          >
+            <div
+              style={{
+                fontWeight: "bold",
+                fontSize: "11px",
+                textTransform: "uppercase",
+                borderBottom: "1px solid #ccc",
+                paddingBottom: "2px",
+                marginBottom: "6px",
+              }}
+            >
+              Lubricant / Oil Changes:
+            </div>
+            <ul style={{ margin: "0 0 0 16px", padding: "0" }}>
+              {card.oilChanges.map((o) => (
+                <li key={`print-oil-${o.id}`}>
+                  <strong>{o.part}</strong> ({o.sku}) — {o.litres} Litres
+                  {o.odometerKm ? ` @ ${o.odometerKm} km` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
-      {card.tyreEvents.length > 0 ? (
-        <section className="panel">
-          <h2>Tyre work</h2>
-          <ul>
-            {card.tyreEvents.map((row) => (
-              <li key={row.id}>
-                {row.type} {row.serialNumber}
-                {row.toPosition ? ` → ${row.toPosition}` : ""}
-                {row.fromPosition ? ` from ${row.fromPosition}` : ""}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+        {/* Physical Signatures Block */}
+        <div
+          className="page-break-inside-avoid"
+          style={{
+            marginTop: "24px",
+            border: "1px solid #000",
+            padding: "12px",
+            pageBreakInside: "avoid",
+          }}
+        >
+          <div
+            style={{
+              fontWeight: "bold",
+              fontSize: "11px",
+              textTransform: "uppercase",
+              marginBottom: "24px",
+              textAlign: "center",
+            }}
+          >
+            Verification & Authorization Signatures
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: "20px",
+              textAlign: "center",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  borderTop: "1px dashed #000",
+                  paddingTop: "4px",
+                  fontWeight: "bold",
+                }}
+              >
+                Mechanic / Technician
+              </div>
+              <div style={{ fontSize: "10px", color: "#555" }}>
+                Name: {card.mechanicName || "........................"}
+              </div>
+              <div style={{ fontSize: "10px", color: "#555" }}>
+                Date: ........................
+              </div>
+            </div>
+            <div>
+              <div
+                style={{
+                  borderTop: "1px dashed #000",
+                  paddingTop: "4px",
+                  fontWeight: "bold",
+                }}
+              >
+                Storekeeper
+              </div>
+              <div style={{ fontSize: "10px", color: "#555" }}>
+                Parts Issued Verified
+              </div>
+              <div style={{ fontSize: "10px", color: "#555" }}>
+                Date: ........................
+              </div>
+            </div>
+            <div>
+              <div
+                style={{
+                  borderTop: "1px dashed #000",
+                  paddingTop: "4px",
+                  fontWeight: "bold",
+                }}
+              >
+                Workshop Supervisor / Manager
+              </div>
+              <div style={{ fontSize: "10px", color: "#555" }}>
+                Job Completed & Approved
+              </div>
+              <div style={{ fontSize: "10px", color: "#555" }}>
+                Date: ........................
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   );
 }

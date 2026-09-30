@@ -10,7 +10,9 @@ export function TopbarSearch({ mode }: { mode: DashboardMode }) {
   const [shortcutHint, setShortcutHint] = useState("Ctrl+K");
 
   useEffect(() => {
-    const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    const mac = /Mac|iPhone|iPad/.test(
+      navigator.platform || navigator.userAgent,
+    );
     setShortcutHint(mac ? "⌘K" : "Ctrl+K");
   }, []);
 
@@ -36,7 +38,13 @@ export function TopbarSearch({ mode }: { mode: DashboardMode }) {
       <label className="topbar-search">
         <span className="topbar-search-icon" aria-hidden="true">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+            <circle
+              cx="11"
+              cy="11"
+              r="7"
+              stroke="currentColor"
+              strokeWidth="2"
+            />
             <path
               d="M20 20l-3.5-3.5"
               stroke="currentColor"

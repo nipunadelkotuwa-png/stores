@@ -4,7 +4,11 @@ import { getBalances } from "~/features/inventory/queries.server";
 import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.balances";
 export async function loader({ request }: Route.LoaderArgs) {
-  return { balances: await getBalances(await requirePermission(request, "balances.read")) };
+  return {
+    balances: await getBalances(
+      await requirePermission(request, "balances.read"),
+    ),
+  };
 }
 export default function BalancesPage({ loaderData }: Route.ComponentProps) {
   const [searchParams] = useSearchParams();

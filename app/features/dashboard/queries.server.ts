@@ -26,7 +26,10 @@ type DashboardOptions = {
   periodDays?: PeriodDays;
 };
 
-function documentStoreFilter(storeIds: string[] | null, column = sql`store_id`) {
+function documentStoreFilter(
+  storeIds: string[] | null,
+  column = sql`store_id`,
+) {
   if (storeIds === null) return sql`true`;
   if (storeIds.length === 0) return sql`false`;
   return sql`${column} IN (${sql.join(
@@ -35,11 +38,17 @@ function documentStoreFilter(storeIds: string[] | null, column = sql`store_id`) 
   )})`;
 }
 
-export async function getDashboard(actor: Actor, options: DashboardOptions = {}) {
+export async function getDashboard(
+  actor: Actor,
+  options: DashboardOptions = {},
+) {
   const storeIds = await getAuthorizedStoreIds(actor);
   const storeScope = scopedStoreCondition(stores.id, storeIds);
   const documentScope = scopedStoreCondition(stockDocuments.storeId, storeIds);
-  const balanceScope = scopedStoreCondition(inventoryBalances.storeId, storeIds);
+  const balanceScope = scopedStoreCondition(
+    inventoryBalances.storeId,
+    storeIds,
+  );
 
   const bounds = periodBounds(options.periodDays ?? 30);
 
@@ -143,7 +152,9 @@ export async function getDashboard(actor: Actor, options: DashboardOptions = {})
       })
       .from(inventoryBalances)
       .where(balanceScope),
-    db.execute<{ value: string }>(sql`
+    db
+      .execute<{ value: string }>(
+        sql`
       WITH last_receipt_cost AS (
         SELECT DISTINCT ON (sdl.part_id, sd.store_id)
           sdl.part_id,
@@ -163,8 +174,12 @@ export async function getDashboard(actor: Actor, options: DashboardOptions = {})
       LEFT JOIN last_receipt_cost lrc
         ON lrc.part_id = b.part_id AND lrc.store_id = b.store_id
       WHERE ${documentStoreFilter(storeIds, sql`b.store_id`)}
-    `).then((result) => result.rows[0] ?? { value: "0" }),
-    db.execute<{ value: string }>(sql`
+    `,
+      )
+      .then((result) => result.rows[0] ?? { value: "0" }),
+    db
+      .execute<{ value: string }>(
+        sql`
       WITH last_receipt_cost AS (
         SELECT DISTINCT ON (sdl.part_id, sd.store_id)
           sdl.part_id,
@@ -189,7 +204,9 @@ export async function getDashboard(actor: Actor, options: DashboardOptions = {})
         AND sd.business_date >= ${bounds.periodStart}
         AND sd.business_date <= ${bounds.periodEnd}
         AND ${documentStoreFilter(storeIds, sql`sd.store_id`)}
-    `).then((result) => result.rows[0] ?? { value: "0" }),
+    `,
+      )
+      .then((result) => result.rows[0] ?? { value: "0" }),
     db
       .select({
         value: sql<string>`COALESCE(SUM(
@@ -295,7 +312,10 @@ export async function getDashboard(actor: Actor, options: DashboardOptions = {})
     transactionCount: periodTransactionTotal.value,
     periodLabel: bounds.periodLabel,
     trends: {
-      stores: pctChange(storesAddedInPeriod.value, storeTotal.value - storesAddedInPeriod.value),
+      stores: pctChange(
+        storesAddedInPeriod.value,
+        storeTotal.value - storesAddedInPeriod.value,
+      ),
       parts: pctChange(partsAddedInPeriod.value, partsBeforePeriod.value),
       buses: pctChange(busesAddedInPeriod.value, busesBeforePeriod.value),
       transactions: pctChange(

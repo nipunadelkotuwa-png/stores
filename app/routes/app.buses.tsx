@@ -25,7 +25,10 @@ import type { Route } from "./+types/app.buses";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requirePermission(request, "masterData.read");
-  return { buses: await listBuses(), canManage: can(user.role, "masterData.write") };
+  return {
+    buses: await listBuses(),
+    canManage: can(user.role, "masterData.write"),
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {

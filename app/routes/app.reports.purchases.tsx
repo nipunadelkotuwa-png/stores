@@ -10,11 +10,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const range = resolveReportPeriod(url.searchParams, getEnv().APP_TIME_ZONE);
   const supplier = url.searchParams.get("supplier") || undefined;
-  const result = await getLocalPurchases(await requirePermission(request, "reports.read"), {
-    start: range.start,
-    end: range.end,
-    supplier,
-  });
+  const result = await getLocalPurchases(
+    await requirePermission(request, "reports.read"),
+    {
+      start: range.start,
+      end: range.end,
+      supplier,
+    },
+  );
   return { ...result, range };
 }
 

@@ -52,7 +52,9 @@ const schema = z.object({
 });
 
 export async function loader({ request }: Route.LoaderArgs) {
-  return getTransactionOptions(await requirePermission(request, "purchases.create"));
+  return getTransactionOptions(
+    await requirePermission(request, "purchases.create"),
+  );
 }
 
 export async function action({ request }: Route.ActionArgs) {

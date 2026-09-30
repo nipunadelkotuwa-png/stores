@@ -77,15 +77,44 @@ describe("workshop schemas", () => {
   });
 
   it("accepts a valid job card and oil change", () => {
-    expect(
-      openJobCardSchema.safeParse({
-        storeId: "11111111-1111-4111-8111-111111111111",
-        busId: "33333333-3333-4333-8333-333333333333",
-        businessDate: "2026-08-17",
-        odometerKm: "120000",
-        complaint: "Engine noise",
-      }).success,
-    ).toBe(true);
+    const validTransport = openJobCardSchema.safeParse({
+      type: "TRANSPORT",
+      storeId: "11111111-1111-4111-8111-111111111111",
+      busId: "33333333-3333-4333-8333-333333333333",
+      businessDate: "2026-08-17",
+      odometerKm: "120000",
+      complaint: "Engine noise",
+    });
+    expect(validTransport.success).toBe(true);
+    if (validTransport.success) {
+      expect(validTransport.data.type).toBe("TRANSPORT");
+    }
+
+    const validTourism = openJobCardSchema.safeParse({
+      type: "TOURISM",
+      storeId: "11111111-1111-4111-8111-111111111111",
+      busId: "33333333-3333-4333-8333-333333333333",
+      businessDate: "2026-08-17",
+      odometerKm: "120000",
+      complaint: "AC check",
+    });
+    expect(validTourism.success).toBe(true);
+    if (validTourism.success) {
+      expect(validTourism.data.type).toBe("TOURISM");
+    }
+
+    // Default when omitted
+    const defaultType = openJobCardSchema.safeParse({
+      storeId: "11111111-1111-4111-8111-111111111111",
+      busId: "33333333-3333-4333-8333-333333333333",
+      businessDate: "2026-08-17",
+      complaint: "Routine service",
+    });
+    expect(defaultType.success).toBe(true);
+    if (defaultType.success) {
+      expect(defaultType.data.type).toBe("TRANSPORT");
+    }
+
     expect(
       closeJobCardSchema.safeParse({
         jobCardId: "44444444-4444-4444-8444-444444444444",

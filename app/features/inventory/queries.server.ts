@@ -375,6 +375,10 @@ export async function getPostedDocumentsForReversal(actor: Actor) {
 
 export async function getDocumentForReceipt(actor: Actor, id: string) {
   const ids = await getAuthorizedStoreIds(actor);
+  const destStores = alias(stores, "dest_stores_receipt");
+  const createdUsers = alias(users, "created_users_receipt");
+  const postedUsers = alias(users, "posted_users_receipt");
+
   const [doc] = await db
     .select({
       id: stockDocuments.id,
@@ -383,17 +387,32 @@ export async function getDocumentForReceipt(actor: Actor, id: string) {
       date: stockDocuments.businessDate,
       store: stores.name,
       storeCode: stores.code,
+      destinationStore: destStores.name,
+      destinationStoreCode: destStores.code,
       bus: buses.fleetNumber,
+      busRegistration: buses.registrationNumber,
+      busMake: buses.make,
+      busModel: buses.model,
+      jobCardId: stockDocuments.jobCardId,
+      jobNumber: jobCards.jobNumber,
+      jobCardType: jobCards.type,
       postedAt: stockDocuments.postedAt,
       reason: stockDocuments.reason,
+      notes: stockDocuments.notes,
       status: stockDocuments.status,
       lastApprovalError: stockDocuments.lastApprovalError,
       lastApprovalAttemptedAt: stockDocuments.lastApprovalAttemptedAt,
       createdBy: stockDocuments.createdBy,
+      createdByName: createdUsers.displayName,
+      postedByName: postedUsers.displayName,
     })
     .from(stockDocuments)
     .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
+    .leftJoin(destStores, eq(stockDocuments.destinationStoreId, destStores.id))
     .leftJoin(buses, eq(stockDocuments.busId, buses.id))
+    .leftJoin(jobCards, eq(stockDocuments.jobCardId, jobCards.id))
+    .leftJoin(createdUsers, eq(stockDocuments.createdBy, createdUsers.id))
+    .leftJoin(postedUsers, eq(stockDocuments.postedBy, postedUsers.id))
     .where(
       and(
         eq(stockDocuments.id, id),

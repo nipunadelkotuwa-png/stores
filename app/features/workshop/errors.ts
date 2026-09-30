@@ -37,10 +37,7 @@ export function workshopActionResult(
 ): { error: string } {
   rethrowAuthorizationError(error);
   const message = workshopActionError(error, fallback);
-  if (
-    error instanceof WorkshopConflictError ||
-    isSerializationFailure(error)
-  ) {
+  if (error instanceof WorkshopConflictError || isSerializationFailure(error)) {
     return data({ error: message }, { status: 409 }) as unknown as {
       error: string;
     };

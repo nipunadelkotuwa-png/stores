@@ -1,10 +1,7 @@
 import { Link } from "react-router";
 import { lazy, Suspense, type ReactNode } from "react";
 
-import {
-  PERIOD_OPTIONS,
-  type PeriodDays,
-} from "~/features/dashboard/period";
+import { PERIOD_OPTIONS, type PeriodDays } from "~/features/dashboard/period";
 import type { getDashboard } from "~/features/dashboard/queries.server";
 import { greetingName } from "~/lib/display-name";
 
@@ -260,7 +257,11 @@ function PeriodSelector({
   return (
     <div className="dash-period">
       <span className="dash-period-label">{periodLabel}</span>
-      <div className="dash-period-options" role="group" aria-label="Reporting period">
+      <div
+        className="dash-period-options"
+        role="group"
+        aria-label="Reporting period"
+      >
         {PERIOD_OPTIONS.map((days) => (
           <Link
             key={days}
@@ -369,7 +370,10 @@ export function ClassicDashboard({
               + Add New Item
             </Link>
           ) : null}
-          <Link className="button dash-btn dash-btn-outline-blue" to="/pos/issue">
+          <Link
+            className="button dash-btn dash-btn-outline-blue"
+            to="/pos/issue"
+          >
             Issue (POS)
           </Link>
           <Link
@@ -398,7 +402,10 @@ export function ClassicDashboard({
             periodDays,
           );
           return (
-            <article className="bento-cell dash-kpi-card bento-span-2" key={card.label}>
+            <article
+              className="bento-cell dash-kpi-card bento-span-2"
+              key={card.label}
+            >
               <div className="dash-kpi-top">
                 <MetricIcon tone={card.tone}>{card.icon}</MetricIcon>
                 <span className="dash-kpi-label">{card.label}</span>
@@ -446,7 +453,10 @@ export function ClassicDashboard({
             </article>
           }
         >
-          <ClassicDashboardChart chartData={chartData} periodDays={periodDays} />
+          <ClassicDashboardChart
+            chartData={chartData}
+            periodDays={periodDays}
+          />
         </Suspense>
 
         <article className="bento-cell dash-panel dash-low-stock-panel bento-span-4 bento-row-2">
@@ -499,11 +509,17 @@ export function ClassicDashboard({
         <div className="bento-cell bento-span-8 bento-row-2 dash-summary-shell">
           <div className="dash-summary-grid">
             {summaryCards.map((card) => (
-              <article className={`dash-summary-card tone-${card.tone}`} key={card.label}>
+              <article
+                className={`dash-summary-card tone-${card.tone}`}
+                key={card.label}
+              >
                 <p className="dash-summary-label">{card.label}</p>
                 <strong className="dash-summary-value">{card.value}</strong>
                 <span className="dash-summary-subtitle">{card.subtitle}</span>
-                <span className={`dash-summary-icon tone-${card.tone}`} aria-hidden="true" />
+                <span
+                  className={`dash-summary-icon tone-${card.tone}`}
+                  aria-hidden="true"
+                />
               </article>
             ))}
           </div>

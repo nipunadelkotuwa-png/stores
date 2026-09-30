@@ -10,7 +10,10 @@ export function persistSidebarCollapsed(collapsed: boolean) {
   if (typeof document === "undefined") return;
   document.documentElement.classList.toggle(SIDEBAR_COLLAPSED_CLASS, collapsed);
   try {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "true" : "false");
+    window.localStorage.setItem(
+      SIDEBAR_COLLAPSED_KEY,
+      collapsed ? "true" : "false",
+    );
   } catch {
     /* private mode / blocked storage */
   }

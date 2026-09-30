@@ -110,7 +110,9 @@ export async function action({ request }: Route.ActionArgs) {
     if (!userId.success) return { error: "Invalid user." };
     if (userId.data === actor.id && intent !== "add-store") {
       if (intent === "disable" || intent === "change-role") {
-        return { error: "You cannot change your own role or disable yourself." };
+        return {
+          error: "You cannot change your own role or disable yourself.",
+        };
       }
     }
 
@@ -185,7 +187,8 @@ export async function action({ request }: Route.ActionArgs) {
         });
       } catch (error) {
         if (error instanceof LastAdminError) return { error: error.message };
-        if (error instanceof NonAdminStoreError) return { error: error.message };
+        if (error instanceof NonAdminStoreError)
+          return { error: error.message };
         throw error;
       }
       await auditAccessChange(actor, target.id, {
@@ -232,7 +235,8 @@ export async function action({ request }: Route.ActionArgs) {
             );
         });
       } catch (error) {
-        if (error instanceof NonAdminStoreError) return { error: error.message };
+        if (error instanceof NonAdminStoreError)
+          return { error: error.message };
         throw error;
       }
       await auditAccessChange(actor, target.id, {
@@ -262,8 +266,8 @@ export default function UsersPage({ loaderData }: Route.ComponentProps) {
           <h1>Users & Roles</h1>
           <p className="muted">
             Permissions are fixed by role. Assign a role and store here.
-            Operators, store keepers, workshop users, and viewers are limited
-            to assigned stores.
+            Operators, store keepers, workshop users, and viewers are limited to
+            assigned stores.
           </p>
         </div>
       </div>
@@ -290,9 +294,17 @@ export default function UsersPage({ loaderData }: Route.ComponentProps) {
                       <small>{user.email}</small>
                     </td>
                     <td>
-                      <Form method="post" className="stack" style={{ gap: "0.35rem" }}>
+                      <Form
+                        method="post"
+                        className="stack"
+                        style={{ gap: "0.35rem" }}
+                      >
                         <CsrfField />
-                        <input type="hidden" name="intent" value="change-role" />
+                        <input
+                          type="hidden"
+                          name="intent"
+                          value="change-role"
+                        />
                         <input type="hidden" name="userId" value={user.id} />
                         <select name="role" defaultValue={user.role}>
                           {USER_ROLES.map((role) => (
@@ -310,14 +322,22 @@ export default function UsersPage({ loaderData }: Route.ComponentProps) {
                       {user.role === "ADMIN" ? (
                         <>
                           <span>All stores</span>
-                          <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                          <p
+                            className="muted"
+                            style={{ margin: "0.35rem 0 0" }}
+                          >
                             Assign a store before changing this user away from
                             admin.
                           </p>
                         </>
                       ) : null}
                       {user.role !== "ADMIN" || user.stores.length > 0 ? (
-                        <ul style={{ margin: user.role === "ADMIN" ? "0.35rem 0 0" : 0, paddingLeft: "1.1rem" }}>
+                        <ul
+                          style={{
+                            margin: user.role === "ADMIN" ? "0.35rem 0 0" : 0,
+                            paddingLeft: "1.1rem",
+                          }}
+                        >
                           {user.stores.length === 0 ? (
                             <li>None</li>
                           ) : (
@@ -364,12 +384,17 @@ export default function UsersPage({ loaderData }: Route.ComponentProps) {
                         <CsrfField />
                         <input type="hidden" name="intent" value="add-store" />
                         <input type="hidden" name="userId" value={user.id} />
-                        <select name="storeId" aria-label={`Add store for ${user.displayName}`}>
+                        <select
+                          name="storeId"
+                          aria-label={`Add store for ${user.displayName}`}
+                        >
                           <option value="">Add store</option>
                           {loaderData.stores
                             .filter(
                               (store) =>
-                                !user.stores.some((assigned) => assigned.id === store.id),
+                                !user.stores.some(
+                                  (assigned) => assigned.id === store.id,
+                                ),
                             )
                             .map((store) => (
                               <option key={store.id} value={store.id}>
@@ -396,14 +421,20 @@ export default function UsersPage({ loaderData }: Route.ComponentProps) {
                           <input
                             type="hidden"
                             name="intent"
-                            value={user.status === "ACTIVE" ? "disable" : "enable"}
+                            value={
+                              user.status === "ACTIVE" ? "disable" : "enable"
+                            }
                           />
                           <input type="hidden" name="userId" value={user.id} />
                           <button className="text-button" type="submit">
                             {user.status === "ACTIVE" ? "Disable" : "Enable"}
                           </button>
                         </Form>
-                        <Form method="post" className="stack" style={{ gap: "0.35rem" }}>
+                        <Form
+                          method="post"
+                          className="stack"
+                          style={{ gap: "0.35rem" }}
+                        >
                           <CsrfField />
                           <input
                             type="hidden"

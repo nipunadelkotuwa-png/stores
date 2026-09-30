@@ -8,6 +8,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const actor = await requirePermission(request, "jobCards.read");
   const url = new URL(request.url);
   const status = url.searchParams.get("status");
+  const typeParam = url.searchParams.get("type");
   return {
     canCreate: can(actor.role, "jobCards.create"),
     cards: await listJobCards(actor, {
@@ -18,6 +19,10 @@ export async function loader({ request }: Route.LoaderArgs) {
         status === "CLOSED" ||
         status === "CANCELLED"
           ? status
+          : undefined,
+      type:
+        typeParam === "TRANSPORT" || typeParam === "TOURISM"
+          ? typeParam
           : undefined,
       bus: url.searchParams.get("bus") || undefined,
       start: url.searchParams.get("start") || undefined,
@@ -31,7 +36,12 @@ export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
   const query = params.get("q")?.trim().toLowerCase() ?? "";
   const cards = query
     ? loaderData.cards.filter((card) =>
-        [card.jobNumber, card.fleetNumber, card.registrationNumber, card.complaint]
+        [
+          card.jobNumber,
+          card.fleetNumber,
+          card.registrationNumber,
+          card.complaint,
+        ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(query)),
       )
@@ -61,10 +71,18 @@ export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
         <div
           className="form-grid"
           style={{
-            gridTemplateColumns: "1fr 1fr 1fr 1fr auto",
+            gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr auto",
             alignItems: "end",
           }}
         >
+          <label>
+            Type
+            <select name="type" defaultValue={params.get("type") || ""}>
+              <option value="">All Types</option>
+              <option value="TRANSPORT">Transport</option>
+              <option value="TOURISM">Tourism</option>
+            </select>
+          </label>
           <label>
             Status
             <select name="status" defaultValue={params.get("status") || ""}>
@@ -112,6 +130,7 @@ export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
             <thead>
               <tr>
                 <th>Job</th>
+                <th>Type</th>
                 <th>Date</th>
                 <th>Bus</th>
                 <th>Store</th>
@@ -122,7 +141,7 @@ export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
             <tbody>
               {cards.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <div className="empty-state">
                       <strong>No job cards</strong>
                       <p>Open a card when a bus comes in for work.</p>
@@ -134,6 +153,15 @@ export default function JobCardsPage({ loaderData }: Route.ComponentProps) {
                   <tr key={card.id}>
                     <td className="mono">
                       <Link to={`/job-cards/${card.id}`}>{card.jobNumber}</Link>
+                    </td>
+                    <td>
+                      <span
+                        className={`badge ${
+                          card.type === "TOURISM" ? "accent" : "subtle"
+                        }`}
+                      >
+                        {card.type}
+                      </span>
                     </td>
                     <td>{card.businessDate}</td>
                     <td>

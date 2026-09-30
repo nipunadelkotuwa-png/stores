@@ -38,16 +38,12 @@ describe.runIf(hasDb)("named role enforcement", { timeout: 60_000 }, () => {
     ).length;
 
     await expect(
-      postStock(
-        { ...admin!, role: "VIEWER" },
-        "STOCK_RECEIPT",
-        {
-          storeId: store!.id,
-          businessDate: "2026-09-10",
-          idempotencyKey: `viewer-stock-${crypto.randomUUID()}`,
-          lines: [{ partId: part!.id, quantity: "1", unitCost: "1" }],
-        },
-      ),
+      postStock({ ...admin!, role: "VIEWER" }, "STOCK_RECEIPT", {
+        storeId: store!.id,
+        businessDate: "2026-09-10",
+        idempotencyKey: `viewer-stock-${crypto.randomUUID()}`,
+        lines: [{ partId: part!.id, quantity: "1", unitCost: "1" }],
+      }),
     ).rejects.toSatisfy(isForbidden);
 
     expect(
@@ -90,10 +86,8 @@ describe.runIf(hasDb)("named role enforcement", { timeout: 60_000 }, () => {
   it("refuses last-admin demotion and never drops to zero admins concurrently", async () => {
     const { db } = await import("../../app/db/client.server");
     const { users } = await import("../../app/db/schema");
-    const {
-      LastAdminError,
-      assertNotLastActiveAdmin,
-    } = await import("../../app/features/master-data/users-access.server");
+    const { LastAdminError, assertNotLastActiveAdmin } =
+      await import("../../app/features/master-data/users-access.server");
 
     const snapshot = await db
       .select({

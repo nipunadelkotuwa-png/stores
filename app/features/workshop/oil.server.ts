@@ -31,7 +31,10 @@ export async function recordOilChange(actor: Actor, input: unknown) {
       busId: card.busId,
       jobCardId: card.id,
       businessDate: card.businessDate,
-      notes: encodeWorkshopNotes({ kind: "OIL" }, command.notes || "Oil change"),
+      notes: encodeWorkshopNotes(
+        { kind: "OIL" },
+        command.notes || "Oil change",
+      ),
       idempotencyKey: command.idempotencyKey,
       lines: [{ partId: command.partId, quantity: command.litres }],
     });

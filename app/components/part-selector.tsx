@@ -99,7 +99,8 @@ export function PartSelector({
             borderRadius: "999px",
             borderColor: state.isFocused ? "var(--primary)" : "var(--line)",
             boxShadow: state.isFocused ? "var(--ring)" : "var(--shadow-sm)",
-            transition: "border-color 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1), transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+            transition:
+              "border-color 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1), transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1)",
             transform: state.isFocused ? "translateY(-1px)" : "none",
             "&:hover": {
               borderColor: "var(--primary)",
@@ -147,7 +148,9 @@ export function PartSelector({
             ...base,
             color: state.isFocused ? "var(--primary)" : "#94a3b8",
             transition: "color 140ms ease, transform 140ms ease",
-            transform: state.selectProps.menuIsOpen ? "rotate(180deg)" : undefined,
+            transform: state.selectProps.menuIsOpen
+              ? "rotate(180deg)"
+              : undefined,
           }),
         }}
       />

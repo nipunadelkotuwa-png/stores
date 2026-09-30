@@ -40,7 +40,12 @@ function LabelBody({
   mode,
   size,
 }: {
-  part: { sku: string; name: string; barcode: string | null; category: string | null };
+  part: {
+    sku: string;
+    name: string;
+    barcode: string | null;
+    category: string | null;
+  };
   mode: LabelMode;
   size: LabelSize;
 }) {
@@ -58,7 +63,11 @@ function LabelBody({
       ) : null}
       {mode === "qr" || mode === "both" ? (
         <div className="label-qr">
-          <QRCode value={codeValue} size={mode === "both" ? 64 : 120} level="M" />
+          <QRCode
+            value={codeValue}
+            size={mode === "both" ? 64 : 120}
+            level="M"
+          />
         </div>
       ) : null}
       <div className="label-info">
@@ -86,7 +95,10 @@ export default function PrintLabelsPage({ loaderData }: Route.ComponentProps) {
     );
   }, [loaderData.parts, query]);
 
-  const filteredIds = useMemo(() => filtered.map((part) => part.id), [filtered]);
+  const filteredIds = useMemo(
+    () => filtered.map((part) => part.id),
+    [filtered],
+  );
   const selectedSet = new Set(selected);
   const selectedParts = loaderData.parts.filter((part) =>
     selectedSet.has(part.id),

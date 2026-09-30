@@ -40,7 +40,9 @@ test("Admin can sign in and view the inventory dashboard", async ({ page }) => {
     .getByRole("link", { name: "Scan barcode" })
     .click();
   await expect(page).toHaveURL(/\/scan$/);
-  await expect(page.getByRole("heading", { name: "Scan Barcode" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Scan Barcode" }),
+  ).toBeVisible();
 
   await page
     .getByRole("navigation", { name: "Main navigation" })

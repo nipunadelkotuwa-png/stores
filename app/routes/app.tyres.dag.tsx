@@ -224,7 +224,8 @@ export default function TyreDagPage({ loaderData }: Route.ComponentProps) {
                         setSendTyreIds((current) => toggleId(current, tyre.id))
                       }
                     />{" "}
-                    {tyre.serialNumber} — {tyre.sku} ({tyre.stage}) · {tyre.store}
+                    {tyre.serialNumber} — {tyre.sku} ({tyre.stage}) ·{" "}
+                    {tyre.store}
                   </label>
                 ))}
               </fieldset>

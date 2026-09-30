@@ -9,7 +9,7 @@ function looksLikeDocumentNumber(query: string): boolean {
 }
 
 function looksLikeJobNumber(query: string): boolean {
-  return /^JOB[-\s]/i.test(query);
+  return /^(JOB|JC)[-\s]/i.test(query);
 }
 
 export function resolveSearchNavigation(

@@ -58,7 +58,12 @@ export function ReportPeriodFilter({
         <>
           <label>
             Start
-            <input type="date" name="start" defaultValue={start || ""} required />
+            <input
+              type="date"
+              name="start"
+              defaultValue={start || ""}
+              required
+            />
           </label>
           <label>
             End

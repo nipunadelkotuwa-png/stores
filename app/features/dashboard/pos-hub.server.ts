@@ -188,7 +188,9 @@ function formatActivityLabel(row: {
   const qty = Number(row.quantity);
   const qtyLabel = Number.isFinite(qty) ? qty : row.quantity;
   const extraLines =
-    row.lineCount > 1 ? ` (+${row.lineCount - 1} more line${row.lineCount > 2 ? "s" : ""})` : "";
+    row.lineCount > 1
+      ? ` (+${row.lineCount - 1} more line${row.lineCount > 2 ? "s" : ""})`
+      : "";
 
   switch (row.type) {
     case "BUS_ISSUE":

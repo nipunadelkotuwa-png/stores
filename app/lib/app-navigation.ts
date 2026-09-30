@@ -78,7 +78,11 @@ export const reportNavConfig: NavItemConfig[] = [
     label: "Daily issues",
     permission: "reports.read",
   },
-  { to: "/reports/item-usage", label: "Item usage", permission: "reports.read" },
+  {
+    to: "/reports/item-usage",
+    label: "Item usage",
+    permission: "reports.read",
+  },
   {
     to: "/reports/unusual-issues",
     label: "Unusual issues",
@@ -91,7 +95,11 @@ export const reportNavConfig: NavItemConfig[] = [
   },
   { to: "/reports/bus-usage", label: "Bus usage", permission: "reports.read" },
   { to: "/reports/dag-out", label: "DAG out", permission: "reports.read" },
-  { to: "/reports/tyre-stock", label: "Tyre stock", permission: "reports.read" },
+  {
+    to: "/reports/tyre-stock",
+    label: "Tyre stock",
+    permission: "reports.read",
+  },
   { to: "/reports/transfers", label: "Transfers", permission: "reports.read" },
   { to: "/reports/purchases", label: "Purchases", permission: "reports.read" },
 ];
@@ -99,7 +107,11 @@ export const reportNavConfig: NavItemConfig[] = [
 export const adminNavConfig: NavItemConfig[] = [
   { to: "/admin/users", label: "Users & Roles", permission: "users.manage" },
   { to: "/admin/stores", label: "Stores", permission: "stores.manage" },
-  { to: "/admin/reorder", label: "Reorder levels", permission: "reorder.manage" },
+  {
+    to: "/admin/reorder",
+    label: "Reorder levels",
+    permission: "reorder.manage",
+  },
   {
     to: "/admin/corrections",
     label: "Corrections",
@@ -122,7 +134,10 @@ export function navItemEnd(item: NavItemConfig): boolean | undefined {
   return undefined;
 }
 
-export function isNavItemActive(pathname: string, item: NavItemConfig): boolean {
+export function isNavItemActive(
+  pathname: string,
+  item: NavItemConfig,
+): boolean {
   if (item.to === "/") return pathname === "/";
   if (item.exact || item.end) {
     return pathname === item.to;
@@ -180,10 +195,7 @@ export function buildNavSections(role: Role): NavSectionConfig[] {
 }
 
 export function buildPrimaryNav(role: Role): NavItemConfig[] {
-  return visibleNavItems(
-    [...primaryNavConfig, adminQuickNavConfig],
-    role,
-  );
+  return visibleNavItems([...primaryNavConfig, adminQuickNavConfig], role);
 }
 
 /** Flat list of all sidebar paths for completeness checks / search hints. */
@@ -196,4 +208,7 @@ export function allNavPaths(role: Role): string[] {
   ];
 }
 
-export type NavItemWithIcon = NavItemConfig & { icon: ReactNode; badge?: number };
+export type NavItemWithIcon = NavItemConfig & {
+  icon: ReactNode;
+  badge?: number;
+};

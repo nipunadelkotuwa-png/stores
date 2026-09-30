@@ -149,8 +149,21 @@ function ChevronRight() {
 function JobCardIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <rect
+        x="4"
+        y="3"
+        width="16"
+        height="18"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M8 8h8M8 12h8M8 16h5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -158,7 +171,12 @@ function JobCardIcon() {
 function AlertIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 8v5M12 16.5h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path
+        d="M12 8v5M12 16.5h.01"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
       <path
         d="M10.3 4.5 2.8 18a1.5 1.5 0 0 0 1.3 2.2h15.8a1.5 1.5 0 0 0 1.3-2.2L13.7 4.5a1.5 1.5 0 0 0-2.6 0Z"
         stroke="currentColor"
@@ -172,8 +190,21 @@ function AlertIcon() {
 function ApprovalIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M9 11l2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M9 11l2 2 4-4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <rect
+        x="4"
+        y="4"
+        width="16"
+        height="16"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
     </svg>
   );
 }
@@ -181,8 +212,21 @@ function ApprovalIcon() {
 function TransactionIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M7 7h10M7 12h6M7 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M7 7h10M7 12h6M7 17h8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <rect
+        x="4"
+        y="3"
+        width="16"
+        height="18"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
     </svg>
   );
 }
@@ -190,8 +234,21 @@ function TransactionIcon() {
 function IssueIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M12 5v14M5 12h14"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <rect
+        x="3"
+        y="3"
+        width="18"
+        height="18"
+        rx="4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
     </svg>
   );
 }
@@ -199,8 +256,18 @@ function IssueIcon() {
 function StockInIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 16V8M8 12l4 4 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M4 20h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path
+        d="M12 16V8M8 12l4 4 4-4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M4 20h16"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -208,8 +275,17 @@ function StockInIcon() {
 function ScanIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" stroke="currentColor" strokeWidth="2" />
-      <path d="M8 12h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path
+        d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M8 12h8"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -217,7 +293,12 @@ function ScanIcon() {
 function BalanceIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path
+        d="M4 7h16M4 12h16M4 17h10"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -225,8 +306,18 @@ function BalanceIcon() {
 function ReturnIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M9 14 4 9l5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M20 20v-7a4 4 0 0 0-4-4H4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path
+        d="M9 14 4 9l5-5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M20 20v-7a4 4 0 0 0-4-4H4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -234,7 +325,12 @@ function ReturnIcon() {
 function PurchaseIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M6 6h15l-1.5 9h-12L6 6Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path
+        d="M6 6h15l-1.5 9h-12L6 6Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
       <circle cx="9" cy="19" r="1.5" fill="currentColor" />
       <circle cx="17" cy="19" r="1.5" fill="currentColor" />
     </svg>
@@ -435,7 +531,9 @@ export function PosHub({ userName, canManage, data }: PosHubProps) {
                       checked={!hidden}
                       onChange={() => toggleActionVisibility(action.to)}
                     />
-                    <HubIcon tone={action.tone}>{actionIcon(action.title)}</HubIcon>
+                    <HubIcon tone={action.tone}>
+                      {actionIcon(action.title)}
+                    </HubIcon>
                     <div>
                       <strong>{action.title}</strong>
                       <span>{action.description}</span>
@@ -444,21 +542,21 @@ export function PosHub({ userName, canManage, data }: PosHubProps) {
                 );
               })
           : visibleActions.map((action) => (
-          <Link
-            key={action.to}
-            to={action.to}
-            className="bento-cell pos-hub-action bento-span-3"
-          >
-            <HubIcon tone={action.tone}>{actionIcon(action.title)}</HubIcon>
-            <div>
-              <strong>{action.title}</strong>
-              <span>{action.description}</span>
-            </div>
-            <span className="pos-hub-chevron" aria-hidden="true">
-              <ChevronRight />
-            </span>
-          </Link>
-        ))}
+              <Link
+                key={action.to}
+                to={action.to}
+                className="bento-cell pos-hub-action bento-span-3"
+              >
+                <HubIcon tone={action.tone}>{actionIcon(action.title)}</HubIcon>
+                <div>
+                  <strong>{action.title}</strong>
+                  <span>{action.description}</span>
+                </div>
+                <span className="pos-hub-chevron" aria-hidden="true">
+                  <ChevronRight />
+                </span>
+              </Link>
+            ))}
 
         <article className="bento-cell pos-hub-widget bento-span-4 bento-row-2">
           <div className="pos-hub-widget-head">
@@ -562,7 +660,10 @@ export function PosHub({ userName, canManage, data }: PosHubProps) {
                 <span className="pos-hub-side-cta">View list</span>
               </Link>
               {canManage ? (
-                <Link to="/admin/reorder" className="pos-hub-side-card tone-green">
+                <Link
+                  to="/admin/reorder"
+                  className="pos-hub-side-card tone-green"
+                >
                   <div>
                     <strong>Auto reorder</strong>
                     <span>

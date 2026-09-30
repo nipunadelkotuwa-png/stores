@@ -6,7 +6,11 @@ import type { Role } from "~/lib/auth/permissions";
 import type { Actor } from "~/lib/auth/authorization.server";
 import { wouldLeaveZeroAdmins } from "./last-admin";
 
-export { wouldLeaveZeroAdmins, assertNonAdminHasStore, NonAdminStoreError } from "./last-admin";
+export {
+  wouldLeaveZeroAdmins,
+  assertNonAdminHasStore,
+  NonAdminStoreError,
+} from "./last-admin";
 
 export class LastAdminError extends Error {
   constructor() {

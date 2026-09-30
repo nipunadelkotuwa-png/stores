@@ -106,13 +106,33 @@ export function ClassicDashboardChart({
                   strokeWidth={2.5}
                 />
                 <defs>
-                  <linearGradient id="issuedGradient" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient
+                    id="issuedGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
                     <stop offset="0%" stopColor="#10b981" stopOpacity={0.18} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                    <stop
+                      offset="100%"
+                      stopColor="#10b981"
+                      stopOpacity={0.02}
+                    />
                   </linearGradient>
-                  <linearGradient id="stockInGradient" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient
+                    id="stockInGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
                     <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.18} />
-                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} />
+                    <stop
+                      offset="100%"
+                      stopColor="#f59e0b"
+                      stopOpacity={0.02}
+                    />
                   </linearGradient>
                 </defs>
               </ComposedChart>
