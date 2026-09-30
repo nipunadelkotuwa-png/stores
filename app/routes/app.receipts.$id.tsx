@@ -10,6 +10,7 @@ import {
   ReportSummary,
   ReportTable,
 } from "~/components/report-primitives";
+import { ReportActions } from "~/components/report-actions";
 import { getDocumentForReceipt } from "~/features/inventory/queries.server";
 import { requirePermission } from "~/lib/auth/authorization.server";
 import { can } from "~/lib/auth/permissions";
@@ -173,7 +174,7 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Transaction Document</p>
           <h1>{config.title} • {doc.number}</h1>
         </div>
-        <div className="heading-actions">
+        <div className="heading-actions" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <Link to="/reports/movements" className="button button-secondary">
             Movement Ledger
           </Link>
@@ -182,12 +183,12 @@ export default function ReceiptPage({ loaderData }: Route.ComponentProps) {
               View Job Card
             </Link>
           ) : null}
-          <button
-            className="button button-primary"
-            onClick={() => window.print()}
-          >
-            Print A4 Voucher
-          </button>
+          <ReportActions
+            filename={doc.number}
+            documentTitle={`${config.title} • ${doc.number}`}
+            targetSelector=".receipt-print-wrapper"
+            className=""
+          />
         </div>
       </div>
 

@@ -4,6 +4,7 @@ import {
   ReportPrintFooter,
   ReportPrintHeader,
 } from "~/components/report-print-header";
+import { ReportActions } from "~/components/report-actions";
 import { getBalances } from "~/features/inventory/queries.server";
 import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.balances";
@@ -53,15 +54,11 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
             Current on-hand quantity for every part and accessible location.
           </p>
         </div>
-        <div className="heading-actions">
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={() => window.print()}
-          >
-            Print / Save as PDF
-          </button>
-        </div>
+        <ReportActions
+          filename="stock-balances-register"
+          documentTitle="Stock Balances Register"
+          targetSelector=".panel:has(table)"
+        />
       </div>
 
       <section className="panel">

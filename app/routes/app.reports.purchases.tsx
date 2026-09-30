@@ -1,5 +1,6 @@
 import { Form, Link, useSearchParams } from "react-router";
 import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
+import { ReportActions } from "~/components/report-actions";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { getLocalPurchases } from "~/features/inventory/queries.server";
@@ -61,15 +62,11 @@ export default function PurchasesReportPage({
             Report of all local purchases, filterable by date and supplier.
           </p>
         </div>
-        <div className="heading-actions">
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={() => window.print()}
-          >
-            Print / Save as PDF
-          </button>
-        </div>
+        <ReportActions
+          filename={`local-purchases-${loaderData.range.period || "report"}`}
+          documentTitle="Local Purchases Report"
+          targetSelector=".panel:has(table)"
+        />
       </div>
 
       <Form

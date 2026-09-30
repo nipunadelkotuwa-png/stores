@@ -30,8 +30,10 @@
     "@zxing/library": "^0.23.0",
     "decimal.js": "^10.6.0",
     "drizzle-orm": "^0.45.2",
+    "html2canvas": "^1.4.1",
     "isbot": "^5.1.36",
     "jsbarcode": "^3.12.3",
+    "jspdf": "^4.2.1",
     "pg": "^8.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -64,5 +66,12 @@
     "vite": "^8.0.3",
     "vite-env-only": "^3.0.3",
     "vitest": "^4.1.10"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@node-rs/argon2",
+      "core-js",
+      "esbuild"
+    ]
   }
 }

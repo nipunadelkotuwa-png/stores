@@ -12,6 +12,7 @@ import { TyreDisposeForm } from "~/components/tyre-dispose-form";
 import { StockLineItems } from "~/components/stock-line-items";
 import { TyreMap } from "~/components/tyre-map";
 import { ReportEmptyState } from "~/components/report-primitives";
+import { ReportActions } from "~/components/report-actions";
 import {
   loadStockLines,
   stockLinesActionError,
@@ -246,13 +247,12 @@ export default function JobCardDetailPage({
           >
             {pending ? "Pending approval" : card.status}
           </span>
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={() => window.print()}
-          >
-            Print
-          </button>
+          <ReportActions
+            filename={card.jobNumber}
+            documentTitle={`Job Card • ${card.jobNumber}`}
+            targetSelector=".print-doc-container"
+            className=""
+          />
         </div>
       </div>
 

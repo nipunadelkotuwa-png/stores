@@ -1,5 +1,6 @@
 import { Form, Link, useSearchParams } from "react-router";
 import { ReportPrintFooter, ReportPrintHeader } from "~/components/report-print-header";
+import { ReportActions } from "~/components/report-actions";
 import { ReportPeriodFilter } from "~/components/report-period-filter";
 import { getEnv } from "~/config/env.server";
 import { movementFiltersFromSearch } from "~/features/inventory/movement-filters";
@@ -51,14 +52,11 @@ export default function MovementsPage({ loaderData }: Route.ComponentProps) {
             Immutable movements with the resulting balance after every posting.
           </p>
         </div>
-        <div>
-          <button
-            className="button button-primary"
-            onClick={() => window.print()}
-          >
-            Print / Save as PDF
-          </button>
-        </div>
+        <ReportActions
+          filename={`stock-movements-${loaderData.range.period || "ledger"}`}
+          documentTitle="Stock Movement Ledger"
+          targetSelector=".print-panel"
+        />
       </div>
       {!loaderData.focus ? (
         <Form
