@@ -1,13 +1,11 @@
 /**
- * PDF generation and export utility for StoreOPS (DS Gunasekara Group)
+ * High-Reliability PDF generation and export utility for StoreOPS (DS Gunasekara Group)
  * Uses client-side jsPDF and html2canvas with dynamic imports for SSR safety.
  */
 
 export interface PdfExportOptions {
   filename?: string;
   orientation?: "portrait" | "landscape";
-  unit?: "mm" | "pt" | "px";
-  format?: "a4" | [number, number];
   scale?: number;
 }
 
@@ -17,14 +15,14 @@ export interface GeneratedPdfResult {
   blobUrl: string;
   filename: string;
   totalPages: number;
+  pageImages: string[];
   download: () => void;
   print: () => void;
 }
 
 /**
  * Generate a high-quality A4 PDF from a DOM element.
- * Supports multi-page splitting, high-DPI canvas capture, and returns
- * a downloadable file and blob URL for interactive previewing.
+ * Performs clean multi-page canvas slicing so each page is crisp, with zero clipping errors.
  */
 export async function generatePdfFromElement(
   element: HTMLElement,
@@ -37,7 +35,7 @@ export async function generatePdfFromElement(
   const {
     filename = "document.pdf",
     orientation = "portrait",
-    scale = 2, // High DPI for crisp vector-like text and barcodes
+    scale = 2, // High DPI for crisp text and barcodes
   } = options;
 
   // Dynamically import jsPDF and html2canvas for safe SSR bundling
@@ -52,33 +50,34 @@ export async function generatePdfFromElement(
   const a4WidthMm = orientation === "landscape" ? 297 : 210;
   const a4HeightMm = orientation === "landscape" ? 210 : 297;
 
-  // Ensure element styles are fully captured
+  // Render the target element into a high-DPI canvas
   const canvas = await html2canvas(element, {
     scale: scale,
     useCORS: true,
     allowTaint: true,
     logging: false,
     backgroundColor: "#ffffff",
-    windowWidth: element.scrollWidth,
     onclone: (clonedDoc: Document) => {
-      // Force all elements inside clone to be visible as if printing
-      const clonedEl = clonedDoc.querySelector(".print-doc-container, .receipt-print-wrapper, .receipt-panel, .print-panel, table") as HTMLElement;
-      if (clonedEl) {
-        clonedEl.style.display = "block";
-        clonedEl.style.visibility = "visible";
-      }
-      // Ensure all no-print elements in clonedDoc are hidden
-      const noPrintElements = clonedDoc.querySelectorAll(".no-print");
-      noPrintElements.forEach((el) => {
-        (el as HTMLElement).style.display = "none";
+      // Force all print containers inside clone to be visible
+      const clonedEls = clonedDoc.querySelectorAll(
+        ".print-doc-container, .job-card-sheet, .receipt-print-wrapper, .receipt-panel, .print-panel",
+      );
+      clonedEls.forEach((el) => {
+        const h = el as HTMLElement;
+        h.style.display = "block";
+        h.style.visibility = "visible";
       });
-      // Ensure all print-only elements in clonedDoc are visible
-      const printOnlyElements = clonedDoc.querySelectorAll(".print-only, .only-print");
-      printOnlyElements.forEach((el) => {
-        (el as HTMLElement).style.display = "block";
+      // Hide all no-print controls inside clone
+      const noPrintEls = clonedDoc.querySelectorAll(".no-print");
+      noPrintEls.forEach((el) => {
+        (el as HTMLElement).style.display = "none";
       });
     },
   });
+
+  if (!canvas || canvas.width === 0 || canvas.height === 0) {
+    throw new Error("Unable to capture printable content: element was empty or hidden.");
+  }
 
   const pdf = new jsPDF({
     orientation: orientation,
@@ -87,35 +86,45 @@ export async function generatePdfFromElement(
     compress: true,
   });
 
-  const imgData = canvas.toDataURL("image/jpeg", 0.95);
+  // Calculate pixel height of one A4 page based on the canvas aspect ratio
+  const pageHeightPx = Math.floor((canvas.width * a4HeightMm) / a4WidthMm);
+  const totalPages = Math.ceil(canvas.height / pageHeightPx) || 1;
+  const pageImages: string[] = [];
 
-  const canvasWidthPx = canvas.width;
-  const canvasHeightPx = canvas.height;
-
-  // Calculate the height of the image in mm when fitted to A4 width
-  const imgWidthMm = a4WidthMm;
-  const imgHeightMm = (canvasHeightPx * a4WidthMm) / canvasWidthPx;
-
-  let totalPages = 1;
-
-  if (imgHeightMm <= a4HeightMm) {
-    // Single page document
-    pdf.addImage(imgData, "JPEG", 0, 0, imgWidthMm, imgHeightMm, undefined, "FAST");
-  } else {
-    // Multi-page document: slice the canvas image across pages
-    let heightLeftMm = imgHeightMm;
-    let positionYMm = 0;
-
-    pdf.addImage(imgData, "JPEG", 0, positionYMm, imgWidthMm, imgHeightMm, undefined, "FAST");
-    heightLeftMm -= a4HeightMm;
-
-    while (heightLeftMm > 0) {
-      positionYMm -= a4HeightMm;
+  for (let i = 0; i < totalPages; i++) {
+    if (i > 0) {
       pdf.addPage();
-      totalPages += 1;
-      pdf.addImage(imgData, "JPEG", 0, positionYMm, imgWidthMm, imgHeightMm, undefined, "FAST");
-      heightLeftMm -= a4HeightMm;
     }
+
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = pageHeightPx;
+    const ctx = pageCanvas.getContext("2d");
+
+    if (ctx) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+
+      const sourceY = i * pageHeightPx;
+      const sourceHeight = Math.min(pageHeightPx, canvas.height - sourceY);
+
+      ctx.drawImage(
+        canvas,
+        0,
+        sourceY,
+        canvas.width,
+        sourceHeight,
+        0,
+        0,
+        canvas.width,
+        sourceHeight,
+      );
+    }
+
+    const pageDataUrl = pageCanvas.toDataURL("image/jpeg", 0.95);
+    pageImages.push(pageDataUrl);
+
+    pdf.addImage(pageDataUrl, "JPEG", 0, 0, a4WidthMm, a4HeightMm, undefined, "FAST");
   }
 
   const blob = pdf.output("blob");
@@ -127,19 +136,13 @@ export async function generatePdfFromElement(
   };
 
   const print = () => {
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
-    iframe.src = blobUrl;
-    document.body.appendChild(iframe);
-    iframe.onload = () => {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-    };
+    const printWindow = window.open(blobUrl);
+    if (printWindow) {
+      printWindow.focus();
+      printWindow.print();
+    } else {
+      window.print();
+    }
   };
 
   return {
@@ -148,6 +151,7 @@ export async function generatePdfFromElement(
     blobUrl,
     filename: cleanFilename,
     totalPages,
+    pageImages,
     download,
     print,
   };

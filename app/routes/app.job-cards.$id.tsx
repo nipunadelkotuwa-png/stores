@@ -250,7 +250,7 @@ export default function JobCardDetailPage({
           <ReportActions
             filename={card.jobNumber}
             documentTitle={`Job Card • ${card.jobNumber}`}
-            targetSelector=".print-doc-container"
+            targetSelector="#printable-job-card"
             className=""
           />
         </div>
@@ -260,44 +260,8 @@ export default function JobCardDetailPage({
         <p className="form-error no-print">{actionData.error}</p>
       ) : null}
 
-      <div className="screen-only">
-        <section
-          className="panel receipt-panel"
-          style={{ marginBottom: "1.5rem" }}
-        >
-          <p>
-            <strong>Complaint:</strong> {card.complaint}
-          </p>
-          {card.mechanicName ? (
-            <p>
-              <strong>Mechanic:</strong> {card.mechanicName}
-            </p>
-          ) : null}
-          {card.odometerKm ? (
-            <p>
-              <strong>Odometer:</strong> {card.odometerKm} km
-            </p>
-          ) : null}
-          {card.workDone ? (
-            <p>
-              <strong>Work done:</strong> {card.workDone}
-            </p>
-          ) : null}
-          {card.notes ? (
-            <p>
-              <strong>Notes:</strong> {card.notes}
-            </p>
-          ) : null}
-          <p className="muted">
-            Opened by {card.openedBy}
-            {card.status === "REJECTED"
-              ? " · Rejected"
-              : card.closedAt
-                ? ` · Closed ${new Date(card.closedAt).toLocaleString()}`
-                : ""}
-          </p>
-        </section>
-
+      {/* Interactive Workshop Action Panels (Hidden on Print) */}
+      <div className="no-print" style={{ marginBottom: "1.5rem" }}>
         <section className="panel" style={{ marginBottom: "1.5rem" }}>
           <h2>Tyres on this bus</h2>
           <TyreMap slots={card.fitted} />
@@ -630,109 +594,10 @@ export default function JobCardDetailPage({
           </>
         ) : null}
 
-        <section className="panel" style={{ marginBottom: "1.5rem" }}>
-          <h2>Parts issued / returned</h2>
-          {card.documents.length === 0 ? (
-            <p className="muted">No stock documents on this card yet.</p>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Document</th>
-                    <th>Type</th>
-                    <th>SKU</th>
-                    <th>Part</th>
-                    <th>Qty</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {card.documents.map((row) => (
-                    <tr key={`${row.id}-${row.sku}`}>
-                      <td className="mono">
-                        <Link to={`/receipts/${row.id}`}>{row.number}</Link>
-                      </td>
-                      <td>
-                        {row.type.replaceAll("_", " ")}
-                        {row.status === "PENDING_APPROVAL"
-                          ? " · pending"
-                          : row.status === "REJECTED"
-                            ? " · rejected"
-                            : ""}
-                      </td>
-                      <td className="mono">{row.sku}</td>
-                      <td>{row.part}</td>
-                      <td className="quantity">{row.quantity}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section className="panel" style={{ marginBottom: "1.5rem" }}>
-          <h2>Lubricant / Oil changes</h2>
-          {card.oilChanges.length === 0 ? (
-            <p className="muted">No lubricant or oil changes recorded on this card.</p>
-          ) : (
-            <ul>
-              {card.oilChanges.map((row) => (
-                <li key={row.id}>
-                  <strong>{row.part}</strong> ({row.sku}) — <strong>{row.litres} L</strong>
-                  {row.odometerKm
-                    ? ` @ ${Number(row.odometerKm).toLocaleString()} km`
-                    : ""}
-                  {row.documentStatus === "PENDING_APPROVAL" ? (
-                    <span
-                      className="badge warning"
-                      style={{ marginLeft: "6px" }}
-                    >
-                      awaiting verification
-                    </span>
-                  ) : row.documentStatus === "REJECTED" ? (
-                    <span
-                      className="badge danger"
-                      style={{ marginLeft: "6px" }}
-                    >
-                      rejected
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="panel">
-          <h2>Tyre activity</h2>
-          {card.tyreEvents.length === 0 ? (
-            <p className="muted">No tyre movements or tyres issued on this card.</p>
-          ) : (
-            <ul>
-              {card.tyreEvents.map((row) => (
-                <li key={row.id}>
-                  <strong>{row.type}</strong> — Serial:{" "}
-                  <span className="mono">{row.serialNumber}</span>
-                  {row.toPosition ? ` → Position ${row.toPosition}` : ""}
-                  {row.fromPosition ? ` from ${row.fromPosition}` : ""}
-                  {row.status === "PENDING_APPROVAL" ? (
-                    <span
-                      className="badge warning"
-                      style={{ marginLeft: "6px" }}
-                    >
-                      awaiting verification
-                    </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       </div>
 
-      {/* DEDICATED COMPLETE MULTI-PAGE PRINT LAYOUT (A4 WORKSHOP STANDARD) */}
-      <div className="print-only print-doc-container">
+      {/* DEDICATED COMPLETE MULTI-PAGE A4 WORKSHOP JOB CARD DOCUMENT (Visible on screen and print) */}
+      <div id="printable-job-card" className="print-doc-container job-card-sheet">
         {/* Printable Header */}
         <div className="print-header-bar">
           <div>

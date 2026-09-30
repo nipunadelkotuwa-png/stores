@@ -31,8 +31,8 @@ export function PdfPreviewDialog({
 
   if (!isOpen) return null;
 
-  const handleZoomIn = () => setZoom((prev) => Math.min(prev + 15, 175));
-  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 15, 60));
+  const handleZoomIn = () => setZoom((prev) => Math.min(prev + 15, 160));
+  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 15, 50));
   const handleResetZoom = () => setZoom(100);
 
   return (
@@ -43,9 +43,9 @@ export function PdfPreviewDialog({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: "rgba(17, 24, 39, 0.75)",
-        backdropFilter: "blur(4px)",
-        zIndex: 9999,
+        backgroundColor: "rgba(15, 23, 42, 0.85)",
+        backdropFilter: "blur(6px)",
+        zIndex: 99999,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -59,11 +59,11 @@ export function PdfPreviewDialog({
       <div
         style={{
           width: "100%",
-          maxWidth: "1000px",
+          maxWidth: "1080px",
           height: "92vh",
           backgroundColor: "#1e293b",
           borderRadius: "8px",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -88,12 +88,12 @@ export function PdfPreviewDialog({
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ fontSize: "1.2rem" }}>📄</span>
             <div>
-              <div style={{ fontWeight: 700, fontSize: "9.5pt", letterSpacing: "0.02em" }}>
+              <div style={{ fontWeight: 700, fontSize: "10pt", letterSpacing: "0.02em" }}>
                 {documentTitle}
               </div>
               {pdfResult ? (
-                <div style={{ fontSize: "7.5pt", color: "#94a3b8", fontFamily: "var(--font-mono, monospace)" }}>
-                  {pdfResult.filename} • {pdfResult.totalPages} page(s) • A4
+                <div style={{ fontSize: "8pt", color: "#94a3b8", fontFamily: "var(--font-mono, monospace)" }}>
+                  {pdfResult.filename} • {pdfResult.totalPages} A4 page(s)
                 </div>
               ) : null}
             </div>
@@ -115,13 +115,13 @@ export function PdfPreviewDialog({
               <button
                 type="button"
                 onClick={handleZoomOut}
-                disabled={zoom <= 60}
+                disabled={zoom <= 50}
                 style={{
                   background: "transparent",
                   border: "none",
                   color: "#cbd5e1",
-                  fontSize: "12pt",
-                  cursor: zoom <= 60 ? "not-allowed" : "pointer",
+                  fontSize: "13pt",
+                  cursor: zoom <= 50 ? "not-allowed" : "pointer",
                   padding: "0 6px",
                   lineHeight: 1,
                 }}
@@ -132,7 +132,7 @@ export function PdfPreviewDialog({
               <span
                 style={{
                   fontSize: "8.5pt",
-                  minWidth: "42px",
+                  minWidth: "44px",
                   textAlign: "center",
                   fontFamily: "var(--font-mono, monospace)",
                   color: "#e2e8f0",
@@ -143,13 +143,13 @@ export function PdfPreviewDialog({
               <button
                 type="button"
                 onClick={handleZoomIn}
-                disabled={zoom >= 175}
+                disabled={zoom >= 160}
                 style={{
                   background: "transparent",
                   border: "none",
                   color: "#cbd5e1",
-                  fontSize: "12pt",
-                  cursor: zoom >= 175 ? "not-allowed" : "pointer",
+                  fontSize: "13pt",
+                  cursor: zoom >= 160 ? "not-allowed" : "pointer",
                   padding: "0 6px",
                   lineHeight: 1,
                 }}
@@ -166,13 +166,13 @@ export function PdfPreviewDialog({
                   color: "#cbd5e1",
                   fontSize: "7.5pt",
                   cursor: "pointer",
-                  padding: "2px 6px",
+                  padding: "3px 7px",
                   borderRadius: "3px",
                   marginLeft: "4px",
                 }}
                 title="Reset to 100%"
               >
-                Reset
+                Fit
               </button>
             </div>
           ) : null}
@@ -232,12 +232,12 @@ export function PdfPreviewDialog({
                 width: "28px",
                 height: "28px",
                 borderRadius: "4px",
-                fontSize: "12pt",
+                fontSize: "13pt",
                 fontWeight: 700,
                 cursor: "pointer",
                 display: "grid",
                 placeItems: "center",
-                marginLeft: "6px",
+                marginLeft: "4px",
               }}
               title="Close Preview (Esc)"
             >
@@ -253,9 +253,10 @@ export function PdfPreviewDialog({
             backgroundColor: "#334155",
             overflow: "auto",
             display: "flex",
-            justifyContent: "center",
-            alignItems: "flex-start",
-            padding: "20px",
+            flexDirection: "column",
+            alignItems: "center",
+            padding: "24px 16px",
+            gap: "24px",
           }}
         >
           {isLoading ? (
@@ -272,8 +273,8 @@ export function PdfPreviewDialog({
             >
               <div
                 style={{
-                  width: "40px",
-                  height: "40px",
+                  width: "44px",
+                  height: "44px",
                   border: "4px solid rgba(255, 255, 255, 0.2)",
                   borderTopColor: "#22c55e",
                   borderRadius: "50%",
@@ -290,37 +291,67 @@ export function PdfPreviewDialog({
               `,
                 }}
               />
-              <div style={{ fontWeight: 600, fontSize: "10.5pt" }}>
+              <div style={{ fontWeight: 600, fontSize: "11pt" }}>
                 Rendering High-Resolution PDF...
               </div>
               <div style={{ fontSize: "8.5pt", color: "#94a3b8" }}>
-                Generating vector pages and multi-page layout via PDF engine
+                Capturing vector typography and slicing pages
               </div>
             </div>
-          ) : pdfResult ? (
+          ) : pdfResult && pdfResult.pageImages && pdfResult.pageImages.length > 0 ? (
+            /* Direct high-fidelity multi-page document rendering */
             <div
               style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "20px",
                 width: `${zoom}%`,
                 maxWidth: "100%",
-                height: "100%",
-                display: "flex",
-                justifyContent: "center",
                 transition: "width 0.15s ease-out",
               }}
             >
-              <iframe
-                src={`${pdfResult.blobUrl}#toolbar=0&navpanes=0`}
-                title="PDF Preview"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  minHeight: "750px",
-                  border: "none",
-                  borderRadius: "4px",
-                  backgroundColor: "#ffffff",
-                  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.3)",
-                }}
-              />
+              {pdfResult.pageImages.map((pageSrc, pageIdx) => (
+                <div
+                  key={pageIdx}
+                  style={{
+                    position: "relative",
+                    width: "100%",
+                    maxWidth: "850px",
+                    backgroundColor: "#ffffff",
+                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0,0,0,0.1)",
+                    borderRadius: "2px",
+                    overflow: "hidden",
+                  }}
+                >
+                  {/* Page indicator pill */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: "8px",
+                      right: "12px",
+                      backgroundColor: "rgba(0, 0, 0, 0.65)",
+                      color: "#ffffff",
+                      fontSize: "7.5pt",
+                      padding: "2px 8px",
+                      borderRadius: "10px",
+                      pointerEvents: "none",
+                      letterSpacing: "0.03em",
+                    }}
+                  >
+                    Page {pageIdx + 1} of {pdfResult.totalPages}
+                  </div>
+                  <img
+                    src={pageSrc}
+                    alt={`Page ${pageIdx + 1}`}
+                    style={{
+                      width: "100%",
+                      height: "auto",
+                      display: "block",
+                    }}
+                  />
+                </div>
+              ))}
             </div>
           ) : (
             <div style={{ color: "#cbd5e1", marginTop: "40px" }}>
