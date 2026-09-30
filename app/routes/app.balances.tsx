@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import {
+  ReportPrintFooter,
+  ReportPrintHeader,
+} from "~/components/report-print-header";
 import { getBalances } from "~/features/inventory/queries.server";
 import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.balances";
+
 export async function loader({ request }: Route.LoaderArgs) {
   return {
     balances: await getBalances(
@@ -10,6 +15,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     ),
   };
 }
+
 export default function BalancesPage({ loaderData }: Route.ComponentProps) {
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(
@@ -19,6 +25,7 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     setSearchQuery(searchParams.get("q")?.trim() ?? "");
   }, [searchParams]);
+
   const rows = loaderData.balances.filter((row) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -26,9 +33,19 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
       row.sku.toLowerCase().includes(q) || row.part.toLowerCase().includes(q)
     );
   });
+
   return (
     <>
-      <div className="page-heading">
+      <ReportPrintHeader
+        title="Stock Balances Register"
+        subtitle="Current On-Hand Inventory Valuation & Balances"
+        metadata={[
+          ...(searchQuery ? [{ label: "Search Filter", value: searchQuery }] : []),
+          { label: "Total Listed Items", value: rows.length },
+        ]}
+      />
+
+      <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Live inventory</p>
           <h1>Stock balances</h1>
@@ -36,9 +53,20 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
             Current on-hand quantity for every part and accessible location.
           </p>
         </div>
+        <div className="heading-actions">
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => window.print()}
+          >
+            Print / Save as PDF
+          </button>
+        </div>
       </div>
+
       <section className="panel">
         <div
+          className="no-print"
           style={{
             display: "flex",
             justifyContent: "flex-end",
@@ -67,7 +95,7 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
                 <th>Part</th>
                 <th>On hand</th>
                 <th>Reorder level</th>
-                <th />
+                <th className="no-print" />
               </tr>
             </thead>
             <tbody>
@@ -92,7 +120,7 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
                       {row.onHand} {row.unit}
                     </td>
                     <td>{row.reorderLevel ?? "Not set"}</td>
-                    <td>
+                    <td className="no-print">
                       <Link
                         to={`/issues/new?part=${row.partId}&store=${row.storeId}`}
                       >
@@ -112,6 +140,8 @@ export default function BalancesPage({ loaderData }: Route.ComponentProps) {
           </table>
         </div>
       </section>
+
+      <ReportPrintFooter reportName="Stock Balances Register" />
     </>
   );
 }

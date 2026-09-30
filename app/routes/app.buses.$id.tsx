@@ -1,4 +1,8 @@
 import { data, Link } from "react-router";
+import {
+  ReportPrintFooter,
+  ReportPrintHeader,
+} from "~/components/report-print-header";
 import { TyreMap } from "~/components/tyre-map";
 import { busStatusLabel } from "~/features/master-data/bus-lifecycle";
 import { getBusHistory } from "~/features/workshop/history.server";
@@ -18,7 +22,19 @@ export default function BusHistoryPage({ loaderData }: Route.ComponentProps) {
   const { bus, fitted, lastOil, lastOdometer, timeline } = loaderData;
   return (
     <>
-      <div className="page-heading">
+      <ReportPrintHeader
+        title={`Bus Maintenance Ledger • ${bus.fleetNumber}`}
+        subtitle="Workshop & Fleet Asset Lifecycle Register"
+        metadata={[
+          { label: "Fleet Number", value: bus.fleetNumber },
+          { label: "Registration No", value: bus.registrationNumber || "—" },
+          { label: "Make / Model", value: [bus.make, bus.model].filter(Boolean).join(" ") || "—" },
+          { label: "Status", value: busStatusLabel(bus.status) },
+          { label: "Odometer", value: lastOdometer ? `${lastOdometer} km` : "—" },
+        ]}
+      />
+
+      <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Fleet history</p>
           <h1>
@@ -40,6 +56,13 @@ export default function BusHistoryPage({ loaderData }: Route.ComponentProps) {
           <Link className="button button-secondary" to="/buses">
             All buses
           </Link>
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => window.print()}
+          >
+            Print / Save as PDF
+          </button>
           {bus.status === "ACTIVE" ? (
             <Link
               className="button button-primary"
@@ -142,6 +165,11 @@ export default function BusHistoryPage({ loaderData }: Route.ComponentProps) {
           </ol>
         )}
       </section>
+
+      <ReportPrintFooter
+        reportName={`Bus Maintenance Ledger • ${bus.fleetNumber}`}
+        documentId={bus.registrationNumber || bus.fleetNumber}
+      />
     </>
   );
 }

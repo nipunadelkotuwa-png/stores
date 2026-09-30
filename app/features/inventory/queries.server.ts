@@ -378,6 +378,8 @@ export async function getDocumentForReceipt(actor: Actor, id: string) {
   const destStores = alias(stores, "dest_stores_receipt");
   const createdUsers = alias(users, "created_users_receipt");
   const postedUsers = alias(users, "posted_users_receipt");
+  const reversedDocs = alias(stockDocuments, "reversed_doc_receipt");
+  const linkedDocs = alias(stockDocuments, "linked_doc_receipt");
 
   const [doc] = await db
     .select({
@@ -389,6 +391,7 @@ export async function getDocumentForReceipt(actor: Actor, id: string) {
       storeCode: stores.code,
       destinationStore: destStores.name,
       destinationStoreCode: destStores.code,
+      supplierName: suppliers.name,
       bus: buses.fleetNumber,
       busRegistration: buses.registrationNumber,
       busMake: buses.make,
@@ -396,6 +399,19 @@ export async function getDocumentForReceipt(actor: Actor, id: string) {
       jobCardId: stockDocuments.jobCardId,
       jobNumber: jobCards.jobNumber,
       jobCardType: jobCards.type,
+      reversesDocumentId: stockDocuments.reversesDocumentId,
+      reversedDocNumber: reversedDocs.documentNumber,
+      reversedDocType: reversedDocs.type,
+      linkedDocumentId: stockDocuments.linkedDocumentId,
+      linkedDocNumber: linkedDocs.documentNumber,
+      linkedDocType: linkedDocs.type,
+      localPurchaseNumber: localPurchases.purchaseNumber,
+      supplierInvoiceReference: localPurchases.supplierInvoiceReference,
+      purchaseCurrency: localPurchases.currency,
+      purchaseSubtotal: localPurchases.subtotal,
+      purchaseDiscount: localPurchases.discount,
+      purchaseTax: localPurchases.tax,
+      purchaseTotal: localPurchases.total,
       postedAt: stockDocuments.postedAt,
       reason: stockDocuments.reason,
       notes: stockDocuments.notes,
@@ -409,10 +425,14 @@ export async function getDocumentForReceipt(actor: Actor, id: string) {
     .from(stockDocuments)
     .innerJoin(stores, eq(stockDocuments.storeId, stores.id))
     .leftJoin(destStores, eq(stockDocuments.destinationStoreId, destStores.id))
+    .leftJoin(suppliers, eq(stockDocuments.supplierId, suppliers.id))
     .leftJoin(buses, eq(stockDocuments.busId, buses.id))
     .leftJoin(jobCards, eq(stockDocuments.jobCardId, jobCards.id))
     .leftJoin(createdUsers, eq(stockDocuments.createdBy, createdUsers.id))
     .leftJoin(postedUsers, eq(stockDocuments.postedBy, postedUsers.id))
+    .leftJoin(reversedDocs, eq(stockDocuments.reversesDocumentId, reversedDocs.id))
+    .leftJoin(linkedDocs, eq(stockDocuments.linkedDocumentId, linkedDocs.id))
+    .leftJoin(localPurchases, eq(localPurchases.receiptDocumentId, stockDocuments.id))
     .where(
       and(
         eq(stockDocuments.id, id),
@@ -436,12 +456,36 @@ export async function getDocumentForReceipt(actor: Actor, id: string) {
       quantity: stockDocumentLines.quantity,
       unit: parts.unit,
       unitCost: stockDocumentLines.unitCost,
+      note: stockDocumentLines.note,
+      quantityDelta: stockMovements.quantityDelta,
+      balanceAfter: stockMovements.balanceAfter,
     })
     .from(stockDocumentLines)
     .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
+    .leftJoin(
+      stockMovements,
+      eq(stockMovements.documentLineId, stockDocumentLines.id),
+    )
     .where(eq(stockDocumentLines.documentId, id));
 
-  return { ...doc, lines };
+  const tyresList = await db
+    .select({
+      serialNumber: tyres.serialNumber,
+      sku: parts.sku,
+      partName: parts.name,
+      fromPosition: tyreEvents.fromPosition,
+      toPosition: tyreEvents.toPosition,
+      fromStage: tyreEvents.fromStage,
+      toStage: tyreEvents.toStage,
+      odometerKm: tyreEvents.odometerKm,
+      notes: tyreEvents.notes,
+    })
+    .from(tyreEvents)
+    .innerJoin(tyres, eq(tyreEvents.tyreId, tyres.id))
+    .innerJoin(parts, eq(tyres.partId, parts.id))
+    .where(eq(tyreEvents.stockDocumentId, id));
+
+  return { ...doc, lines, tyres: tyresList };
 }
 
 export async function getDailyMovements(actor: Actor, date: string) {

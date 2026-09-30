@@ -1,4 +1,8 @@
 import { data, Link, useActionData } from "react-router";
+import {
+  ReportPrintFooter,
+  ReportPrintHeader,
+} from "~/components/report-print-header";
 import { TyreDisposeForm } from "~/components/tyre-dispose-form";
 import { workshopActionResult } from "~/features/workshop/errors";
 import { getTyreDetail } from "~/features/workshop/queries.server";
@@ -39,7 +43,22 @@ export default function TyreDetailPage({ loaderData }: Route.ComponentProps) {
   const today = new Date().toISOString().slice(0, 10);
   return (
     <>
-      <div className="page-heading">
+      <ReportPrintHeader
+        title={`Tyre Lifecycle History • ${tyre.serialNumber}`}
+        subtitle="Workshop Tyre Asset Management & Inspection Record"
+        metadata={[
+          { label: "Serial Number", value: tyre.serialNumber },
+          { label: "SKU / Size", value: `${tyre.sku} (${tyre.part})` },
+          { label: "Current Stage", value: tyre.stage },
+          {
+            label: "Current Status",
+            value: `${statusLabel(tyre.status)}${tyre.status === "FITTED" ? ` (Bus ${tyre.fleetNumber ?? "—"} • ${tyre.position ?? "—"})` : tyre.storeCode ? ` (${tyre.storeCode})` : ""}`,
+          },
+          { label: "Total Events", value: tyre.events.length },
+        ]}
+      />
+
+      <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Workshop</p>
           <h1 className="mono">{tyre.serialNumber}</h1>
@@ -51,6 +70,13 @@ export default function TyreDetailPage({ loaderData }: Route.ComponentProps) {
           <Link className="button button-secondary" to="/tyres">
             Back to register
           </Link>
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => window.print()}
+          >
+            Print / Save as PDF
+          </button>
           {tyre.actions.canFit ? (
             <Link className="button button-secondary" to="/job-cards">
               {fitActionLabel(tyre.actions)}
@@ -167,6 +193,11 @@ export default function TyreDetailPage({ loaderData }: Route.ComponentProps) {
           </ol>
         )}
       </section>
+
+      <ReportPrintFooter
+        reportName={`Tyre Lifecycle History • ${tyre.serialNumber}`}
+        documentId={tyre.serialNumber}
+      />
     </>
   );
 }

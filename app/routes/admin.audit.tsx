@@ -1,5 +1,9 @@
 import { Link } from "react-router";
 import {
+  ReportPrintFooter,
+  ReportPrintHeader,
+} from "~/components/report-print-header";
+import {
   auditReceiptPath,
   formatAuditDetail,
 } from "~/features/inventory/audit-display";
@@ -15,13 +19,31 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function AuditLogPage({ loaderData }: Route.ComponentProps) {
   return (
     <>
-      <div className="page-heading">
+      <ReportPrintHeader
+        title="System Audit Log & Security Register"
+        subtitle="Immutable Audit Trail of Inventory Transactions"
+        metadata={[
+          { label: "Total Audit Records", value: loaderData.events.length },
+          { label: "Scope", value: "All Locations & Transactions" },
+        ]}
+      />
+
+      <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Administration</p>
           <h1>Audit log</h1>
           <p className="muted">
             Posted inventory events, reversals, purchases, and low-stock alerts.
           </p>
+        </div>
+        <div className="heading-actions">
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => window.print()}
+          >
+            Print / Save as PDF
+          </button>
         </div>
       </div>
       <section className="panel">
@@ -75,6 +97,8 @@ export default function AuditLogPage({ loaderData }: Route.ComponentProps) {
           </table>
         </div>
       </section>
+
+      <ReportPrintFooter reportName="System Audit Log & Security Register" />
     </>
   );
 }

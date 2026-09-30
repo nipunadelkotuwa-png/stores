@@ -1,7 +1,12 @@
 import { Link } from "react-router";
+import {
+  ReportPrintFooter,
+  ReportPrintHeader,
+} from "~/components/report-print-header";
 import { getLowStock } from "~/features/inventory/queries.server";
 import { requirePermission } from "~/lib/auth/authorization.server";
 import type { Route } from "./+types/app.alerts.low-stock";
+
 export async function loader({ request }: Route.LoaderArgs) {
   return {
     alerts: await getLowStock(
@@ -9,9 +14,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     ),
   };
 }
+
 export default function LowStockPage({ loaderData }: Route.ComponentProps) {
   return (
     <>
+      <ReportPrintHeader
+        title="Low-Stock Alert Report"
+        subtitle="Critical Reorder & Procurement Alerts"
+        metadata={[
+          { label: "Alert Count", value: `${loaderData.alerts.length} item(s) below reorder level` },
+          { label: "Priority", value: "Immediate Reorder Required" },
+        ]}
+      />
+
       <div className="page-heading no-print">
         <div>
           <p className="eyebrow">Attention required</p>
@@ -74,6 +89,8 @@ export default function LowStockPage({ loaderData }: Route.ComponentProps) {
           </div>
         ) : null}
       </section>
+
+      <ReportPrintFooter reportName="Low-Stock Alert Report" />
     </>
   );
 }

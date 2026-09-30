@@ -11,6 +11,7 @@ import { CsrfField } from "~/components/csrf-field";
 import { TyreDisposeForm } from "~/components/tyre-dispose-form";
 import { StockLineItems } from "~/components/stock-line-items";
 import { TyreMap } from "~/components/tyre-map";
+import { ReportEmptyState } from "~/components/report-primitives";
 import {
   loadStockLines,
   stockLinesActionError,
@@ -935,75 +936,78 @@ export default function JobCardDetailPage({
           )}
         </div>
 
-        {/* Section 5: Tyre Activity */}
-        <div className="print-section-box">
-          <div className="print-section-title">Tyre Activity</div>
-          <div className="print-section-body">
-            {card.tyreEvents.length === 0 ? (
-              <span style={{ color: "#666", fontStyle: "italic" }}>
-                No tyre movements or tyre replacements recorded for this job card.
-              </span>
-            ) : (
-              <ul style={{ margin: "0", paddingLeft: "18px" }}>
-                {card.tyreEvents.map((t) => (
-                  <li key={`print-tyre-act-${t.id}`} style={{ marginBottom: "3px" }}>
-                    <strong>{t.type}</strong> — Serial:{" "}
-                    <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 600 }}>
-                      {t.serialNumber}
-                    </span>
-                    {t.toPosition ? ` → Position ${t.toPosition}` : ""}
-                    {t.fromPosition ? ` (from ${t.fromPosition})` : ""}
-                    {t.status === "PENDING_APPROVAL" ? (
-                      <span
-                        style={{
-                          fontSize: "8pt",
-                          color: "#b45309",
-                          marginLeft: "6px",
-                          fontWeight: "bold",
-                        }}
-                      >
-                        [Awaiting Verification]
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+        {/* Section 5 & 6: Tyre Activity & Lubricant Changes */}
+        {card.tyreEvents.length === 0 && card.oilChanges.length === 0 ? (
+          <ReportEmptyState
+            title="Other Workshop Activity"
+            items={[
+              { label: "Tyres", message: "No tyre activity recorded" },
+              { label: "Lubricants / Oil", message: "No oil change recorded" },
+            ]}
+          />
+        ) : (
+          <>
+            {card.tyreEvents.length > 0 ? (
+              <div className="print-section-box">
+                <div className="print-section-title">Tyre Activity</div>
+                <div className="print-section-body">
+                  <ul style={{ margin: "0", paddingLeft: "18px" }}>
+                    {card.tyreEvents.map((t) => (
+                      <li key={`print-tyre-act-${t.id}`} style={{ marginBottom: "3px" }}>
+                        <strong>{t.type}</strong> — Serial:{" "}
+                        <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 600 }}>
+                          {t.serialNumber}
+                        </span>
+                        {t.toPosition ? ` → Position ${t.toPosition}` : ""}
+                        {t.fromPosition ? ` (from ${t.fromPosition})` : ""}
+                        {t.status === "PENDING_APPROVAL" ? (
+                          <span
+                            style={{
+                              fontSize: "8pt",
+                              color: "#b45309",
+                              marginLeft: "6px",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            [Awaiting Verification]
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : null}
 
-        {/* Section 6: Lubricant / Oil Changes */}
-        <div className="print-section-box">
-          <div className="print-section-title">Lubricant / Oil Changes</div>
-          <div className="print-section-body">
-            {card.oilChanges.length === 0 ? (
-              <span style={{ color: "#666", fontStyle: "italic" }}>
-                No lubricant or oil changes recorded for this job card.
-              </span>
-            ) : (
-              <ul style={{ margin: "0", paddingLeft: "18px" }}>
-                {card.oilChanges.map((o) => (
-                  <li key={`print-oil-act-${o.id}`} style={{ marginBottom: "3px" }}>
-                    <strong>{o.part}</strong> ({o.sku}) — <strong>{o.litres} Litres</strong>
-                    {o.odometerKm ? ` @ ${Number(o.odometerKm).toLocaleString()} km` : ""}
-                    {o.documentStatus === "PENDING_APPROVAL" ? (
-                      <span
-                        style={{
-                          fontSize: "8pt",
-                          color: "#b45309",
-                          marginLeft: "6px",
-                          fontWeight: "bold",
-                        }}
-                      >
-                        [Awaiting Verification]
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+            {card.oilChanges.length > 0 ? (
+              <div className="print-section-box">
+                <div className="print-section-title">Lubricant / Oil Changes</div>
+                <div className="print-section-body">
+                  <ul style={{ margin: "0", paddingLeft: "18px" }}>
+                    {card.oilChanges.map((o) => (
+                      <li key={`print-oil-act-${o.id}`} style={{ marginBottom: "3px" }}>
+                        <strong>{o.part}</strong> ({o.sku}) — <strong>{o.litres} Litres</strong>
+                        {o.odometerKm ? ` @ ${Number(o.odometerKm).toLocaleString()} km` : ""}
+                        {o.documentStatus === "PENDING_APPROVAL" ? (
+                          <span
+                            style={{
+                              fontSize: "8pt",
+                              color: "#b45309",
+                              marginLeft: "6px",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            [Awaiting Verification]
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
 
         {/* Section 7: Completion & Verification Signatures */}
         <div className="print-section-box" style={{ marginTop: "16px", pageBreakInside: "avoid" }}>
