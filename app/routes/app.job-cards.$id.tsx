@@ -205,6 +205,10 @@ export default function JobCardDetailPage({
     ];
   });
 
+  const pendingApprovalsCount = card.documents.filter(
+    (d) => d.status === "PENDING_APPROVAL",
+  ).length;
+
   return (
     <>
       <div className="page-heading no-print">
@@ -473,14 +477,97 @@ export default function JobCardDetailPage({
 
               <section className="panel form-panel">
                 <h2>Close job card</h2>
+                <div
+                  style={{
+                    backgroundColor: "var(--color-paper-2, #f8f9fa)",
+                    border: "1px solid var(--color-rule, #e5e7eb)",
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "1rem",
+                    fontSize: "0.875rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: "700",
+                      marginBottom: "6px",
+                      textTransform: "uppercase",
+                      fontSize: "0.75rem",
+                      letterSpacing: "0.05em",
+                      color: "var(--muted, #6b7280)",
+                    }}
+                  >
+                    Work & Stock Issued Summary
+                  </div>
+                  <div style={{ marginBottom: "4px" }}>
+                    <strong>🛢️ Lubricants: </strong>
+                    {card.oilChanges.length === 0 ? (
+                      <span className="muted">None recorded</span>
+                    ) : (
+                      <span>
+                        {card.oilChanges
+                          .map((o) => `${o.part} (${o.litres}L)`)
+                          .join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ marginBottom: "4px" }}>
+                    <strong>🛞 Tyres: </strong>
+                    {card.tyreEvents.length === 0 ? (
+                      <span className="muted">None recorded</span>
+                    ) : (
+                      <span>
+                        {card.tyreEvents
+                          .map(
+                            (t) =>
+                              `${t.type} ${t.serialNumber}${t.toPosition ? ` → ${t.toPosition}` : ""}`,
+                          )
+                          .join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <strong>🔩 Spare Parts: </strong>
+                    {card.documents.length === 0 ? (
+                      <span className="muted">None issued</span>
+                    ) : (
+                      <span>{card.documents.length} document line(s)</span>
+                    )}
+                  </div>
+                  {pendingApprovalsCount > 0 ? (
+                    <div
+                      style={{
+                        marginTop: "8px",
+                        padding: "6px 8px",
+                        backgroundColor: "#fef3c7",
+                        color: "#92400e",
+                        borderRadius: "4px",
+                        fontWeight: "600",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      ⚠️ {pendingApprovalsCount} issue(s) awaiting verification. Must be approved before closing.
+                    </div>
+                  ) : null}
+                </div>
+
                 <Form method="post" className="stack">
                   <CsrfField />
                   <input type="hidden" name="intent" value="close" />
                   <label>
                     Work done
-                    <textarea name="workDone" rows={4} required minLength={3} />
+                    <textarea
+                      name="workDone"
+                      rows={4}
+                      required
+                      minLength={3}
+                      placeholder="Describe work completed by mechanics and technicians..."
+                    />
                   </label>
-                  <button className="button button-primary" disabled={busy}>
+                  <button
+                    className="button button-primary"
+                    disabled={busy || pendingApprovalsCount > 0}
+                  >
                     Close card
                   </button>
                 </Form>
@@ -583,39 +670,64 @@ export default function JobCardDetailPage({
           )}
         </section>
 
-        {card.oilChanges.length > 0 ? (
-          <section className="panel" style={{ marginBottom: "1.5rem" }}>
-            <h2>Oil changes</h2>
+        <section className="panel" style={{ marginBottom: "1.5rem" }}>
+          <h2>Lubricant / Oil changes</h2>
+          {card.oilChanges.length === 0 ? (
+            <p className="muted">No lubricant or oil changes recorded on this card.</p>
+          ) : (
             <ul>
               {card.oilChanges.map((row) => (
                 <li key={row.id}>
-                  {row.part} ({row.sku}) — {row.litres} L
-                  {row.odometerKm ? ` @ ${row.odometerKm} km` : ""}
-                  {row.documentStatus === "PENDING_APPROVAL"
-                    ? " · awaiting verification"
-                    : row.documentStatus === "REJECTED"
-                      ? " · rejected"
-                      : ""}
+                  <strong>{row.part}</strong> ({row.sku}) — <strong>{row.litres} L</strong>
+                  {row.odometerKm
+                    ? ` @ ${Number(row.odometerKm).toLocaleString()} km`
+                    : ""}
+                  {row.documentStatus === "PENDING_APPROVAL" ? (
+                    <span
+                      className="badge warning"
+                      style={{ marginLeft: "6px" }}
+                    >
+                      awaiting verification
+                    </span>
+                  ) : row.documentStatus === "REJECTED" ? (
+                    <span
+                      className="badge danger"
+                      style={{ marginLeft: "6px" }}
+                    >
+                      rejected
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
-          </section>
-        ) : null}
+          )}
+        </section>
 
-        {card.tyreEvents.length > 0 ? (
-          <section className="panel">
-            <h2>Tyre work</h2>
+        <section className="panel">
+          <h2>Tyre activity</h2>
+          {card.tyreEvents.length === 0 ? (
+            <p className="muted">No tyre movements or tyres issued on this card.</p>
+          ) : (
             <ul>
               {card.tyreEvents.map((row) => (
                 <li key={row.id}>
-                  {row.type} {row.serialNumber}
-                  {row.toPosition ? ` → ${row.toPosition}` : ""}
+                  <strong>{row.type}</strong> — Serial:{" "}
+                  <span className="mono">{row.serialNumber}</span>
+                  {row.toPosition ? ` → Position ${row.toPosition}` : ""}
                   {row.fromPosition ? ` from ${row.fromPosition}` : ""}
+                  {row.status === "PENDING_APPROVAL" ? (
+                    <span
+                      className="badge warning"
+                      style={{ marginLeft: "6px" }}
+                    >
+                      awaiting verification
+                    </span>
+                  ) : null}
                 </li>
               ))}
             </ul>
-          </section>
-        ) : null}
+          )}
+        </section>
       </div>
 
       {/* DEDICATED COMPLETE MULTI-PAGE PRINT LAYOUT (A4 WORKSHOP STANDARD) */}
@@ -828,17 +940,31 @@ export default function JobCardDetailPage({
           <div className="print-section-title">Tyre Activity</div>
           <div className="print-section-body">
             {card.tyreEvents.length === 0 ? (
-              <span style={{ color: "#666" }}>No tyre movements recorded.</span>
+              <span style={{ color: "#666", fontStyle: "italic" }}>
+                No tyre movements or tyre replacements recorded for this job card.
+              </span>
             ) : (
               <ul style={{ margin: "0", paddingLeft: "18px" }}>
                 {card.tyreEvents.map((t) => (
-                  <li key={`print-tyre-act-${t.id}`} style={{ marginBottom: "2px" }}>
+                  <li key={`print-tyre-act-${t.id}`} style={{ marginBottom: "3px" }}>
                     <strong>{t.type}</strong> — Serial:{" "}
-                    <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
+                    <span style={{ fontFamily: "var(--font-mono, monospace)", fontWeight: 600 }}>
                       {t.serialNumber}
                     </span>
                     {t.toPosition ? ` → Position ${t.toPosition}` : ""}
                     {t.fromPosition ? ` (from ${t.fromPosition})` : ""}
+                    {t.status === "PENDING_APPROVAL" ? (
+                      <span
+                        style={{
+                          fontSize: "8pt",
+                          color: "#b45309",
+                          marginLeft: "6px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        [Awaiting Verification]
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -846,22 +972,38 @@ export default function JobCardDetailPage({
           </div>
         </div>
 
-        {/* Section 6: Oil Changes (if any) */}
-        {card.oilChanges.length > 0 ? (
-          <div className="print-section-box">
-            <div className="print-section-title">Lubricant / Oil Changes</div>
-            <div className="print-section-body">
+        {/* Section 6: Lubricant / Oil Changes */}
+        <div className="print-section-box">
+          <div className="print-section-title">Lubricant / Oil Changes</div>
+          <div className="print-section-body">
+            {card.oilChanges.length === 0 ? (
+              <span style={{ color: "#666", fontStyle: "italic" }}>
+                No lubricant or oil changes recorded for this job card.
+              </span>
+            ) : (
               <ul style={{ margin: "0", paddingLeft: "18px" }}>
                 {card.oilChanges.map((o) => (
-                  <li key={`print-oil-act-${o.id}`} style={{ marginBottom: "2px" }}>
+                  <li key={`print-oil-act-${o.id}`} style={{ marginBottom: "3px" }}>
                     <strong>{o.part}</strong> ({o.sku}) — <strong>{o.litres} Litres</strong>
                     {o.odometerKm ? ` @ ${Number(o.odometerKm).toLocaleString()} km` : ""}
+                    {o.documentStatus === "PENDING_APPROVAL" ? (
+                      <span
+                        style={{
+                          fontSize: "8pt",
+                          color: "#b45309",
+                          marginLeft: "6px",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        [Awaiting Verification]
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
-            </div>
+            )}
           </div>
-        ) : null}
+        </div>
 
         {/* Section 7: Completion & Verification Signatures */}
         <div className="print-section-box" style={{ marginTop: "16px", pageBreakInside: "avoid" }}>

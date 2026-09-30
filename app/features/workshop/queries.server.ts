@@ -235,8 +235,11 @@ export async function getJobCardDetail(actor: Actor, id: string) {
           type: stockDocuments.type,
           status: stockDocuments.status,
           date: stockDocuments.businessDate,
+          notes: stockDocuments.notes,
           sku: parts.sku,
           part: parts.name,
+          categoryCode: partCategories.code,
+          unit: parts.unit,
           quantity: stockDocumentLines.quantity,
         })
         .from(stockDocumentLines)
@@ -245,6 +248,7 @@ export async function getJobCardDetail(actor: Actor, id: string) {
           eq(stockDocumentLines.documentId, stockDocuments.id),
         )
         .innerJoin(parts, eq(stockDocumentLines.partId, parts.id))
+        .leftJoin(partCategories, eq(parts.categoryId, partCategories.id))
         .where(eq(stockDocuments.jobCardId, card.id))
         .orderBy(asc(stockDocuments.postedAt)),
       db
@@ -256,6 +260,7 @@ export async function getJobCardDetail(actor: Actor, id: string) {
           occurredAt: tyreEvents.occurredAt,
           fromPosition: tyreEvents.fromPosition,
           toPosition: tyreEvents.toPosition,
+          stockDocumentId: tyreEvents.stockDocumentId,
         })
         .from(tyreEvents)
         .innerJoin(tyres, eq(tyreEvents.tyreId, tyres.id))
@@ -269,6 +274,7 @@ export async function getJobCardDetail(actor: Actor, id: string) {
           part: parts.name,
           odometerKm: oilChanges.odometerKm,
           documentStatus: stockDocuments.status,
+          stockDocumentId: oilChanges.stockDocumentId,
         })
         .from(oilChanges)
         .innerJoin(parts, eq(oilChanges.partId, parts.id))
@@ -294,8 +300,14 @@ export async function getJobCardDetail(actor: Actor, id: string) {
       getFittedTyres(card.busId),
     ]);
 
-  const pendingFitNotes = await db
-    .select({ notes: stockDocuments.notes })
+  const pendingFitDocuments = await db
+    .select({
+      id: stockDocuments.id,
+      number: stockDocuments.documentNumber,
+      status: stockDocuments.status,
+      notes: stockDocuments.notes,
+      businessDate: stockDocuments.businessDate,
+    })
     .from(stockDocuments)
     .where(
       and(
@@ -304,12 +316,114 @@ export async function getJobCardDetail(actor: Actor, id: string) {
         eq(stockDocuments.status, "PENDING_APPROVAL"),
       ),
     );
-  const reserved = new Set(
-    pendingFitNotes.flatMap((row) => {
-      const payload = parseWorkshopNotes(row.notes);
-      return payload?.kind === "TYRE_FIT" ? [payload.tyreId] : [];
-    }),
+
+  const pendingTyreInfo: Array<{
+    docId: string;
+    docNumber: string;
+    tyreId: string;
+    position: string;
+    occupantId?: string;
+  }> = [];
+
+  for (const doc of pendingFitDocuments) {
+    const payload = parseWorkshopNotes(doc.notes);
+    if (payload?.kind === "TYRE_FIT") {
+      pendingTyreInfo.push({
+        docId: doc.id,
+        docNumber: doc.number,
+        tyreId: payload.tyreId,
+        position: payload.position,
+        occupantId: payload.occupantId,
+      });
+    }
+  }
+
+  const reserved = new Set(pendingTyreInfo.map((p) => p.tyreId));
+
+  let pendingTyreEventRows: Array<{
+    id: string;
+    tyreId: string;
+    type: string;
+    serialNumber: string;
+    occurredAt: Date | string | null;
+    fromPosition: string | null;
+    toPosition: string | null;
+    status: string;
+  }> = [];
+
+  if (pendingTyreInfo.length > 0) {
+    const pendingTyres = await db
+      .select({ id: tyres.id, serialNumber: tyres.serialNumber })
+      .from(tyres)
+      .where(
+        inArray(
+          tyres.id,
+          pendingTyreInfo.map((p) => p.tyreId),
+        ),
+      );
+    const serialMap = new Map(pendingTyres.map((t) => [t.id, t.serialNumber]));
+
+    pendingTyreEventRows = pendingTyreInfo.map((p) => ({
+      id: `pending-${p.docId}`,
+      tyreId: p.tyreId,
+      type: p.occupantId ? "REPLACE" : "FIT",
+      serialNumber: serialMap.get(p.tyreId) || "—",
+      occurredAt: new Date().toISOString(),
+      fromPosition: null,
+      toPosition: p.position,
+      status: "PENDING_APPROVAL",
+    }));
+  }
+
+  const existingTyreDocIds = new Set([
+    ...tyreRows.map((r) => r.stockDocumentId).filter(Boolean),
+    ...pendingTyreInfo.map((p) => p.docId),
+  ]);
+  const additionalTyreIssues = documents
+    .filter(
+      (d) =>
+        d.categoryCode === "TYRE" &&
+        !existingTyreDocIds.has(d.id) &&
+        d.type === "BUS_ISSUE",
+    )
+    .map((d) => ({
+      id: `tyre-issue-${d.id}-${d.sku}`,
+      tyreId: "",
+      type: "ISSUE",
+      serialNumber: `${d.part} (${d.quantity} ${d.unit || "EA"})`,
+      occurredAt: d.date,
+      fromPosition: null,
+      toPosition: null,
+      status: d.status,
+    }));
+
+  const combinedTyreEvents = [
+    ...tyreRows.map((r) => ({ ...r, status: "POSTED" })),
+    ...pendingTyreEventRows,
+    ...additionalTyreIssues,
+  ];
+
+  const existingOilDocIds = new Set(
+    oilRows.map((r) => r.stockDocumentId).filter(Boolean),
   );
+  const additionalOils = documents
+    .filter(
+      (d) =>
+        d.categoryCode === "OIL" &&
+        !existingOilDocIds.has(d.id) &&
+        d.type === "BUS_ISSUE",
+    )
+    .map((d) => ({
+      id: `doc-oil-${d.id}-${d.sku}`,
+      litres: d.quantity,
+      sku: d.sku,
+      part: d.part,
+      odometerKm: card.odometerKm,
+      documentStatus: d.status,
+      stockDocumentId: d.id,
+    }));
+
+  const combinedOilChanges = [...oilRows, ...additionalOils];
 
   const removedIds = [
     ...new Set(
@@ -337,8 +451,8 @@ export async function getJobCardDetail(actor: Actor, id: string) {
   return {
     ...card,
     documents,
-    tyreEvents: tyreRows,
-    oilChanges: oilRows,
+    tyreEvents: combinedTyreEvents,
+    oilChanges: combinedOilChanges,
     storeTyres: storeTyres.filter((tyre) => !reserved.has(tyre.id)),
     oilParts,
     fitted,
