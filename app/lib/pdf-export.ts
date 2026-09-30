@@ -29,7 +29,9 @@ export async function generatePdfFromElement(
   options: PdfExportOptions = {},
 ): Promise<GeneratedPdfResult> {
   if (typeof window === "undefined") {
-    throw new Error("PDF generation is only supported in client-side browser environments.");
+    throw new Error(
+      "PDF generation is only supported in client-side browser environments.",
+    );
   }
 
   const {
@@ -57,7 +59,8 @@ export async function generatePdfFromElement(
     allowTaint: true,
     logging: false,
     backgroundColor: "#ffffff",
-    onclone: (clonedDoc: Document) => {
+    windowWidth: 1280,
+    onclone: (clonedDoc: Document, target: HTMLElement) => {
       // Force all print containers inside clone to be visible
       const clonedEls = clonedDoc.querySelectorAll(
         ".print-doc-container, .job-card-sheet, .receipt-print-wrapper, .report-sheet, .receipt-panel, .print-panel",
@@ -67,6 +70,15 @@ export async function generatePdfFromElement(
         h.style.display = "block";
         h.style.visibility = "visible";
       });
+      target.style.width = `${(a4WidthMm * 96) / 25.4}px`;
+      target.style.maxWidth = "none";
+      target.style.margin = "0";
+      target.style.boxShadow = "none";
+      clonedDoc
+        .querySelectorAll<HTMLElement>(".report-table-scroll")
+        .forEach((table) => {
+          table.style.overflow = "visible";
+        });
       // Hide all no-print controls inside clone
       const noPrintEls = clonedDoc.querySelectorAll(".no-print");
       noPrintEls.forEach((el) => {
@@ -76,7 +88,9 @@ export async function generatePdfFromElement(
   });
 
   if (!canvas || canvas.width === 0 || canvas.height === 0) {
-    throw new Error("Unable to capture printable content: element was empty or hidden.");
+    throw new Error(
+      "Unable to capture printable content: element was empty or hidden.",
+    );
   }
 
   const pdf = new jsPDF({
@@ -124,12 +138,23 @@ export async function generatePdfFromElement(
     const pageDataUrl = pageCanvas.toDataURL("image/jpeg", 0.95);
     pageImages.push(pageDataUrl);
 
-    pdf.addImage(pageDataUrl, "JPEG", 0, 0, a4WidthMm, a4HeightMm, undefined, "FAST");
+    pdf.addImage(
+      pageDataUrl,
+      "JPEG",
+      0,
+      0,
+      a4WidthMm,
+      a4HeightMm,
+      undefined,
+      "FAST",
+    );
   }
 
   const blob = pdf.output("blob");
   const blobUrl = URL.createObjectURL(blob);
-  const cleanFilename = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
+  const cleanFilename = filename.endsWith(".pdf")
+    ? filename
+    : `${filename}.pdf`;
 
   const download = () => {
     pdf.save(cleanFilename);

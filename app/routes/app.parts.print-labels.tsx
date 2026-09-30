@@ -218,18 +218,23 @@ export default function PrintLabelsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
 
+      <p className="muted no-print" role="status">
+        {selectedParts.length} parts selected · {printParts.length} labels to
+        print
+      </p>
       <div className={`labels-grid labels-size-${size} no-print`}>
         {filtered.map((part) => {
           const isSelected = selectedSet.has(part.id);
           return (
             <div
               key={part.id}
-              className={`label-card${isSelected ? "" : " label-card-hidden"}`}
+              className={`label-card${isSelected ? " label-card-selected" : ""}`}
             >
               <label className="no-print" style={{ display: "block" }}>
                 <input
                   type="checkbox"
                   checked={isSelected}
+                  aria-label={`Include ${part.sku}`}
                   onChange={() => toggle(part.id)}
                 />{" "}
                 Include

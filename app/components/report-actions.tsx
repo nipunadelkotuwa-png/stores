@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { generatePdfFromElement, type GeneratedPdfResult } from "~/lib/pdf-export";
+import {
+  generatePdfFromElement,
+  type GeneratedPdfResult,
+} from "~/lib/pdf-export";
 import { PdfPreviewDialog } from "./pdf-preview-dialog";
 
 interface ReportActionsProps {
@@ -26,7 +29,9 @@ export function ReportActions({
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [pdfResult, setPdfResult] = useState<GeneratedPdfResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [activeAction, setActiveAction] = useState<"preview" | "download" | null>(null);
+  const [activeAction, setActiveAction] = useState<
+    "preview" | "download" | null
+  >(null);
 
   const getTargetElement = (): HTMLElement | null => {
     // Look for dedicated print container first
@@ -57,7 +62,10 @@ export function ReportActions({
 
       const result = await generatePdfFromElement(el, {
         filename,
-        orientation,
+        orientation:
+          el.matches(".print-landscape") || el.querySelector(".print-landscape")
+            ? "landscape"
+            : orientation,
         scale: 2,
       });
 
@@ -80,7 +88,10 @@ export function ReportActions({
 
   return (
     <>
-      <div className={className} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+      <div
+        className={`${className} report-actions`}
+        style={{ display: "flex", gap: "8px", alignItems: "center" }}
+      >
         {showPrint ? (
           <button
             type="button"
@@ -88,7 +99,7 @@ export function ReportActions({
             onClick={() => window.print()}
             title="Open standard browser print dialog"
           >
-            <span>🖨️</span> Print
+            Print
           </button>
         ) : null}
 
@@ -100,7 +111,9 @@ export function ReportActions({
             onClick={() => handleGeneratePdf("preview")}
             title="Preview document in PDF viewer with zoom and page controls"
           >
-            <span>🔍</span> {isGenerating && activeAction === "preview" ? "Rendering..." : "PDF Preview"}
+            {isGenerating && activeAction === "preview"
+              ? "Rendering..."
+              : "PDF Preview"}
           </button>
         ) : null}
 
@@ -112,7 +125,9 @@ export function ReportActions({
             onClick={() => handleGeneratePdf("download")}
             title="Download true A4 PDF file"
           >
-            <span>⬇️</span> {isGenerating && activeAction === "download" ? "Generating..." : "Download PDF"}
+            {isGenerating && activeAction === "download"
+              ? "Generating..."
+              : "Download PDF"}
           </button>
         ) : null}
       </div>

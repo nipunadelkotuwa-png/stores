@@ -8,6 +8,7 @@ export default tseslint.config(
       ".react-router/**",
       "node_modules/**",
       "graphify-out/**",
+      "test-results/**",
     ],
   },
   eslint.configs.recommended,
